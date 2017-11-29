@@ -1,0 +1,22 @@
+[package]
+name = "plygui-win32"
+version = "0.0.1"
+authors = ["Serhii Plyhun <snuk188@gmail.com>"]
+
+[lib]
+name = "plygui_win32"
+path = "src/lib.rs"
+
+[dependencies]
+plygui = {version = "0.0.1", path = "../plygui"}
+user32-sys = "~0.2"
+gdi32-sys = "~0.2"
+kernel32-sys = "~0.2"
+comctl32-sys = "~0.2"
+comdlg32-sys = "~0.2"
+winapi = "~0.2"
+lazy_static = "~0.2"
+derive_builder = "~0.5"
+
+[build-dependencies]
+embed-resource = "~1.1"
