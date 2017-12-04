@@ -1,7 +1,7 @@
 use super::*;
 use super::common::*;
 
-use plygui::{development, Id, UiRole, UiRoleMut, UiWindow, UiControl, UiMember, UiContainer, UiMultiContainer, Visibility};
+use plygui::{development, Id, UiWindow, UiControl, UiMember, UiContainer, UiMultiContainer, Visibility, UiMemberBase};
 
 use std::{ptr, mem, str};
 use std::os::raw::c_void;
@@ -15,9 +15,8 @@ lazy_static! {
 
 #[repr(C)]
 pub struct Window {
-	id: Id,
+	base: UiMemberBase,
     hwnd: winapi::HWND,
-    visibility: Visibility,
     child: Option<Box<UiControl>>,
     h_resize: Option<Box<FnMut(&mut UiMember, u16, u16)>>,
 }
@@ -46,11 +45,10 @@ impl Window {
                 .collect::<Vec<_>>();
 
             let mut w = Box::new(Window {
-				            		id: Id::next(),
+				            		base: UiMemberBase::with_visibility(Visibility::Visible),
                                      hwnd: 0 as winapi::HWND,
                                      child: None,
                                      h_resize: None,
-                                     visibility: Visibility::Visible,
                                  });
 
             if INSTANCE as usize == 0 {
@@ -96,12 +94,10 @@ impl UiContainer for Window {
         unsafe {
             let mut old = self.child.take();
             if let Some(old) = old.as_mut() {
-                let mut wc = common::cast_uicontrol_to_windows(old);
-                wc.on_removed_from_container(self);
+                old.on_removed_from_container(self);
             }
             if let Some(new) = child.as_mut() {
-                let mut wc = common::cast_uicontrol_to_windows(new);
-                wc.on_added_to_container(self, 0, 0); //TODO padding
+                new.on_added_to_container(self, 0, 0); //TODO padding
 
             }
             self.child = child;
@@ -160,14 +156,14 @@ impl UiMember for Window {
         self.h_resize = handler;
     }
 
-    fn role<'a>(&'a self) -> UiRole<'a> {
-        UiRole::Window(self)
+    fn member_id(&self) -> &'static str {
+    	development::CLASS_ID_WINDOW
     }
     fn set_visibility(&mut self, visibility: Visibility) {
-        self.visibility = visibility;
+        self.base.visibility = visibility;
         unsafe {
             user32::ShowWindow(self.hwnd,
-                               if self.visibility == Visibility::Visible {
+                               if self.base.visibility == Visibility::Visible {
                                    winapi::SW_SHOW
                                } else {
                                    winapi::SW_HIDE
@@ -175,16 +171,10 @@ impl UiMember for Window {
         }
     }
     fn visibility(&self) -> Visibility {
-        self.visibility
+        self.base.visibility
     }
-    fn role_mut<'a>(&'a mut self) -> UiRoleMut<'a> {
-        UiRoleMut::Window(self)
-    }
-    /*fn native_id(&self) -> NativeId {
-        self.hwnd
-    }*/
     fn id(&self) -> Id {
-    	self.id
+    	self.base.id
     }
     fn is_control(&self) -> Option<&UiControl> {
     	None

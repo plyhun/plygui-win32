@@ -35,7 +35,7 @@ impl UiApplication for Application {
 impl Application {
     pub fn with_name(name: &str) -> Box<Application> {
     	init_comctl();
-    	Id::next();
+    	//Id::next();
 	    Box::new(Application {
                      name: name.into(),
                      windows: Vec::with_capacity(1),

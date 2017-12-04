@@ -1,6 +1,6 @@
 use super::*;
 
-use plygui::{layout, Id, UiRole, UiRoleMut, Visibility, UiControl, UiButton, UiMember, UiContainer};
+use plygui::{layout, development, Id, Visibility, UiControl, UiButton, UiMember, UiContainer};
 
 use std::{ptr, mem, str};
 use std::os::raw::c_void;
@@ -45,6 +45,31 @@ impl UiButton for Button {
 }
 
 impl UiControl for Button {
+	fn on_added_to_container(&mut self, parent: &UiContainer, x: u16, y: u16) {
+		let selfptr = self as *mut _ as *mut c_void;
+        let (pw, ph) = parent.size();
+        self.base.hwnd = parent.hwnd(); // required for measure, as we don't have own hwnd yet
+        let (w, h, _) = self.measure(pw, ph);
+        let (hwnd, id) = common::create_control_hwnd(x as i32,
+                                                     y as i32,
+                                                     w as i32,
+                                                     h as i32,
+                                                     parent.hwnd(),
+                                                     0,
+                                                     WINDOW_CLASS.as_ptr(),
+                                                     self.label.as_str(),
+                                                     winapi::BS_PUSHBUTTON | winapi::WS_TABSTOP,
+                                                     selfptr,
+                                                     Some(handler));
+        self.base.hwnd = hwnd;
+        self.base.subclass_id = id;
+	}
+    fn on_removed_from_container(&mut self, parent: &UiContainer) {
+    	common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, Some(handler));
+        self.base.hwnd = 0 as winapi::HWND;
+        self.base.subclass_id = 0;
+    }
+    
     fn layout_width(&self) -> layout::Size {
     	self.base.layout_width()
     }
@@ -178,15 +203,9 @@ impl UiMember for Button {
         self.base.visibility()
     }
 
-    fn role<'a>(&'a self) -> UiRole<'a> {
-        UiRole::Button(self)
+    fn member_id(&self) -> &'static str {
+	    development::CLASS_ID_BUTTON
     }
-    fn role_mut<'a>(&'a mut self) -> UiRoleMut<'a> {
-        UiRoleMut::Button(self)
-    }
-    /*fn native_id(&self) -> NativeId {
-        self.base.hwnd
-    }*/
     fn id(&self) -> Id {
     	self.base.id()
     }
@@ -206,7 +225,7 @@ impl Drop for Button {
 }
 
 unsafe impl common::WindowsControl for Button {
-    unsafe fn on_added_to_container(&mut self, parent: &common::WindowsContainer, px: u16, py: u16) {
+    /*unsafe fn on_added_to_container(&mut self, parent: &common::WindowsContainer, px: u16, py: u16) {
         let selfptr = self as *mut _ as *mut c_void;
         let (pw, ph) = parent.size();
         self.base.hwnd = parent.hwnd(); // required for measure, as we don't have own hwnd yet
@@ -229,7 +248,7 @@ unsafe impl common::WindowsControl for Button {
         common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, Some(handler));
         self.base.hwnd = 0 as winapi::HWND;
         self.base.subclass_id = 0;
-    }
+    }*/
     fn as_base(&self) -> &common::WindowsControlBase {
     	&self.base
     }

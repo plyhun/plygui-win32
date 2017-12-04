@@ -5,16 +5,14 @@ use std::os::raw::c_void;
 use std::os::windows::ffi::OsStrExt;
 use std::ffi::OsStr;
 
-use plygui::{development, layout, Id, UiContainer, UiMember, UiControl, UiRoleMut, Visibility};
+use plygui::{development, layout, Id, UiContainer, UiMember, UiControl, UiControlBase, UiMemberBase, Visibility};
 
 pub static mut INSTANCE: winapi::HINSTANCE = 0 as winapi::HINSTANCE;
 
 #[repr(C)]
 pub struct WindowsControlBase {
-	id: Id,
-    layout: development::layout::LayoutBase,
-    visibility: Visibility,
-    
+	base: UiControlBase, 
+	
     pub hwnd: winapi::HWND,
     pub subclass_id: u64,
     pub coords: Option<(i32, i32)>,
@@ -26,20 +24,21 @@ pub struct WindowsControlBase {
 impl Default for WindowsControlBase {
     fn default() -> WindowsControlBase {
         WindowsControlBase {
-        	id: Id::next(),
-            hwnd: 0 as winapi::HWND,
+        	base: UiControlBase {
+	        	base: UiMemberBase::with_visibility(Visibility::Visible),
+		        layout: development::layout::LayoutBase {
+		            width: layout::Size::MatchParent,
+					height: layout::Size::WrapContent,
+					gravity: layout::gravity::CENTER_HORIZONTAL | layout::gravity::TOP,
+					orientation: layout::Orientation::Vertical,
+					alignment: layout::Alignment::None,
+	            },
+        	},
+        	hwnd: 0 as winapi::HWND,
             h_resize: None,
             subclass_id: 0,
-            layout: development::layout::LayoutBase {
-	            width: layout::Size::MatchParent,
-				height: layout::Size::WrapContent,
-				gravity: layout::gravity::CENTER_HORIZONTAL | layout::gravity::TOP,
-				orientation: layout::Orientation::Vertical,
-				alignment: layout::Alignment::None,
-            },
             measured_size: (0, 0),
             coords: None,
-            visibility: Visibility::Visible,
         }
     }
 }
@@ -71,47 +70,47 @@ impl WindowsControlBase {
 		}
 	}
 	pub fn layout_width(&self) -> layout::Size {
-    	self.layout.width
+    	self.base.layout.width
     }
 	pub fn layout_height(&self) -> layout::Size {
-		self.layout.height
+		self.base.layout.height
 	}
 	pub fn layout_gravity(&self) -> layout::Gravity {
-		self.layout.gravity
+		self.base.layout.gravity
 	}
 	pub fn layout_orientation(&self) -> layout::Orientation {
-		self.layout.orientation
+		self.base.layout.orientation
 	}
 	pub fn layout_alignment(&self) -> layout::Alignment {
-		self.layout.alignment
+		self.base.layout.alignment
 	}
 	
 	pub fn set_layout_width(&mut self, width: layout::Size) {
-		self.layout.width = width;
+		self.base.layout.width = width;
 		self.invalidate();
 	}
 	pub fn set_layout_height(&mut self, height: layout::Size) {
-		self.layout.height = height;
+		self.base.layout.height = height;
 		self.invalidate();
 	}
 	pub fn set_layout_gravity(&mut self, gravity: layout::Gravity) {
-		self.layout.gravity = gravity;
+		self.base.layout.gravity = gravity;
 		self.invalidate();
 	}
 	pub fn set_layout_orientation(&mut self, orientation: layout::Orientation) {
-		self.layout.orientation = orientation;
+		self.base.layout.orientation = orientation;
 		self.invalidate();
 	}
 	pub fn set_layout_alignment(&mut self, alignment: layout::Alignment) {
-		self.layout.alignment = alignment;
+		self.base.layout.alignment = alignment;
 		self.invalidate();
 	}
     
     pub fn set_visibility(&mut self, visibility: Visibility) {
-        self.visibility = visibility;
+        self.base.base.visibility = visibility;
         unsafe {
             user32::ShowWindow(self.hwnd,
-                               if self.visibility == Visibility::Invisible {
+                               if self.base.base.visibility == Visibility::Invisible {
                                    winapi::SW_HIDE
                                } else {
                                    winapi::SW_SHOW
@@ -120,10 +119,10 @@ impl WindowsControlBase {
         }
     }
     pub fn id(&self) -> Id {
-    	self.id
+    	self.base.base.id
     }
     pub fn visibility(&self) -> Visibility {
-        self.visibility
+        self.base.base.visibility
     }
     pub fn parent_hwnd(&self) -> Option<winapi::HWND> {
     	unsafe {
@@ -232,8 +231,8 @@ impl WindowsControlBase {
 }
 
 pub unsafe trait WindowsControl: UiMember {
-    unsafe fn on_added_to_container(&mut self, &WindowsContainer, x: u16, y: u16);
-    unsafe fn on_removed_from_container(&mut self, &WindowsContainer);
+//    unsafe fn on_added_to_container(&mut self, &WindowsContainer, x: u16, y: u16);
+//    unsafe fn on_removed_from_container(&mut self, &WindowsContainer);
     fn as_base(&self) -> &WindowsControlBase;
     fn as_base_mut(&mut self) -> &mut WindowsControlBase;
 }
@@ -327,7 +326,7 @@ pub unsafe fn window_rect(hwnd: winapi::HWND) -> winapi::RECT {
     rect
 }
 
-pub unsafe fn cast_uicontrol_to_windows(input: &mut Box<UiControl>) -> &mut WindowsControl {
+/*pub unsafe fn cast_uicontrol_to_windows(input: &mut Box<UiControl>) -> &mut WindowsControl {
     use std::ops::DerefMut;
     match input.role_mut() {
         UiRoleMut::Button(_) => {
@@ -352,10 +351,10 @@ pub unsafe fn cast_hwnd_to_windows<'a>(hwnd: winapi::HWND) -> Option<&'a mut Win
             let ll: &mut layout_linear::LinearLayout = mem::transmute(hwnd_ptr as *mut c_void);
             return Some(ll);
         },
-        /*development::CLASS_ID_WINDOW => {
+        development::CLASS_ID_WINDOW => {
             let w: &mut window::Window = mem::transmute(hwnd_ptr as *mut c_void);
             return Some(w);
-        },*/
+        },
         button::CLASS_ID => {
             let b: &mut button::Button = mem::transmute(hwnd_ptr as *mut c_void);
             return Some(b);
@@ -385,7 +384,7 @@ pub unsafe fn cast_hwnd_to_uimember<'a>(hwnd: winapi::HWND) -> Option<&'a mut Ui
 	        None
         },
     }
-}
+}*/
 
 pub unsafe fn log_error() {
     let error = kernel32::GetLastError();

@@ -1,7 +1,7 @@
 use super::*;
 use super::common::*;
 
-use plygui::{development, layout, Id, UiRole, UiRoleMut, UiControl, UiMember, UiContainer, UiMultiContainer, UiLinearLayout, Visibility};
+use plygui::{development, layout, Id, UiControl, UiMember, UiContainer, UiMultiContainer, UiLinearLayout, Visibility};
 
 use std::{ptr, mem};
 use std::os::raw::c_void;
@@ -38,9 +38,6 @@ impl UiMember for LinearLayout {
         self.base.visibility()
     }
 
-    /*fn native_id(&self) -> NativeId {
-        self.base.hwnd
-    }*/
     fn id(&self) -> Id {
     	self.base.id()
     }
@@ -53,11 +50,8 @@ impl UiMember for LinearLayout {
         self.base.h_resize = handler;
     }
 
-    fn role<'a>(&'a self) -> UiRole<'a> {
-        UiRole::LinearLayout(self)
-    }
-    fn role_mut<'a>(&'a mut self) -> UiRoleMut<'a> {
-        UiRoleMut::LinearLayout(self)
+    fn member_id(&self) -> &'static str {
+    	development::CLASS_ID_LAYOUT_LINEAR
     }
     fn is_control(&self) -> Option<&UiControl> {
     	Some(self)
@@ -185,6 +179,50 @@ impl UiControl for LinearLayout {
     fn root_mut(&mut self) -> Option<&mut UiContainer> {
         self.base.root_mut()
     }
+    fn on_added_to_container(&mut self, parent: &UiContainer, px: u16, py: u16) {
+        let selfptr = self as *mut _ as *mut c_void;
+        let (pw, ph) = parent.size();
+        self.base.hwnd = parent.hwnd(); // required for measure, as we don't have own hwnd yet
+        let (width, height, _) = self.measure(pw, ph);
+        let (hwnd, id) = common::create_control_hwnd(px as i32,
+                                                     py as i32,
+                                                     width as i32,
+                                                     height as i32,
+                                                     parent.hwnd(),
+                                                     winapi::WS_EX_CONTROLPARENT,
+                                                     WINDOW_CLASS.as_ptr(),
+                                                     "",
+                                                     0,
+                                                     selfptr,
+                                                     None);
+        self.base.hwnd = hwnd;
+        self.base.subclass_id = id;
+        self.base.coords = Some((px as i32, py as i32));
+        let mut x = 0;
+        let mut y = 0;
+        for ref mut child in self.children.as_mut_slice() {
+            let mut wc = common::cast_uicontrol_to_windows(child);
+            let self2: &mut LinearLayout = mem::transmute(selfptr);
+            wc.on_added_to_container(self2, x, y);
+            let (xx, yy) = wc.size();
+            match self.orientation {
+                layout::Orientation::Horizontal => x += xx,
+                layout::Orientation::Vertical => y += yy,
+            }
+        }
+    }
+    fn on_removed_from_container(&mut self, _: &UiContainer) {
+        let selfptr = self as *mut _ as *mut c_void;
+        for ref mut child in self.children.as_mut_slice() {
+            let mut wc = common::cast_uicontrol_to_windows(child);
+            let self2: &mut LinearLayout = mem::transmute(selfptr);
+            wc.on_removed_from_container(self2);
+        }
+        destroy_hwnd(self.base.hwnd, self.base.subclass_id, None);
+        self.base.hwnd = 0 as winapi::HWND;
+        self.base.subclass_id = 0;
+    }
+
 }
 
 impl UiContainer for LinearLayout {
@@ -294,49 +332,6 @@ unsafe impl WindowsContainer for LinearLayout {
 }
 
 unsafe impl WindowsControl for LinearLayout {
-    unsafe fn on_added_to_container(&mut self, parent: &WindowsContainer, px: u16, py: u16) {
-        let selfptr = self as *mut _ as *mut c_void;
-        let (pw, ph) = parent.size();
-        self.base.hwnd = parent.hwnd(); // required for measure, as we don't have own hwnd yet
-        let (width, height, _) = self.measure(pw, ph);
-        let (hwnd, id) = common::create_control_hwnd(px as i32,
-                                                     py as i32,
-                                                     width as i32,
-                                                     height as i32,
-                                                     parent.hwnd(),
-                                                     winapi::WS_EX_CONTROLPARENT,
-                                                     WINDOW_CLASS.as_ptr(),
-                                                     "",
-                                                     0,
-                                                     selfptr,
-                                                     None);
-        self.base.hwnd = hwnd;
-        self.base.subclass_id = id;
-        self.base.coords = Some((px as i32, py as i32));
-        let mut x = 0;
-        let mut y = 0;
-        for ref mut child in self.children.as_mut_slice() {
-            let mut wc = common::cast_uicontrol_to_windows(child);
-            let self2: &mut LinearLayout = mem::transmute(selfptr);
-            wc.on_added_to_container(self2, x, y);
-            let (xx, yy) = wc.size();
-            match self.orientation {
-                layout::Orientation::Horizontal => x += xx,
-                layout::Orientation::Vertical => y += yy,
-            }
-        }
-    }
-    unsafe fn on_removed_from_container(&mut self, _: &WindowsContainer) {
-        let selfptr = self as *mut _ as *mut c_void;
-        for ref mut child in self.children.as_mut_slice() {
-            let mut wc = common::cast_uicontrol_to_windows(child);
-            let self2: &mut LinearLayout = mem::transmute(selfptr);
-            wc.on_removed_from_container(self2);
-        }
-        destroy_hwnd(self.base.hwnd, self.base.subclass_id, None);
-        self.base.hwnd = 0 as winapi::HWND;
-        self.base.subclass_id = 0;
-    }
     fn as_base(&self) -> &WindowsControlBase {
     	&self.base
     }
