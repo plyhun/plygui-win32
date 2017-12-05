@@ -1,7 +1,7 @@
 use super::*;
 use super::common::*;
 
-use plygui::{development, layout, Id, UiControl, UiMember, UiContainer, UiMultiContainer, UiLinearLayout, Visibility};
+use plygui::{development, layout, Id, UiControl, UiLayedOut, UiMember, UiContainer, UiMultiContainer, UiLinearLayout, UiMemberBase, Visibility};
 
 use std::{ptr, mem};
 use std::os::raw::c_void;
@@ -30,12 +30,21 @@ impl LinearLayout {
     }
 }
 
-impl UiMember for LinearLayout {
+impl UiMember for LinearLayout {    
     fn set_visibility(&mut self, visibility: Visibility) {
-        self.base.set_visibility(visibility);
+        self.base.control_base.member_base.visibility = visibility;
+        unsafe {
+            user32::ShowWindow(self.base.hwnd,
+                               if self.base.control_base.member_base.visibility == Visibility::Invisible {
+                                   winapi::SW_HIDE
+                               } else {
+                                   winapi::SW_SHOW
+                               });
+            self.invalidate();
+        }
     }
     fn visibility(&self) -> Visibility {
-        self.base.visibility()
+        self.base.control_base.member_base.visibility
     }
 
     fn id(&self) -> Id {
@@ -53,6 +62,9 @@ impl UiMember for LinearLayout {
     fn member_id(&self) -> &'static str {
     	development::CLASS_ID_LAYOUT_LINEAR
     }
+    unsafe fn native_id(&self) -> usize {
+	    unsafe { self.base.hwnd as usize }
+    }
     fn is_control(&self) -> Option<&UiControl> {
     	Some(self)
     }
@@ -61,38 +73,46 @@ impl UiMember for LinearLayout {
     }     
 }
 
-impl UiControl for LinearLayout {
-    fn layout_width(&self) -> layout::Size {
-    	self.base.layout_width()
+impl UiLayedOut for LinearLayout {
+	fn layout_width(&self) -> layout::Size {
+    	self.base.control_base.layout.width
     }
 	fn layout_height(&self) -> layout::Size {
-		self.base.layout_height()
+		self.base.control_base.layout.height
 	}
 	fn layout_gravity(&self) -> layout::Gravity {
-		self.base.layout_gravity()
+		self.base.control_base.layout.gravity
 	}
 	fn layout_orientation(&self) -> layout::Orientation {
-		self.base.layout_orientation()
+		self.base.control_base.layout.orientation
 	}
 	fn layout_alignment(&self) -> layout::Alignment {
-		self.base.layout_alignment()
+		self.base.control_base.layout.alignment
 	}
 	
 	fn set_layout_width(&mut self, width: layout::Size) {
-		self.base.set_layout_width(width);
+		self.base.control_base.layout.width = width;
+		self.invalidate();
 	}
 	fn set_layout_height(&mut self, height: layout::Size) {
-		self.base.set_layout_height(height);
+		self.base.control_base.layout.height = height;
+		self.invalidate();
 	}
 	fn set_layout_gravity(&mut self, gravity: layout::Gravity) {
-		self.base.set_layout_gravity(gravity);
+		self.base.control_base.layout.gravity = gravity;
+		self.invalidate();
 	}
 	fn set_layout_orientation(&mut self, orientation: layout::Orientation) {
-		self.base.set_layout_orientation(orientation);
+		self.base.control_base.layout.orientation = orientation;
+		self.invalidate();
 	}
 	fn set_layout_alignment(&mut self, alignment: layout::Alignment) {
-		self.base.set_layout_alignment(alignment);
+		self.base.control_base.layout.alignment = alignment;
+		self.invalidate();
 	}
+}
+
+impl UiControl for LinearLayout {
     fn draw(&mut self, coords: Option<(i32, i32)>) {
     	if coords.is_some() {
     		self.base.coords = coords;
@@ -127,15 +147,15 @@ impl UiControl for LinearLayout {
         		let mut w = parent_width;
 		        let mut h = parent_height;
 		
-		        if let layout::Size::Exact(ew) = self.base.layout_width() {
+		        if let layout::Size::Exact(ew) = self.layout_width() {
 		            w = ew;
 		        }
-		        if let layout::Size::Exact(eh) = self.base.layout_height() {
+		        if let layout::Size::Exact(eh) = self.layout_height() {
 		            w = eh;
 		        }
 		        match self.orientation {
 		            layout::Orientation::Vertical => {
-		                if let layout::Size::WrapContent = self.base.layout_height() {
+		                if let layout::Size::WrapContent = self.layout_height() {
 		                    let mut hh = 0;
 		                    for ref mut child in self.children.as_mut_slice() {
 		                        let (_, ch, _) = child.measure(w, h);
@@ -145,7 +165,7 @@ impl UiControl for LinearLayout {
 		                }
 		            }
 		            layout::Orientation::Horizontal => {
-		                if let layout::Size::WrapContent = self.base.layout_width() {
+		                if let layout::Size::WrapContent = self.layout_width() {
 		                    let mut ww = 0;
 		                    for ref mut child in self.children.as_mut_slice() {
 		                        let (cw, _, _) = child.measure(w, h);
@@ -167,44 +187,45 @@ impl UiControl for LinearLayout {
         Some(self)
     }
 
-    fn parent(&self) -> Option<&UiContainer> {
+    fn parent(&self) -> Option<&UiMemberBase> {
         self.base.parent()
     }
-    fn parent_mut(&mut self) -> Option<&mut UiContainer> {
+    fn parent_mut(&mut self) -> Option<&mut UiMemberBase> {
         self.base.parent_mut()
     }
-    fn root(&self) -> Option<&UiContainer> {
+    fn root(&self) -> Option<&UiMemberBase> {
         self.base.root()
     }
-    fn root_mut(&mut self) -> Option<&mut UiContainer> {
+    fn root_mut(&mut self) -> Option<&mut UiMemberBase> {
         self.base.root_mut()
     }
     fn on_added_to_container(&mut self, parent: &UiContainer, px: u16, py: u16) {
         let selfptr = self as *mut _ as *mut c_void;
         let (pw, ph) = parent.size();
-        self.base.hwnd = parent.hwnd(); // required for measure, as we don't have own hwnd yet
-        let (width, height, _) = self.measure(pw, ph);
-        let (hwnd, id) = common::create_control_hwnd(px as i32,
-                                                     py as i32,
-                                                     width as i32,
-                                                     height as i32,
-                                                     parent.hwnd(),
-                                                     winapi::WS_EX_CONTROLPARENT,
-                                                     WINDOW_CLASS.as_ptr(),
-                                                     "",
-                                                     0,
-                                                     selfptr,
-                                                     None);
+        let (hwnd, id) = unsafe { 
+        	self.base.hwnd = parent.native_id() as winapi::HWND; // required for measure, as we don't have own hwnd yet
+	        let (width, height, _) = self.measure(pw, ph);
+	        common::create_control_hwnd(px as i32,
+	                                                     py as i32,
+	                                                     width as i32,
+	                                                     height as i32,
+	                                                     parent.native_id() as winapi::HWND,
+	                                                     winapi::WS_EX_CONTROLPARENT,
+	                                                     WINDOW_CLASS.as_ptr(),
+	                                                     "",
+	                                                     0,
+	                                                     selfptr,
+	                                                     None)
+        };
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
         self.base.coords = Some((px as i32, py as i32));
         let mut x = 0;
         let mut y = 0;
         for ref mut child in self.children.as_mut_slice() {
-            let mut wc = common::cast_uicontrol_to_windows(child);
-            let self2: &mut LinearLayout = mem::transmute(selfptr);
-            wc.on_added_to_container(self2, x, y);
-            let (xx, yy) = wc.size();
+            let self2: &mut LinearLayout = unsafe { mem::transmute(selfptr) };
+            child.on_added_to_container(self2, x, y);
+            let (xx, yy) = child.size();
             match self.orientation {
                 layout::Orientation::Horizontal => x += xx,
                 layout::Orientation::Vertical => y += yy,
@@ -214,9 +235,8 @@ impl UiControl for LinearLayout {
     fn on_removed_from_container(&mut self, _: &UiContainer) {
         let selfptr = self as *mut _ as *mut c_void;
         for ref mut child in self.children.as_mut_slice() {
-            let mut wc = common::cast_uicontrol_to_windows(child);
-            let self2: &mut LinearLayout = mem::transmute(selfptr);
-            wc.on_removed_from_container(self2);
+            let self2: &mut LinearLayout = unsafe { mem::transmute(selfptr) };
+            child.on_removed_from_container(self2);
         }
         destroy_hwnd(self.base.hwnd, self.base.subclass_id, None);
         self.base.hwnd = 0 as winapi::HWND;
@@ -226,27 +246,6 @@ impl UiControl for LinearLayout {
 }
 
 impl UiContainer for LinearLayout {
-    fn set_child(&mut self, child: Option<Box<UiControl>>) -> Option<Box<UiControl>> {
-        let old = self.children.pop();
-        self.children.clear();
-
-        if let Some(child) = child {
-            self.set_child_to(0, child);
-        }
-
-        old
-    }
-    fn child(&self) -> Option<&UiControl> {
-        self.children.get(0).map(|c| c.as_ref())
-    }
-    fn child_mut(&mut self) -> Option<&mut UiControl> {
-        //self.children.get_mut(0).map(|c|c.as_mut()) // WTF??
-        if self.children.len() > 0 {
-            Some(self.children[0].as_mut())
-        } else {
-            None
-        }
-    }
     fn find_control_by_id_mut(&mut self, id_: Id) -> Option<&mut UiControl> {
         if self.id() == id_ {
             return Some(self);

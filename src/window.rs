@@ -1,7 +1,7 @@
 use super::*;
 use super::common::*;
 
-use plygui::{development, Id, UiWindow, UiControl, UiMember, UiContainer, UiMultiContainer, Visibility, UiMemberBase};
+use plygui::{development, Id, UiWindow, UiControl, UiMember, UiContainer, UiSingleContainer, Visibility, UiMemberBase};
 
 use std::{ptr, mem, str};
 use std::os::raw::c_void;
@@ -90,7 +90,38 @@ impl Window {
 impl UiWindow for Window {}
 
 impl UiContainer for Window {
-    fn set_child(&mut self, mut child: Option<Box<UiControl>>) -> Option<Box<UiControl>> {
+    fn find_control_by_id_mut(&mut self, id_: Id) -> Option<&mut UiControl> {
+        /*if self.id() == id_ {
+			return Some(self);
+		} else*/
+        if let Some(child) = self.child.as_mut() {
+            if let Some(c) = child.is_container_mut() {
+                return c.find_control_by_id_mut(id_);
+            }
+        }
+        None
+    }
+    fn find_control_by_id(&self, id_: Id) -> Option<&UiControl> {
+        /*if self.id() == id_ {
+			return Some(self);
+		} else*/
+        if let Some(child) = self.child.as_ref() {
+            if let Some(c) = child.is_container() {
+                return c.find_control_by_id(id_);
+            }
+        }
+        None
+    }
+    fn is_single_mut(&mut self) -> Option<&mut UiSingleContainer> {
+        Some(self)
+    }
+    fn is_single(&self) -> Option<&UiSingleContainer> {
+        Some(self)
+    } 
+}
+
+impl UiSingleContainer for Window {
+	fn set_child(&mut self, mut child: Option<Box<UiControl>>) -> Option<Box<UiControl>> {
         unsafe {
             let mut old = self.child.take();
             if let Some(old) = old.as_mut() {
@@ -116,34 +147,6 @@ impl UiContainer for Window {
             None
         }
     }
-    fn find_control_by_id_mut(&mut self, id_: Id) -> Option<&mut UiControl> {
-        /*if self.id() == id_ {
-			return Some(self);
-		} else*/
-        if let Some(child) = self.child.as_mut() {
-            if let Some(c) = child.is_container_mut() {
-                return c.find_control_by_id_mut(id_);
-            }
-        }
-        None
-    }
-    fn find_control_by_id(&self, id_: Id) -> Option<&UiControl> {
-        /*if self.id() == id_ {
-			return Some(self);
-		} else*/
-        if let Some(child) = self.child.as_ref() {
-            if let Some(c) = child.is_container() {
-                return c.find_control_by_id(id_);
-            }
-        }
-        None
-    }
-    fn is_multi_mut(&mut self) -> Option<&mut UiMultiContainer> {
-        None
-    }
-    fn is_multi(&self) -> Option<&UiMultiContainer> {
-        None
-    } 
 }
 
 impl UiMember for Window {
@@ -182,6 +185,10 @@ impl UiMember for Window {
     fn is_control_mut(&mut self) -> Option<&mut UiControl> {
     	None
     } 
+    
+    unsafe fn native_id(&self) -> usize {
+	    unsafe { self.hwnd as usize }
+    }
 }
 
 impl Drop for Window {
