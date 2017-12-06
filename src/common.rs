@@ -5,13 +5,14 @@ use std::os::raw::c_void;
 use std::os::windows::ffi::OsStrExt;
 use std::ffi::OsStr;
 
-use plygui::{development, layout, Id, UiContainer, UiMember, UiControl, UiControlBase, UiMemberBase, Visibility};
+use plygui_api::{layout, development, ids, types};
+use plygui_api::traits::{UiMember, UiContainer};
 
 pub static mut INSTANCE: winapi::HINSTANCE = 0 as winapi::HINSTANCE;
 
 #[repr(C)]
 pub struct WindowsControlBase {
-	pub control_base: UiControlBase, 
+	pub control_base: development::UiControlBase, 
 	
     pub hwnd: winapi::HWND,
     pub subclass_id: u64,
@@ -19,13 +20,15 @@ pub struct WindowsControlBase {
     pub measured_size: (u16, u16),
 
     pub h_resize: Option<Box<FnMut(&mut UiMember, u16, u16)>>,
+    
+    invalidate: unsafe fn(this: &mut WindowsControlBase),
 }
 
-impl Default for WindowsControlBase {
-    fn default() -> WindowsControlBase {
+impl WindowsControlBase {
+	pub fn with_params(member_id: &'static str, is_control: bool, invalidate: unsafe fn(this: &mut WindowsControlBase)) -> WindowsControlBase {
         WindowsControlBase {
-        	control_base: UiControlBase {
-	        	member_base: UiMemberBase::with_visibility(Visibility::Visible),
+        	control_base: development::UiControlBase {
+	        	member_base: development::UiMemberBase::with_params(member_id, is_control, types::Visibility::Visible),
 		        layout: development::layout::LayoutBase {
 		            width: layout::Size::MatchParent,
 					height: layout::Size::WrapContent,
@@ -39,11 +42,15 @@ impl Default for WindowsControlBase {
             subclass_id: 0,
             measured_size: (0, 0),
             coords: None,
+            
+            invalidate: invalidate,
         }
     }
-}
-impl WindowsControlBase {
-	pub fn id(&self) -> Id {
+	
+	pub fn invalidate(&mut self) {
+		unsafe { (self.invalidate)(self) }
+	}
+	pub fn id(&self) -> ids::Id {
     	self.control_base.member_base.id
     }
     pub fn parent_hwnd(&self) -> Option<winapi::HWND> {
@@ -56,7 +63,7 @@ impl WindowsControlBase {
             }
     	}
     }
-    pub fn parent(&self) -> Option<&UiMemberBase> {
+    pub fn parent(&self) -> Option<&types::UiMemberCommon> {
         unsafe {
             let parent_hwnd = user32::GetParent(self.hwnd);
             if parent_hwnd == self.hwnd {
@@ -67,7 +74,7 @@ impl WindowsControlBase {
             mem::transmute(parent_ptr as *mut c_void)
         }
     }
-    pub fn parent_mut(&mut self) -> Option<&mut UiMemberBase> {
+    pub fn parent_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
         unsafe {
             let parent_hwnd = user32::GetParent(self.hwnd);
             if parent_hwnd == self.hwnd {
@@ -78,7 +85,7 @@ impl WindowsControlBase {
             mem::transmute(parent_ptr as *mut c_void)
         }
     }
-    pub fn root(&self) -> Option<&UiMemberBase> {
+    pub fn root(&self) -> Option<&types::UiMemberCommon> {
         unsafe {
             let parent_hwnd = user32::GetAncestor(self.hwnd, 2); //GA_ROOT
             if parent_hwnd == self.hwnd {
@@ -89,7 +96,7 @@ impl WindowsControlBase {
             mem::transmute(parent_ptr as *mut c_void)
         }
     }
-    pub fn root_mut(&mut self) -> Option<&mut UiMemberBase> {
+    pub fn root_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
         unsafe {
             let parent_hwnd = user32::GetAncestor(self.hwnd, 2); //GA_ROOT
             if parent_hwnd == self.hwnd {
@@ -100,38 +107,6 @@ impl WindowsControlBase {
             mem::transmute(parent_ptr as *mut c_void)
         }
     }
-}
-
-pub unsafe trait WindowsControl: UiMember {
-	fn invalidate(&mut self) {
-		unsafe {
-			let base = self.as_base_mut();
-			let self_hwnd = base.hwnd;
-			let parent_hwnd = base.parent_hwnd();	
-			if base.parent().is_some() {
-				let parent_hwnd = parent_hwnd.unwrap();
-				/*let real_self = cast_hwnd::<UiMemberBase>(self_hwnd);
-				if let Some(control_self) = real_self.is_control_mut() {
-					let (pw, ph) = parent.size();
-					let wparent = cast_hwnd::<WindowsControlBase>(parent_hwnd);
-					//let (_,_,changed) = 
-					control_self.measure(pw, ph);
-					control_self.draw(None);
-						
-					//if changed {
-						wparent.invalidate();
-					//} 
-				}*/
-				
-				if parent_hwnd != 0 as winapi::HWND {
-	        		user32::InvalidateRect(parent_hwnd, ptr::null_mut(), winapi::TRUE);
-	        	}
-	        }
-		}
-	}
-	
-    fn as_base(&self) -> &WindowsControlBase;
-    fn as_base_mut(&mut self) -> &mut WindowsControlBase;
 }
 
 pub unsafe trait WindowsContainer: UiContainer + UiMember {
@@ -258,7 +233,7 @@ pub unsafe fn cast_hwnd_to_windows<'a>(hwnd: winapi::HWND) -> Option<&'a mut Win
         },
         _ => None,
     }
-}*/
+}*/    
 
 pub unsafe fn cast_hwnd<'a, T>(hwnd: winapi::HWND) -> &'a mut T where T: Sized {// TODO merge with above using T: Sized
 	let hwnd_ptr = user32::GetWindowLongPtrW(hwnd, winapi::GWLP_USERDATA);
@@ -283,4 +258,31 @@ pub unsafe fn log_error() {
     println!("Last error #{}: {}",
              error,
              String::from_utf16_lossy(&string));
+}
+
+#[macro_export]
+macro_rules! impl_invalidate {
+	($typ: ty) => {
+		unsafe fn invalidate_impl(this: &mut common::WindowsControlBase) {
+			let parent_hwnd = this.parent_hwnd();	
+			if let Some(parent_hwnd) = parent_hwnd {
+				let mparent = common::cast_hwnd::<plygui_api::development::UiMemberBase>(parent_hwnd);
+				if mparent.is_control {
+					let wparent = common::cast_hwnd::<common::WindowsControlBase>(parent_hwnd);
+					let (pw, ph) = wparent.measured_size;
+					let this: &mut $typ = mem::transmute(this);
+					//let (_,_,changed) = 
+					this.measure(pw, ph);
+					this.draw(None);
+						
+					//if changed {
+						wparent.invalidate();
+					//} 
+				}
+				if parent_hwnd != 0 as winapi::HWND {
+		    		user32::InvalidateRect(parent_hwnd, ptr::null_mut(), winapi::TRUE);
+		    	}
+		    }
+		}
+	}
 }

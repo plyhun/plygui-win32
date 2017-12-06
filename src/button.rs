@@ -1,7 +1,8 @@
 use super::*;
 
-use plygui::{layout, development, Id, Visibility, UiControl, UiLayedOut, UiButton, UiMember, UiContainer, UiMemberBase};
-use common::WindowsControl;
+use plygui_api::{layout, ids, types};
+use plygui_api::traits::{UiControl, UiLayedOut, UiButton, UiMember, UiContainer};
+use plygui_api::members::MEMBER_ID_BUTTON;
 
 use std::{ptr, mem, str};
 use std::os::raw::c_void;
@@ -27,7 +28,7 @@ pub struct Button {
 impl Button {
     pub fn new(label: &str) -> Box<Button> {
         let b = Box::new(Button {
-                             base: Default::default(),
+                             base: common::WindowsControlBase::with_params(MEMBER_ID_BUTTON, true, invalidate_impl),
                              h_left_clicked: None,
                              label: label.to_owned(),
                          });
@@ -67,7 +68,7 @@ impl UiControl for Button {
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
 	}
-    fn on_removed_from_container(&mut self, parent: &UiContainer) {
+    fn on_removed_from_container(&mut self, _: &UiContainer) {
     	common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, Some(handler));
         self.base.hwnd = 0 as winapi::HWND;
         self.base.subclass_id = 0;
@@ -93,7 +94,7 @@ impl UiControl for Button {
     	let old_size = self.base.measured_size;
     	
     	self.base.measured_size = match self.visibility() {
-    		Visibility::Gone => (0, 0),
+    		types::Visibility::Gone => (0, 0),
     		_ => {
     			unsafe {
 		            let mut label_size: winapi::SIZE = mem::zeroed();
@@ -144,16 +145,16 @@ impl UiControl for Button {
         None
     }
 
-    fn parent(&self) -> Option<&UiMemberBase> {
+    fn parent(&self) -> Option<&types::UiMemberCommon> {
         self.base.parent()
     }
-    fn parent_mut(&mut self) -> Option<&mut UiMemberBase> {
+    fn parent_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
         self.base.parent_mut()
     }
-    fn root(&self) -> Option<&UiMemberBase> {
+    fn root(&self) -> Option<&types::UiMemberCommon> {
         self.base.root()
     }
-    fn root_mut(&mut self) -> Option<&mut UiMemberBase> {
+    fn root_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
         self.base.root_mut()
     }
 }
@@ -177,23 +178,23 @@ impl UiLayedOut for Button {
 	
 	fn set_layout_width(&mut self, width: layout::Size) {
 		self.base.control_base.layout.width = width;
-		self.invalidate();
+		self.base.invalidate();
 	}
 	fn set_layout_height(&mut self, height: layout::Size) {
 		self.base.control_base.layout.height = height;
-		self.invalidate();
+		self.base.invalidate();
 	}
 	fn set_layout_gravity(&mut self, gravity: layout::Gravity) {
 		self.base.control_base.layout.gravity = gravity;
-		self.invalidate();
+		self.base.invalidate();
 	}
 	fn set_layout_orientation(&mut self, orientation: layout::Orientation) {
 		self.base.control_base.layout.orientation = orientation;
-		self.invalidate();
+		self.base.invalidate();
 	}
 	fn set_layout_alignment(&mut self, alignment: layout::Alignment) {
 		self.base.control_base.layout.alignment = alignment;
-		self.invalidate();
+		self.base.invalidate();
 	}   
 }
 
@@ -207,30 +208,30 @@ impl UiMember for Button {
         self.base.h_resize = handler;
     }
     
-    fn set_visibility(&mut self, visibility: Visibility) {
+    fn set_visibility(&mut self, visibility: types::Visibility) {
         self.base.control_base.member_base.visibility = visibility;
         unsafe {
             user32::ShowWindow(self.base.hwnd,
-                               if self.base.control_base.member_base.visibility == Visibility::Invisible {
+                               if self.base.control_base.member_base.visibility == types::Visibility::Invisible {
                                    winapi::SW_HIDE
                                } else {
                                    winapi::SW_SHOW
                                });
-            self.invalidate();
+            self.base.invalidate();
         }
     }
-    fn visibility(&self) -> Visibility {
+    fn visibility(&self) -> types::Visibility {
         self.base.control_base.member_base.visibility
     } 
 
     fn member_id(&self) -> &'static str {
-	    development::CLASS_ID_BUTTON
+	    self.base.control_base.member_base.member_id
     }
-    fn id(&self) -> Id {
+    fn id(&self) -> ids::Id {
     	self.base.id()
     }
     unsafe fn native_id(&self) -> usize {
-	    unsafe { self.base.hwnd as usize }
+	    self.base.hwnd as usize
     }
     fn is_control(&self) -> Option<&UiControl> {
     	Some(self)
@@ -242,46 +243,13 @@ impl UiMember for Button {
 
 impl Drop for Button {
     fn drop(&mut self) {
-        self.set_visibility(Visibility::Gone);
+        self.set_visibility(types::Visibility::Gone);
         common::destroy_hwnd(self.base.hwnd, 0, None);
     }
 }
 
-unsafe impl common::WindowsControl for Button {
-    /*unsafe fn on_added_to_container(&mut self, parent: &common::WindowsContainer, px: u16, py: u16) {
-        let selfptr = self as *mut _ as *mut c_void;
-        let (pw, ph) = parent.size();
-        self.base.hwnd = parent.hwnd(); // required for measure, as we don't have own hwnd yet
-        let (w, h, _) = self.measure(pw, ph);
-        let (hwnd, id) = common::create_control_hwnd(px as i32,
-                                                     py as i32,
-                                                     w as i32,
-                                                     h as i32,
-                                                     parent.hwnd(),
-                                                     0,
-                                                     WINDOW_CLASS.as_ptr(),
-                                                     self.label.as_str(),
-                                                     winapi::BS_PUSHBUTTON | winapi::WS_TABSTOP,
-                                                     selfptr,
-                                                     Some(handler));
-        self.base.hwnd = hwnd;
-        self.base.subclass_id = id;
-    }
-    unsafe fn on_removed_from_container(&mut self, _: &common::WindowsContainer) {
-        common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, Some(handler));
-        self.base.hwnd = 0 as winapi::HWND;
-        self.base.subclass_id = 0;
-    }*/
-    fn as_base(&self) -> &common::WindowsControlBase {
-    	&self.base
-    }
-    fn as_base_mut(&mut self) -> &mut common::WindowsControlBase {
-    	&mut self.base
-    }
-}
-
 unsafe extern "system" fn handler(hwnd: winapi::HWND, msg: winapi::UINT, wparam: winapi::WPARAM, lparam: winapi::LPARAM, _: u64, param: u64) -> i64 {
-    let mut button: &mut Button = mem::transmute(param);
+    let button: &mut Button = mem::transmute(param);
     let ww = user32::GetWindowLongPtrW(hwnd, winapi::GWLP_USERDATA);
     if ww == 0 {
         user32::SetWindowLongPtrW(hwnd, winapi::GWLP_USERDATA, param as i64);
@@ -307,3 +275,5 @@ unsafe extern "system" fn handler(hwnd: winapi::HWND, msg: winapi::UINT, wparam:
 
     comctl32::DefSubclassProc(hwnd, msg, wparam, lparam)
 }
+
+impl_invalidate!(Button);

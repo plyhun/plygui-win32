@@ -1,7 +1,9 @@
 use super::*;
 use super::common::*;
 
-use plygui::{development, layout, Id, UiControl, UiLayedOut, UiMember, UiContainer, UiMultiContainer, UiLinearLayout, UiMemberBase, Visibility};
+use plygui_api::{layout, ids, types};
+use plygui_api::traits::{UiControl, UiLayedOut, UiMultiContainer, UiLinearLayout, UiMember, UiContainer};
+use plygui_api::members::MEMBER_ID_LAYOUT_LINEAR;
 
 use std::{ptr, mem};
 use std::os::raw::c_void;
@@ -23,7 +25,7 @@ pub struct LinearLayout {
 impl LinearLayout {
     pub fn new(orientation: layout::Orientation) -> Box<LinearLayout> {
         Box::new(LinearLayout {
-                     base: Default::default(),
+                     base: WindowsControlBase::with_params(MEMBER_ID_LAYOUT_LINEAR, true, invalidate_impl),
                      orientation: orientation,
                      children: Vec::new(),
                  })
@@ -31,23 +33,23 @@ impl LinearLayout {
 }
 
 impl UiMember for LinearLayout {    
-    fn set_visibility(&mut self, visibility: Visibility) {
+    fn set_visibility(&mut self, visibility: types::Visibility) {
         self.base.control_base.member_base.visibility = visibility;
         unsafe {
             user32::ShowWindow(self.base.hwnd,
-                               if self.base.control_base.member_base.visibility == Visibility::Invisible {
+                               if self.base.control_base.member_base.visibility == types::Visibility::Invisible {
                                    winapi::SW_HIDE
                                } else {
                                    winapi::SW_SHOW
                                });
-            self.invalidate();
+            self.base.invalidate();
         }
     }
-    fn visibility(&self) -> Visibility {
+    fn visibility(&self) -> types::Visibility {
         self.base.control_base.member_base.visibility
     }
 
-    fn id(&self) -> Id {
+    fn id(&self) -> ids::Id {
     	self.base.id()
     }
     fn size(&self) -> (u16, u16) {
@@ -60,10 +62,10 @@ impl UiMember for LinearLayout {
     }
 
     fn member_id(&self) -> &'static str {
-    	development::CLASS_ID_LAYOUT_LINEAR
+    	self.base.control_base.member_base.member_id
     }
     unsafe fn native_id(&self) -> usize {
-	    unsafe { self.base.hwnd as usize }
+	    self.base.hwnd as usize
     }
     fn is_control(&self) -> Option<&UiControl> {
     	Some(self)
@@ -92,24 +94,24 @@ impl UiLayedOut for LinearLayout {
 	
 	fn set_layout_width(&mut self, width: layout::Size) {
 		self.base.control_base.layout.width = width;
-		self.invalidate();
+		self.base.invalidate();
 	}
 	fn set_layout_height(&mut self, height: layout::Size) {
 		self.base.control_base.layout.height = height;
-		self.invalidate();
+		self.base.invalidate();
 	}
 	fn set_layout_gravity(&mut self, gravity: layout::Gravity) {
 		self.base.control_base.layout.gravity = gravity;
-		self.invalidate();
+		self.base.invalidate();
 	}
 	fn set_layout_orientation(&mut self, orientation: layout::Orientation) {
 		self.base.control_base.layout.orientation = orientation;
-		self.invalidate();
+		self.base.invalidate();
 	}
 	fn set_layout_alignment(&mut self, alignment: layout::Alignment) {
 		self.base.control_base.layout.alignment = alignment;
-		self.invalidate();
-	}
+		self.base.invalidate();
+	}  
 }
 
 impl UiControl for LinearLayout {
@@ -142,7 +144,7 @@ impl UiControl for LinearLayout {
     fn measure(&mut self, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
     	let old_size = self.base.measured_size;
         self.base.measured_size = match self.visibility() {
-        	Visibility::Gone => (0,0),
+        	types::Visibility::Gone => (0,0),
         	_ => {
         		let mut w = parent_width;
 		        let mut h = parent_height;
@@ -187,16 +189,16 @@ impl UiControl for LinearLayout {
         Some(self)
     }
 
-    fn parent(&self) -> Option<&UiMemberBase> {
+    fn parent(&self) -> Option<&types::UiMemberCommon> {
         self.base.parent()
     }
-    fn parent_mut(&mut self) -> Option<&mut UiMemberBase> {
+    fn parent_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
         self.base.parent_mut()
     }
-    fn root(&self) -> Option<&UiMemberBase> {
+    fn root(&self) -> Option<&types::UiMemberCommon> {
         self.base.root()
     }
-    fn root_mut(&mut self) -> Option<&mut UiMemberBase> {
+    fn root_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
         self.base.root_mut()
     }
     fn on_added_to_container(&mut self, parent: &UiContainer, px: u16, py: u16) {
@@ -238,7 +240,7 @@ impl UiControl for LinearLayout {
             let self2: &mut LinearLayout = unsafe { mem::transmute(selfptr) };
             child.on_removed_from_container(self2);
         }
-        destroy_hwnd(self.base.hwnd, self.base.subclass_id, None);
+        common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, None);
         self.base.hwnd = 0 as winapi::HWND;
         self.base.subclass_id = 0;
     }
@@ -246,7 +248,7 @@ impl UiControl for LinearLayout {
 }
 
 impl UiContainer for LinearLayout {
-    fn find_control_by_id_mut(&mut self, id_: Id) -> Option<&mut UiControl> {
+    fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut UiControl> {
         if self.id() == id_ {
             return Some(self);
         }
@@ -263,7 +265,7 @@ impl UiContainer for LinearLayout {
         }
         None
     }
-    fn find_control_by_id(&self, id_: Id) -> Option<&UiControl> {
+    fn find_control_by_id(&self, id_: ids::Id) -> Option<&UiControl> {
         if self.id() == id_ {
             return Some(self);
         }
@@ -324,23 +326,14 @@ impl UiLinearLayout for LinearLayout {
     }
 }
 
-unsafe impl WindowsContainer for LinearLayout {
+unsafe impl common::WindowsContainer for LinearLayout {
     unsafe fn hwnd(&self) -> winapi::HWND {
         self.base.hwnd
     }
 }
 
-unsafe impl WindowsControl for LinearLayout {
-    fn as_base(&self) -> &WindowsControlBase {
-    	&self.base
-    }
-    fn as_base_mut(&mut self) -> &mut WindowsControlBase {
-    	&mut self.base
-    }    
-}
-
 unsafe fn register_window_class() -> Vec<u16> {
-    let class_name = OsStr::new(development::CLASS_ID_LAYOUT_LINEAR)
+    let class_name = OsStr::new(MEMBER_ID_LAYOUT_LINEAR)
         .encode_wide()
         .chain(Some(0).into_iter())
         .collect::<Vec<_>>();
@@ -421,9 +414,11 @@ unsafe extern "system" fn whandler(hwnd: winapi::HWND, msg: winapi::UINT, wparam
     user32::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
+impl_invalidate!(LinearLayout);
+
 impl Drop for LinearLayout {
     fn drop(&mut self) {
-        self.set_visibility(Visibility::Gone);
+        self.set_visibility(types::Visibility::Gone);
         common::destroy_hwnd(self.base.hwnd, 0, None);
     }
 }

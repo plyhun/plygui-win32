@@ -8,7 +8,7 @@ name = "plygui_win32"
 path = "src/lib.rs"
 
 [dependencies]
-plygui = {version = "0.0.1", path = "../plygui"}
+plygui-api = {version = "0.0.1", path = "../plygui-api"}
 user32-sys = "~0.2"
 gdi32-sys = "~0.2"
 kernel32-sys = "~0.2"

@@ -1,7 +1,9 @@
 use super::*;
 use super::common::*;
 
-use plygui::{development, Id, UiWindow, UiControl, UiMember, UiContainer, UiSingleContainer, Visibility, UiMemberBase};
+use plygui_api::{development, ids, types};
+use plygui_api::traits::{UiControl, UiWindow, UiSingleContainer, UiMember, UiContainer};
+use plygui_api::members::MEMBER_ID_WINDOW;
 
 use std::{ptr, mem, str};
 use std::os::raw::c_void;
@@ -15,7 +17,7 @@ lazy_static! {
 
 #[repr(C)]
 pub struct Window {
-	base: UiMemberBase,
+	base: development::UiMemberBase,
     hwnd: winapi::HWND,
     child: Option<Box<UiControl>>,
     h_resize: Option<Box<FnMut(&mut UiMember, u16, u16)>>,
@@ -45,7 +47,7 @@ impl Window {
                 .collect::<Vec<_>>();
 
             let mut w = Box::new(Window {
-				            		base: UiMemberBase::with_visibility(Visibility::Visible),
+				            		base: development::UiMemberBase::with_params(MEMBER_ID_WINDOW, false, types::Visibility::Visible),
                                      hwnd: 0 as winapi::HWND,
                                      child: None,
                                      h_resize: None,
@@ -90,7 +92,7 @@ impl Window {
 impl UiWindow for Window {}
 
 impl UiContainer for Window {
-    fn find_control_by_id_mut(&mut self, id_: Id) -> Option<&mut UiControl> {
+    fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut UiControl> {
         /*if self.id() == id_ {
 			return Some(self);
 		} else*/
@@ -101,7 +103,7 @@ impl UiContainer for Window {
         }
         None
     }
-    fn find_control_by_id(&self, id_: Id) -> Option<&UiControl> {
+    fn find_control_by_id(&self, id_: ids::Id) -> Option<&UiControl> {
         /*if self.id() == id_ {
 			return Some(self);
 		} else*/
@@ -122,19 +124,17 @@ impl UiContainer for Window {
 
 impl UiSingleContainer for Window {
 	fn set_child(&mut self, mut child: Option<Box<UiControl>>) -> Option<Box<UiControl>> {
-        unsafe {
-            let mut old = self.child.take();
-            if let Some(old) = old.as_mut() {
-                old.on_removed_from_container(self);
-            }
-            if let Some(new) = child.as_mut() {
-                new.on_added_to_container(self, 0, 0); //TODO padding
-
-            }
-            self.child = child;
-
-            old
+        let mut old = self.child.take();
+        if let Some(old) = old.as_mut() {
+            old.on_removed_from_container(self);
         }
+        if let Some(new) = child.as_mut() {
+            new.on_added_to_container(self, 0, 0); //TODO padding
+
+        }
+        self.child = child;
+
+        old
     }
     fn child(&self) -> Option<&UiControl> {
         self.child.as_ref().map(|c| c.as_ref())
@@ -160,23 +160,23 @@ impl UiMember for Window {
     }
 
     fn member_id(&self) -> &'static str {
-    	development::CLASS_ID_WINDOW
+    	self.base.member_id
     }
-    fn set_visibility(&mut self, visibility: Visibility) {
+    fn set_visibility(&mut self, visibility: types::Visibility) {
         self.base.visibility = visibility;
         unsafe {
             user32::ShowWindow(self.hwnd,
-                               if self.base.visibility == Visibility::Visible {
+                               if self.base.visibility == types::Visibility::Visible {
                                    winapi::SW_SHOW
                                } else {
                                    winapi::SW_HIDE
                                });
         }
     }
-    fn visibility(&self) -> Visibility {
+    fn visibility(&self) -> types::Visibility {
         self.base.visibility
     }
-    fn id(&self) -> Id {
+    fn id(&self) -> ids::Id {
     	self.base.id
     }
     fn is_control(&self) -> Option<&UiControl> {
@@ -187,14 +187,14 @@ impl UiMember for Window {
     } 
     
     unsafe fn native_id(&self) -> usize {
-	    unsafe { self.hwnd as usize }
+	    self.hwnd as usize
     }
 }
 
 impl Drop for Window {
     fn drop(&mut self) {
         self.set_child(None);
-        self.set_visibility(Visibility::Gone);
+        self.set_visibility(types::Visibility::Gone);
         destroy_hwnd(self.hwnd, 0, None);
     }
 }
@@ -206,7 +206,7 @@ unsafe impl WindowsContainer for Window {
 }
 
 unsafe fn register_window_class() -> Vec<u16> {
-    let class_name = OsStr::new(development::CLASS_ID_WINDOW)
+    let class_name = OsStr::new(MEMBER_ID_WINDOW)
         .encode_wide()
         .chain(Some(0).into_iter())
         .collect::<Vec<_>>();

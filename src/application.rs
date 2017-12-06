@@ -3,7 +3,7 @@ use super::common::WindowsContainer;
 
 use std::{mem, thread};
 
-use plygui::{Id, UiApplication, UiWindow};
+use plygui_api::traits::{UiApplication, UiWindow};
 
 pub struct Application {
     name: String,
