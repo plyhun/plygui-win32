@@ -47,7 +47,15 @@ impl Window {
                 .collect::<Vec<_>>();
 
             let mut w = Box::new(Window {
-				            		base: development::UiMemberBase::with_params(MEMBER_ID_WINDOW, false, types::Visibility::Visible),
+				            		base: development::UiMemberBase::with_params(
+				            			types::Visibility::Visible,
+				            			development::UiMemberFunctions {
+					            			fn_member_id: member_id,
+										    fn_is_control: is_control,
+										    fn_is_control_mut: is_control_mut,
+										    fn_size: size,
+				            			},
+				            		),
                                      hwnd: 0 as winapi::HWND,
                                      child: None,
                                      h_resize: None,
@@ -160,7 +168,7 @@ impl UiMember for Window {
     }
 
     fn member_id(&self) -> &'static str {
-    	self.base.member_id
+    	self.base.member_id()
     }
     fn set_visibility(&mut self, visibility: types::Visibility) {
         self.base.visibility = visibility;
@@ -277,3 +285,12 @@ unsafe extern "system" fn handler(hwnd: winapi::HWND, msg: winapi::UINT, wparam:
 
     user32::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
+
+unsafe fn is_control(_: &development::UiMemberBase) -> Option<&development::UiControlBase> {
+	None
+}
+unsafe fn is_control_mut(_: &mut development::UiMemberBase) -> Option<&mut development::UiControlBase> {
+	None
+}
+impl_size!(Window);
+impl_member_id!(MEMBER_ID_WINDOW);

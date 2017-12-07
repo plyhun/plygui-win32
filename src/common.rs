@@ -25,10 +25,10 @@ pub struct WindowsControlBase {
 }
 
 impl WindowsControlBase {
-	pub fn with_params(member_id: &'static str, is_control: bool, invalidate: unsafe fn(this: &mut WindowsControlBase)) -> WindowsControlBase {
+	pub fn with_params(invalidate: unsafe fn(this: &mut WindowsControlBase), functions: development::UiMemberFunctions) -> WindowsControlBase {
         WindowsControlBase {
         	control_base: development::UiControlBase {
-	        	member_base: development::UiMemberBase::with_params(member_id, is_control, types::Visibility::Visible),
+	        	member_base: development::UiMemberBase::with_params(types::Visibility::Visible, functions),
 		        layout: development::layout::LayoutBase {
 		            width: layout::Size::MatchParent,
 					height: layout::Size::WrapContent,
@@ -267,7 +267,7 @@ macro_rules! impl_invalidate {
 			let parent_hwnd = this.parent_hwnd();	
 			if let Some(parent_hwnd) = parent_hwnd {
 				let mparent = common::cast_hwnd::<plygui_api::development::UiMemberBase>(parent_hwnd);
-				if mparent.is_control {
+				if mparent.is_control().is_some() {
 					let wparent = common::cast_hwnd::<common::WindowsControlBase>(parent_hwnd);
 					let (pw, ph) = wparent.measured_size;
 					let this: &mut $typ = mem::transmute(this);
@@ -283,6 +283,33 @@ macro_rules! impl_invalidate {
 		    		user32::InvalidateRect(parent_hwnd, ptr::null_mut(), winapi::TRUE);
 		    	}
 		    }
+		}
+	}
+}
+#[macro_export]
+macro_rules! impl_is_control {
+	($typ: ty) => {
+		unsafe fn is_control(this: &::plygui_api::development::UiMemberBase) -> Option<&::plygui_api::development::UiControlBase> {
+			Some(&::plygui_api::utils::base_to_impl::<$typ>(this).base.control_base)
+		}
+		unsafe fn is_control_mut(this: &mut ::plygui_api::development::UiMemberBase) -> Option<&mut ::plygui_api::development::UiControlBase> {
+			Some(&mut ::plygui_api::utils::base_to_impl_mut::<$typ>(this).base.control_base)
+		}
+	}
+}
+#[macro_export]
+macro_rules! impl_size {
+	($typ: ty) => {
+		unsafe fn size(this: &::plygui_api::development::UiMemberBase) -> (u16, u16) {
+			::plygui_api::utils::base_to_impl::<Button>(this).size()
+		}
+	}
+}
+#[macro_export]
+macro_rules! impl_member_id {
+	($mem: expr) => {
+		unsafe fn member_id(_: &::plygui_api::development::UiMemberBase) -> &'static str {
+			$mem
 		}
 	}
 }

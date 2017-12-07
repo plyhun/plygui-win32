@@ -1,6 +1,6 @@
 use super::*;
 
-use plygui_api::{layout, ids, types};
+use plygui_api::{layout, ids, types, development};
 use plygui_api::traits::{UiControl, UiLayedOut, UiButton, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_BUTTON;
 
@@ -28,7 +28,15 @@ pub struct Button {
 impl Button {
     pub fn new(label: &str) -> Box<Button> {
         let b = Box::new(Button {
-                             base: common::WindowsControlBase::with_params(MEMBER_ID_BUTTON, true, invalidate_impl),
+                             base: common::WindowsControlBase::with_params(
+                             	invalidate_impl,
+	                             development::UiMemberFunctions {
+		                             fn_member_id: member_id,
+								     fn_is_control: is_control,
+								     fn_is_control_mut: is_control_mut,
+								     fn_size: size,
+	                             },
+                             ),
                              h_left_clicked: None,
                              label: label.to_owned(),
                          });
@@ -225,7 +233,7 @@ impl UiMember for Button {
     } 
 
     fn member_id(&self) -> &'static str {
-	    self.base.control_base.member_base.member_id
+	    self.base.control_base.member_base.member_id()
     }
     fn id(&self) -> ids::Id {
     	self.base.id()
@@ -277,3 +285,6 @@ unsafe extern "system" fn handler(hwnd: winapi::HWND, msg: winapi::UINT, wparam:
 }
 
 impl_invalidate!(Button);
+impl_is_control!(Button);
+impl_size!(Button);
+impl_member_id!(MEMBER_ID_BUTTON);

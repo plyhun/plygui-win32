@@ -1,7 +1,7 @@
 use super::*;
 use super::common::*;
 
-use plygui_api::{layout, ids, types};
+use plygui_api::{layout, ids, types, development};
 use plygui_api::traits::{UiControl, UiLayedOut, UiMultiContainer, UiLinearLayout, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_LAYOUT_LINEAR;
 
@@ -25,7 +25,15 @@ pub struct LinearLayout {
 impl LinearLayout {
     pub fn new(orientation: layout::Orientation) -> Box<LinearLayout> {
         Box::new(LinearLayout {
-                     base: WindowsControlBase::with_params(MEMBER_ID_LAYOUT_LINEAR, true, invalidate_impl),
+                     base: common::WindowsControlBase::with_params(
+                             	invalidate_impl,
+	                             development::UiMemberFunctions {
+		                             fn_member_id: member_id,
+								     fn_is_control: is_control,
+								     fn_is_control_mut: is_control_mut,
+								     fn_size: size,
+	                             },
+                             ),
                      orientation: orientation,
                      children: Vec::new(),
                  })
@@ -62,7 +70,7 @@ impl UiMember for LinearLayout {
     }
 
     fn member_id(&self) -> &'static str {
-    	self.base.control_base.member_base.member_id
+    	self.base.control_base.member_base.member_id()
     }
     unsafe fn native_id(&self) -> usize {
 	    self.base.hwnd as usize
@@ -415,6 +423,9 @@ unsafe extern "system" fn whandler(hwnd: winapi::HWND, msg: winapi::UINT, wparam
 }
 
 impl_invalidate!(LinearLayout);
+impl_is_control!(LinearLayout);
+impl_size!(LinearLayout);
+impl_member_id!(MEMBER_ID_LAYOUT_LINEAR);
 
 impl Drop for LinearLayout {
     fn drop(&mut self) {
