@@ -123,73 +123,6 @@ impl UiLayedOut for LinearLayout {
 }
 
 impl UiControl for LinearLayout {
-    fn draw(&mut self, coords: Option<(i32, i32)>) {
-    	if coords.is_some() {
-    		self.base.coords = coords;
-    	}
-        if let Some((x, y)) = self.base.coords {
-        	unsafe {
-	            user32::SetWindowPos(self.base.hwnd,
-	                                 ptr::null_mut(),
-	                                 x as i32,
-	                                 y as i32,
-	                                 self.base.measured_size.0 as i32,
-	                                 self.base.measured_size.1 as i32,
-	                                 0);
-	        }
-        	let mut x = 0;
-	        let mut y = 0;
-	        for ref mut child in self.children.as_mut_slice() {
-	            child.draw(Some((x, y)));
-	            let (xx, yy) = child.size();
-	            match self.orientation {
-	                layout::Orientation::Horizontal => x += xx as i32,
-	                layout::Orientation::Vertical => y += yy as i32,
-	            }
-	        }
-        }
-    }
-    fn measure(&mut self, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
-    	let old_size = self.base.measured_size;
-        self.base.measured_size = match self.visibility() {
-        	types::Visibility::Gone => (0,0),
-        	_ => {
-        		let mut w = parent_width;
-		        let mut h = parent_height;
-		
-		        if let layout::Size::Exact(ew) = self.layout_width() {
-		            w = ew;
-		        }
-		        if let layout::Size::Exact(eh) = self.layout_height() {
-		            w = eh;
-		        }
-		        match self.orientation {
-		            layout::Orientation::Vertical => {
-		                if let layout::Size::WrapContent = self.layout_height() {
-		                    let mut hh = 0;
-		                    for ref mut child in self.children.as_mut_slice() {
-		                        let (_, ch, _) = child.measure(w, h);
-		                        hh += ch;
-		                    }
-		                    h = hh;
-		                }
-		            }
-		            layout::Orientation::Horizontal => {
-		                if let layout::Size::WrapContent = self.layout_width() {
-		                    let mut ww = 0;
-		                    for ref mut child in self.children.as_mut_slice() {
-		                        let (cw, _, _) = child.measure(w, h);
-		                        ww += cw;
-		                    }
-		                    w = ww;
-		                }
-		            }
-		        }
-		        (w, h)
-        	}
-        };
-        (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
-    }
     fn is_container_mut(&mut self) -> Option<&mut UiContainer> {
         Some(self)
     }
@@ -210,6 +143,8 @@ impl UiControl for LinearLayout {
         self.base.root_mut()
     }
     fn on_added_to_container(&mut self, parent: &UiContainer, px: u16, py: u16) {
+    	use plygui_api::development::UiDrawable;
+    	
         let selfptr = self as *mut _ as *mut c_void;
         let (pw, ph) = parent.size();
         let (hwnd, id) = unsafe { 
@@ -332,6 +267,77 @@ impl UiLinearLayout for LinearLayout {
     fn set_orientation(&mut self, orientation: layout::Orientation) {
         self.orientation = orientation;
     }
+}
+
+impl development::UiDrawable for LinearLayout {
+	fn draw(&mut self, coords: Option<(i32, i32)>) {
+    	if coords.is_some() {
+    		self.base.coords = coords;
+    	}
+        if let Some((x, y)) = self.base.coords {
+        	unsafe {
+	            user32::SetWindowPos(self.base.hwnd,
+	                                 ptr::null_mut(),
+	                                 x as i32,
+	                                 y as i32,
+	                                 self.base.measured_size.0 as i32,
+	                                 self.base.measured_size.1 as i32,
+	                                 0);
+	        }
+        	let mut x = 0;
+	        let mut y = 0;
+	        for ref mut child in self.children.as_mut_slice() {
+	            child.draw(Some((x, y)));
+	            let (xx, yy) = child.size();
+	            match self.orientation {
+	                layout::Orientation::Horizontal => x += xx as i32,
+	                layout::Orientation::Vertical => y += yy as i32,
+	            }
+	        }
+        }
+    }
+    fn measure(&mut self, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+    	let old_size = self.base.measured_size;
+        self.base.measured_size = match self.visibility() {
+        	types::Visibility::Gone => (0,0),
+        	_ => {
+        		let mut w = parent_width;
+		        let mut h = parent_height;
+		
+		        if let layout::Size::Exact(ew) = self.layout_width() {
+		            w = ew;
+		        }
+		        if let layout::Size::Exact(eh) = self.layout_height() {
+		            w = eh;
+		        }
+		        match self.orientation {
+		            layout::Orientation::Vertical => {
+		                if let layout::Size::WrapContent = self.layout_height() {
+		                    let mut hh = 0;
+		                    for ref mut child in self.children.as_mut_slice() {
+		                        let (_, ch, _) = child.measure(w, h);
+		                        hh += ch;
+		                    }
+		                    h = hh;
+		                }
+		            }
+		            layout::Orientation::Horizontal => {
+		                if let layout::Size::WrapContent = self.layout_width() {
+		                    let mut ww = 0;
+		                    for ref mut child in self.children.as_mut_slice() {
+		                        let (cw, _, _) = child.measure(w, h);
+		                        ww += cw;
+		                    }
+		                    w = ww;
+		                }
+		            }
+		        }
+		        (w, h)
+        	}
+        };
+        (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
+    }
+
 }
 
 unsafe impl common::WindowsContainer for LinearLayout {

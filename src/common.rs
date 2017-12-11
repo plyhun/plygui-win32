@@ -264,17 +264,19 @@ pub unsafe fn log_error() {
 macro_rules! impl_invalidate {
 	($typ: ty) => {
 		unsafe fn invalidate_impl(this: &mut common::WindowsControlBase) {
+			use plygui_api::development::UiDrawable;
+			
 			let parent_hwnd = this.parent_hwnd();	
 			if let Some(parent_hwnd) = parent_hwnd {
 				let mparent = common::cast_hwnd::<plygui_api::development::UiMemberBase>(parent_hwnd);
+				let (pw, ph) = mparent.size();
+				let this: &mut $typ = mem::transmute(this);
+				//let (_,_,changed) = 
+				this.measure(pw, ph);
+				this.draw(None);		
+						
 				if mparent.is_control().is_some() {
 					let wparent = common::cast_hwnd::<common::WindowsControlBase>(parent_hwnd);
-					let (pw, ph) = wparent.measured_size;
-					let this: &mut $typ = mem::transmute(this);
-					//let (_,_,changed) = 
-					this.measure(pw, ph);
-					this.draw(None);
-						
 					//if changed {
 						wparent.invalidate();
 					//} 
@@ -301,7 +303,7 @@ macro_rules! impl_is_control {
 macro_rules! impl_size {
 	($typ: ty) => {
 		unsafe fn size(this: &::plygui_api::development::UiMemberBase) -> (u16, u16) {
-			::plygui_api::utils::base_to_impl::<Button>(this).size()
+			::plygui_api::utils::base_to_impl::<$typ>(this).size()
 		}
 	}
 }
@@ -310,6 +312,22 @@ macro_rules! impl_member_id {
 	($mem: expr) => {
 		unsafe fn member_id(_: &::plygui_api::development::UiMemberBase) -> &'static str {
 			$mem
+		}
+	}
+}
+#[macro_export]
+macro_rules! impl_measure {
+	($typ: ty) => {
+		unsafe fn measure(&mut UiMemberBase, w: u16, h: u16) -> (u16, u16, bool) {
+			::plygui_api::utils::base_to_impl::<$typ>(this).measure(w, h)
+		}
+	}
+}
+#[macro_export]
+macro_rules! impl_draw {
+	($typ: ty) => {
+		unsafe fn draw(&mut UiMemberBase, coords: Option<(i32, i32)>) {
+			::plygui_api::utils::base_to_impl::<$typ>(this).draw(coords)
 		}
 	}
 }

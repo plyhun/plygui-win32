@@ -56,6 +56,8 @@ impl UiButton for Button {
 
 impl UiControl for Button {
 	fn on_added_to_container(&mut self, parent: &UiContainer, x: u16, y: u16) {
+		use plygui_api::development::UiDrawable;
+		
 		let selfptr = self as *mut _ as *mut c_void;
         let (pw, ph) = parent.size();
         let (hwnd, id) = unsafe {
@@ -82,70 +84,6 @@ impl UiControl for Button {
         self.base.subclass_id = 0;
     }
     
-    fn draw(&mut self, coords: Option<(i32, i32)>) {
-    	if coords.is_some() {
-    		self.base.coords = coords;
-    	}
-        if let Some((x, y)) = self.base.coords {
-        	unsafe {
-	            user32::SetWindowPos(self.base.hwnd,
-	                                 ptr::null_mut(),
-	                                 x as i32,
-	                                 y as i32,
-	                                 self.base.measured_size.0 as i32,
-	                                 self.base.measured_size.1 as i32,
-	                                 0);
-	        }
-        }
-    }
-    fn measure(&mut self, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
-    	let old_size = self.base.measured_size;
-    	
-    	self.base.measured_size = match self.visibility() {
-    		types::Visibility::Gone => (0, 0),
-    		_ => {
-    			unsafe {
-		            let mut label_size: winapi::SIZE = mem::zeroed();
-		            let w = match self.layout_width() {
-		                layout::Size::MatchParent => parent_width,
-		                layout::Size::Exact(w) => w,
-		                layout::Size::WrapContent => {
-		                    if label_size.cx < 1 {
-		                        let label = OsStr::new(self.label.as_str())
-		                            .encode_wide()
-		                            .chain(Some(0).into_iter())
-		                            .collect::<Vec<_>>();
-		                        gdi32::GetTextExtentPointW(user32::GetDC(self.base.hwnd),
-		                                                   label.as_ptr(),
-		                                                   self.label.len() as i32,
-		                                                   &mut label_size);
-		                    }
-		                    label_size.cx as u16
-		                } 
-		            };
-		            let h = match self.layout_height() {
-		                layout::Size::MatchParent => parent_height,
-		                layout::Size::Exact(h) => h,
-		                layout::Size::WrapContent => {
-		                    if label_size.cy < 1 {
-		                        let label = OsStr::new(self.label.as_str())
-		                            .encode_wide()
-		                            .chain(Some(0).into_iter())
-		                            .collect::<Vec<_>>();
-		                        gdi32::GetTextExtentPointW(user32::GetDC(self.base.hwnd),
-		                                                   label.as_ptr(),
-		                                                   self.label.len() as i32,
-		                                                   &mut label_size);
-		                    }
-		                    label_size.cy as u16
-		                } 
-		            };
-		            (w, h)
-		        }
-    		}
-    	};
-        (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
-    }
     fn is_container_mut(&mut self) -> Option<&mut UiContainer> {
         None
     }
@@ -247,6 +185,73 @@ impl UiMember for Button {
     fn is_control_mut(&mut self) -> Option<&mut UiControl> {
     	Some(self)
     }     
+}
+
+impl development::UiDrawable for Button {
+    fn draw(&mut self, coords: Option<(i32, i32)>) {
+    	if coords.is_some() {
+    		self.base.coords = coords;
+    	}
+        if let Some((x, y)) = self.base.coords {
+        	unsafe {
+	            user32::SetWindowPos(self.base.hwnd,
+	                                 ptr::null_mut(),
+	                                 x as i32,
+	                                 y as i32,
+	                                 self.base.measured_size.0 as i32,
+	                                 self.base.measured_size.1 as i32,
+	                                 0);
+	        }
+        }
+    }
+    fn measure(&mut self, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+    	let old_size = self.base.measured_size;
+    	
+    	self.base.measured_size = match self.visibility() {
+    		types::Visibility::Gone => (0, 0),
+    		_ => {
+    			unsafe {
+		            let mut label_size: winapi::SIZE = mem::zeroed();
+		            let w = match self.layout_width() {
+		                layout::Size::MatchParent => parent_width,
+		                layout::Size::Exact(w) => w,
+		                layout::Size::WrapContent => {
+		                    if label_size.cx < 1 {
+		                        let label = OsStr::new(self.label.as_str())
+		                            .encode_wide()
+		                            .chain(Some(0).into_iter())
+		                            .collect::<Vec<_>>();
+		                        gdi32::GetTextExtentPointW(user32::GetDC(self.base.hwnd),
+		                                                   label.as_ptr(),
+		                                                   self.label.len() as i32,
+		                                                   &mut label_size);
+		                    }
+		                    label_size.cx as u16
+		                } 
+		            };
+		            let h = match self.layout_height() {
+		                layout::Size::MatchParent => parent_height,
+		                layout::Size::Exact(h) => h,
+		                layout::Size::WrapContent => {
+		                    if label_size.cy < 1 {
+		                        let label = OsStr::new(self.label.as_str())
+		                            .encode_wide()
+		                            .chain(Some(0).into_iter())
+		                            .collect::<Vec<_>>();
+		                        gdi32::GetTextExtentPointW(user32::GetDC(self.base.hwnd),
+		                                                   label.as_ptr(),
+		                                                   self.label.len() as i32,
+		                                                   &mut label_size);
+		                    }
+		                    label_size.cy as u16
+		                } 
+		            };
+		            (w, h)
+		        }
+    		}
+    	};
+        (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
+    }	
 }
 
 impl Drop for Button {
