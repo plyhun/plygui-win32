@@ -194,7 +194,7 @@ pub fn destroy_hwnd(hwnd: winapi::HWND,
 
 pub unsafe fn window_rect(hwnd: winapi::HWND) -> winapi::RECT {
     let mut rect: winapi::RECT = mem::zeroed();
-    user32::GetWindowRect(hwnd, &mut rect);
+    user32::GetClientRect(hwnd, &mut rect);
     rect
 }
 

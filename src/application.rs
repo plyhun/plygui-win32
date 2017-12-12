@@ -4,6 +4,7 @@ use super::common::WindowsContainer;
 use std::{mem, thread};
 
 use plygui_api::traits::{UiApplication, UiWindow};
+use plygui_api::types::WindowStartSize;
 
 pub struct Application {
     name: String,
@@ -11,8 +12,8 @@ pub struct Application {
 }
 
 impl UiApplication for Application {
-    fn new_window(&mut self, title: &str, width: u16, height: u16, has_menu: bool) -> Box<UiWindow> {
-        let w = Window::new(title, width, height, has_menu);
+    fn new_window(&mut self, title: &str, size: WindowStartSize, has_menu: bool) -> Box<UiWindow> {
+        let w = Window::new(title, size, has_menu);
         unsafe {
             self.windows.push(w.hwnd());
         }

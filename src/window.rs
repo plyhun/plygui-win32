@@ -17,25 +17,53 @@ lazy_static! {
 
 #[repr(C)]
 pub struct Window {
-	base: development::UiMemberBase,
+    base: development::UiMemberBase,
     hwnd: winapi::HWND,
     child: Option<Box<UiControl>>,
+
     h_resize: Option<Box<FnMut(&mut UiMember, u16, u16)>>,
 }
 
 impl Window {
-    pub(crate) fn new(
-                      title: &str,
-                      width: u16,
-                      height: u16,
-                      has_menu: bool)
-                      -> Box<Window> {
+    pub(crate) fn new(title: &str, window_size: types::WindowStartSize, has_menu: bool) -> Box<Window> {
         unsafe {
-            let mut rect = winapi::RECT {
-                left: 0,
-                top: 0,
-                right: width as i32,
-                bottom: height as i32,
+            let mut rect = match window_size {
+                types::WindowStartSize::Exact(width, height) => winapi::RECT {
+                    left: 0,
+                    top: 0,
+                    right: width as i32,
+                    bottom: height as i32,
+                },
+                types::WindowStartSize::Fullscreen => {
+                    let mut rect = winapi::RECT {
+                        left: 0,
+                        right: 0,
+                        top: 0,
+                        bottom: 0,
+                    };
+                    if user32::SystemParametersInfoW(
+                        winapi::winuser::SPI_GETWORKAREA,
+                        0,
+                        &mut rect as *mut _ as *mut c_void,
+                        0,
+                    ) == 0
+                    {
+                        log_error();
+                        winapi::RECT {
+                            left: 0,
+                            top: 0,
+                            right: 640,
+                            bottom: 480,
+                        }
+                    } else {
+                        winapi::RECT {
+                            left: 0,
+                            top: 0,
+                            right: rect.right,
+                            bottom: rect.bottom,
+                        }
+                    }
+                }
             };
             let style = winapi::WS_OVERLAPPEDWINDOW;
             let exstyle = winapi::WS_EX_APPWINDOW;
@@ -47,36 +75,39 @@ impl Window {
                 .collect::<Vec<_>>();
 
             let mut w = Box::new(Window {
-				            		base: development::UiMemberBase::with_params(
-				            			types::Visibility::Visible,
-				            			development::UiMemberFunctions {
-					            			fn_member_id: member_id,
-										    fn_is_control: is_control,
-										    fn_is_control_mut: is_control_mut,
-										    fn_size: size,
-				            			},
-				            		),
-                                     hwnd: 0 as winapi::HWND,
-                                     child: None,
-                                     h_resize: None,
-                                 });
+                base: development::UiMemberBase::with_params(
+                    types::Visibility::Visible,
+                    development::UiMemberFunctions {
+                        fn_member_id: member_id,
+                        fn_is_control: is_control,
+                        fn_is_control_mut: is_control_mut,
+                        fn_size: size,
+                    },
+                ),
+
+                hwnd: 0 as winapi::HWND,
+                child: None,
+                h_resize: None,
+            });
 
             if INSTANCE as usize == 0 {
                 INSTANCE = kernel32::GetModuleHandleW(ptr::null());
             }
 
-            let hwnd = user32::CreateWindowExW(exstyle,
-                                               WINDOW_CLASS.as_ptr(),
-                                               window_name.as_ptr() as winapi::LPCWSTR,
-                                               style | winapi::WS_VISIBLE,
-                                               winapi::CW_USEDEFAULT,
-                                               winapi::CW_USEDEFAULT,
-                                               rect.right - rect.left,
-                                               rect.bottom - rect.top,
-                                               ptr::null_mut(),
-                                               ptr::null_mut(),
-                                               INSTANCE,
-                                               w.as_mut() as *mut _ as *mut c_void);
+            let hwnd = user32::CreateWindowExW(
+                exstyle,
+                WINDOW_CLASS.as_ptr(),
+                window_name.as_ptr() as winapi::LPCWSTR,
+                style | winapi::WS_VISIBLE,
+                winapi::CW_USEDEFAULT,
+                winapi::CW_USEDEFAULT,
+                rect.right - rect.left,
+                rect.bottom - rect.top,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                INSTANCE,
+                w.as_mut() as *mut _ as *mut c_void,
+            );
 
             w.hwnd = hwnd;
             w
@@ -127,11 +158,11 @@ impl UiContainer for Window {
     }
     fn is_single(&self) -> Option<&UiSingleContainer> {
         Some(self)
-    } 
+    }
 }
 
 impl UiSingleContainer for Window {
-	fn set_child(&mut self, mut child: Option<Box<UiControl>>) -> Option<Box<UiControl>> {
+    fn set_child(&mut self, mut child: Option<Box<UiControl>>) -> Option<Box<UiControl>> {
         let mut old = self.child.take();
         if let Some(old) = old.as_mut() {
             old.on_removed_from_container(self);
@@ -160,7 +191,10 @@ impl UiSingleContainer for Window {
 impl UiMember for Window {
     fn size(&self) -> (u16, u16) {
         let rect = unsafe { window_rect(self.hwnd) };
-        ((rect.right - rect.left) as u16, (rect.bottom - rect.top) as u16)
+        (
+            (rect.right - rect.left) as u16,
+            (rect.bottom - rect.top) as u16,
+        )
     }
 
     fn on_resize(&mut self, handler: Option<Box<FnMut(&mut UiMember, u16, u16)>>) {
@@ -168,34 +202,36 @@ impl UiMember for Window {
     }
 
     fn member_id(&self) -> &'static str {
-    	self.base.member_id()
+        self.base.member_id()
     }
     fn set_visibility(&mut self, visibility: types::Visibility) {
         self.base.visibility = visibility;
         unsafe {
-            user32::ShowWindow(self.hwnd,
-                               if self.base.visibility == types::Visibility::Visible {
-                                   winapi::SW_SHOW
-                               } else {
-                                   winapi::SW_HIDE
-                               });
+            user32::ShowWindow(
+                self.hwnd,
+                if self.base.visibility == types::Visibility::Visible {
+                    winapi::SW_SHOW
+                } else {
+                    winapi::SW_HIDE
+                },
+            );
         }
     }
     fn visibility(&self) -> types::Visibility {
         self.base.visibility
     }
     fn id(&self) -> ids::Id {
-    	self.base.id
+        self.base.id
     }
     fn is_control(&self) -> Option<&UiControl> {
-    	None
+        None
     }
     fn is_control_mut(&mut self) -> Option<&mut UiControl> {
-    	None
-    } 
-    
+        None
+    }
+
     unsafe fn native_id(&self) -> usize {
-	    self.hwnd as usize
+        self.hwnd as usize
     }
 }
 
@@ -266,7 +302,7 @@ unsafe extern "system" fn handler(hwnd: winapi::HWND, msg: winapi::UINT, wparam:
         winapi::WM_DESTROY => {
             user32::PostQuitMessage(0);
             return 0;
-        },
+        }
         /*winapi::WM_PRINTCLIENT => {
         	user32::SendMessageW(hwnd, winapi::WM_ERASEBKGND, wparam, lparam);
 	        return 0;
@@ -287,10 +323,10 @@ unsafe extern "system" fn handler(hwnd: winapi::HWND, msg: winapi::UINT, wparam:
 }
 
 unsafe fn is_control(_: &development::UiMemberBase) -> Option<&development::UiControlBase> {
-	None
+    None
 }
 unsafe fn is_control_mut(_: &mut development::UiMemberBase) -> Option<&mut development::UiControlBase> {
-	None
+    None
 }
 impl_size!(Window);
 impl_member_id!(MEMBER_ID_WINDOW);
