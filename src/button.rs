@@ -52,6 +52,19 @@ impl UiButton for Button {
     fn label(&self) -> &str {
         self.label.as_ref()
     }
+    fn set_label(&mut self, label: &str) {
+    	self.label = label.into(); 
+    	if self.base.hwnd != 0 as winapi::HWND {
+    		let control_name = OsStr::new(&self.label)
+		        .encode_wide()
+		        .chain(Some(0).into_iter())
+		        .collect::<Vec<_>>();
+	    	unsafe {
+	    		user32::SetWindowTextW(self.base.hwnd, control_name.as_ptr());
+	    	}
+	    	self.base.invalidate();
+    	}
+    }
 }
 
 impl UiControl for Button {
@@ -102,6 +115,20 @@ impl UiControl for Button {
     }
     fn root_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
         self.base.root_mut()
+    }
+    
+    #[cfg(feature = "markup")]
+    fn fill_from_markup(&mut self, markup: &plygui_api::markup::Markup, _: &plygui_api::markup::MarkupRegistry, ids: &mut plygui_api::markup::MarkupIds) {
+    	if markup.member_type != MEMBER_ID_BUTTON && markup.member_type != plygui_api::markup::MEMBER_TYPE_BUTTON {
+			match markup.id {
+				Some(ref id) => panic!("Markup does not belong to Button: {} ({})", markup.member_type, id),
+				None => panic!("Markup does not belong to Button: {}", markup.member_type),
+			}
+		}		
+    	if let Some(ref id) = markup.id {
+    		ids.insert(id.clone(), self.id());
+    	}
+    	self.set_label(&markup.attributes.get("label").unwrap().as_attribute())
     }
 }
 
@@ -259,6 +286,11 @@ impl Drop for Button {
         self.set_visibility(types::Visibility::Gone);
         common::destroy_hwnd(self.base.hwnd, 0, None);
     }
+}
+
+#[allow(dead_code)]
+pub(crate) fn spawn() -> Box<UiControl> {
+	Button::new("")
 }
 
 unsafe extern "system" fn handler(hwnd: winapi::HWND, msg: winapi::UINT, wparam: winapi::WPARAM, lparam: winapi::LPARAM, _: u64, param: u64) -> i64 {
