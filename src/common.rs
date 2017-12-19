@@ -1,5 +1,3 @@
-use super::*;
-
 use std::{ptr, mem, str};
 use std::os::raw::c_void;
 use std::os::windows::ffi::OsStrExt;
@@ -8,14 +6,22 @@ use std::ffi::OsStr;
 use plygui_api::{layout, development, ids, types};
 use plygui_api::traits::{UiMember, UiContainer};
 
-pub static mut INSTANCE: winapi::HINSTANCE = 0 as winapi::HINSTANCE;
+use winapi::shared::windef;
+use winapi::shared::minwindef;
+use winapi::shared::ntdef;
+use winapi::um::winuser;
+use winapi::um::winbase;
+use winapi::um::commctrl;
+use winapi::um::errhandlingapi;
+
+pub static mut INSTANCE: minwindef::HINSTANCE = 0 as minwindef::HINSTANCE;
 
 #[repr(C)]
 pub struct WindowsControlBase {
 	pub control_base: development::UiControlBase, 
 	
-    pub hwnd: winapi::HWND,
-    pub subclass_id: u64,
+    pub hwnd: windef::HWND,
+    pub subclass_id: usize,
     pub coords: Option<(i32, i32)>,
     pub measured_size: (u16, u16),
 
@@ -37,7 +43,7 @@ impl WindowsControlBase {
 					alignment: layout::Alignment::None,
 	            },
         	},
-        	hwnd: 0 as winapi::HWND,
+        	hwnd: 0 as windef::HWND,
             h_resize: None,
             subclass_id: 0,
             measured_size: (0, 0),
@@ -53,9 +59,9 @@ impl WindowsControlBase {
 	pub fn id(&self) -> ids::Id {
     	self.control_base.member_base.id
     }
-    pub fn parent_hwnd(&self) -> Option<winapi::HWND> {
+    pub fn parent_hwnd(&self) -> Option<windef::HWND> {
     	unsafe {
-    		let parent_hwnd = user32::GetParent(self.hwnd);
+    		let parent_hwnd = winuser::GetParent(self.hwnd);
             if parent_hwnd == self.hwnd {
                 None
             } else {
@@ -65,58 +71,58 @@ impl WindowsControlBase {
     }
     pub fn parent(&self) -> Option<&types::UiMemberCommon> {
         unsafe {
-            let parent_hwnd = user32::GetParent(self.hwnd);
+            let parent_hwnd = winuser::GetParent(self.hwnd);
             if parent_hwnd == self.hwnd {
                 return None;
             }
 
-            let parent_ptr = user32::GetWindowLongPtrW(parent_hwnd, winapi::GWLP_USERDATA);
+            let parent_ptr = winuser::GetWindowLongPtrW(parent_hwnd, winuser::GWLP_USERDATA);
             mem::transmute(parent_ptr as *mut c_void)
         }
     }
     pub fn parent_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
         unsafe {
-            let parent_hwnd = user32::GetParent(self.hwnd);
+            let parent_hwnd = winuser::GetParent(self.hwnd);
             if parent_hwnd == self.hwnd {
                 return None;
             }
 
-            let parent_ptr = user32::GetWindowLongPtrW(parent_hwnd, winapi::GWLP_USERDATA);
+            let parent_ptr = winuser::GetWindowLongPtrW(parent_hwnd, winuser::GWLP_USERDATA);
             mem::transmute(parent_ptr as *mut c_void)
         }
     }
     pub fn root(&self) -> Option<&types::UiMemberCommon> {
         unsafe {
-            let parent_hwnd = user32::GetAncestor(self.hwnd, 2); //GA_ROOT
+            let parent_hwnd = winuser::GetAncestor(self.hwnd, 2); //GA_ROOT
             if parent_hwnd == self.hwnd {
                 return None;
             }
 
-            let parent_ptr = user32::GetWindowLongPtrW(parent_hwnd, winapi::GWLP_USERDATA);
+            let parent_ptr = winuser::GetWindowLongPtrW(parent_hwnd, winuser::GWLP_USERDATA);
             mem::transmute(parent_ptr as *mut c_void)
         }
     }
     pub fn root_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
         unsafe {
-            let parent_hwnd = user32::GetAncestor(self.hwnd, 2); //GA_ROOT
+            let parent_hwnd = winuser::GetAncestor(self.hwnd, 2); //GA_ROOT
             if parent_hwnd == self.hwnd {
                 return None;
             }
 
-            let parent_ptr = user32::GetWindowLongPtrW(parent_hwnd, winapi::GWLP_USERDATA);
+            let parent_ptr = winuser::GetWindowLongPtrW(parent_hwnd, winuser::GWLP_USERDATA);
             mem::transmute(parent_ptr as *mut c_void)
         }
     }
 }
 
 pub unsafe trait WindowsContainer: UiContainer + UiMember {
-    unsafe fn hwnd(&self) -> winapi::HWND;
+    unsafe fn hwnd(&self) -> windef::HWND;
 }
 
-pub unsafe fn get_class_name_by_hwnd(hwnd: winapi::HWND) -> Vec<u16> {
+pub unsafe fn get_class_name_by_hwnd(hwnd: windef::HWND) -> Vec<u16> {
     let mut max_id = 256;
     let mut name = vec![0u16; max_id];
-    max_id = user32::GetClassNameW(hwnd, name.as_mut_slice().as_ptr(), max_id as i32) as usize;
+    max_id = winuser::GetClassNameW(hwnd, name.as_mut_slice().as_ptr(), max_id as i32) as usize;
     name.truncate(max_id);
     name
 }
@@ -125,23 +131,23 @@ pub unsafe fn create_control_hwnd(x: i32,
                                   y: i32,
                                   w: i32,
                                   h: i32,
-                                  parent: winapi::HWND,
-                                  ex_style: winapi::DWORD,
-                                  class_name: winapi::LPCWSTR,
+                                  parent: windef::HWND,
+                                  ex_style: minwindef::DWORD,
+                                  class_name: ntdef::LPCWSTR,
                                   control_name: &str,
-                                  style: winapi::DWORD,
-                                  param: winapi::LPVOID,
-                                  handler: Option<unsafe extern "system" fn(winapi::HWND,
-                                                                            msg: winapi::UINT,
-                                                                            winapi::WPARAM,
-                                                                            winapi::LPARAM,
-                                                                            u64,
-                                                                            u64)
-                                                                            -> i64>)
-                                  -> (winapi::HWND, u64) {
+                                  style: minwindef::DWORD,
+                                  param: minwindef::LPVOID,
+                                  handler: Option<unsafe extern "system" fn(windef::HWND,
+                                                                            msg: minwindef::UINT,
+                                                                            minwindef::WPARAM,
+                                                                            minwindef::LPARAM,
+                                                                            usize,
+                                                                            usize)
+                                                                            -> isize>)
+                                  -> (windef::HWND, usize) {
     let mut style = style;
-    if (style & winapi::WS_TABSTOP) != 0 {
-        style |= winapi::WS_GROUP;
+    if (style & winuser::WS_TABSTOP) != 0 {
+        style |= winuser::WS_GROUP;
     }
 	#[allow(deprecated)]
     let subclass_id = {
@@ -155,10 +161,10 @@ pub unsafe fn create_control_hwnd(x: i32,
         .encode_wide()
         .chain(Some(0).into_iter())
         .collect::<Vec<_>>();
-    let hwnd = user32::CreateWindowExW(ex_style,
+    let hwnd = winuser::CreateWindowExW(ex_style,
                                        class_name,
                                        control_name.as_ptr(),
-                                       style | winapi::WS_CHILD | winapi::WS_VISIBLE,
+                                       style | winuser::WS_CHILD | winuser::WS_VISIBLE,
                                        x,
                                        y,
                                        w,
@@ -168,33 +174,33 @@ pub unsafe fn create_control_hwnd(x: i32,
                                        INSTANCE,
                                        param);
     log_error();
-    comctl32::SetWindowSubclass(hwnd, handler, subclass_id, param as u64);
+    commctrl::SetWindowSubclass(hwnd, handler, subclass_id as usize, param as usize);
     log_error();
-    (hwnd, subclass_id)
+    (hwnd, subclass_id as usize)
 }
 
-pub fn destroy_hwnd(hwnd: winapi::HWND,
-                    subclass_id: u64,
-                    handler: Option<unsafe extern "system" fn(winapi::HWND,
-                                                              msg: winapi::UINT,
-                                                              winapi::WPARAM,
-                                                              winapi::LPARAM,
-                                                              u64,
-                                                              u64)
-                                                              -> i64>) {
+pub fn destroy_hwnd(hwnd: windef::HWND,
+                    subclass_id: usize,
+                    handler: Option<unsafe extern "system" fn(windef::HWND,
+                                                              msg: minwindef::UINT,
+                                                              minwindef::WPARAM,
+                                                              minwindef::LPARAM,
+                                                              usize,
+                                                              usize)
+                                                              -> isize>) {
     unsafe {
         if subclass_id != 0 {
-            comctl32::RemoveWindowSubclass(hwnd, handler, subclass_id);
+            commctrl::RemoveWindowSubclass(hwnd, handler, subclass_id);
         }
-        if user32::DestroyWindow(hwnd) == 0 {
+        if winuser::DestroyWindow(hwnd) == 0 {
             //panic!("Cannot destroy window!");
         }
     }
 }
 
-pub unsafe fn window_rect(hwnd: winapi::HWND) -> winapi::RECT {
-    let mut rect: winapi::RECT = mem::zeroed();
-    user32::GetClientRect(hwnd, &mut rect);
+pub unsafe fn window_rect(hwnd: windef::HWND) -> windef::RECT {
+    let mut rect: windef::RECT = mem::zeroed();
+    winuser::GetClientRect(hwnd, &mut rect);
     rect
 }
 
@@ -215,8 +221,8 @@ pub unsafe fn window_rect(hwnd: winapi::HWND) -> winapi::RECT {
     }
 }
 
-pub unsafe fn cast_hwnd_to_windows<'a>(hwnd: winapi::HWND) -> Option<&'a mut WindowsControl> {
-	let hwnd_ptr = user32::GetWindowLongPtrW(hwnd, winapi::GWLP_USERDATA);
+pub unsafe fn cast_hwnd_to_windows<'a>(hwnd: HWND) -> Option<&'a mut WindowsControl> {
+	let hwnd_ptr = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     let parent_class = String::from_utf16_lossy(get_class_name_by_hwnd(hwnd).as_ref());
     match parent_class.as_str() {
         development::CLASS_ID_LAYOUT_LINEAR => {
@@ -235,22 +241,22 @@ pub unsafe fn cast_hwnd_to_windows<'a>(hwnd: winapi::HWND) -> Option<&'a mut Win
     }
 }*/    
 
-pub unsafe fn cast_hwnd<'a, T>(hwnd: winapi::HWND) -> &'a mut T where T: Sized {// TODO merge with above using T: Sized
-	let hwnd_ptr = user32::GetWindowLongPtrW(hwnd, winapi::GWLP_USERDATA);
+pub unsafe fn cast_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T where T: Sized {// TODO merge with above using T: Sized
+	let hwnd_ptr = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     mem::transmute(hwnd_ptr as *mut c_void)
 }
 
 pub unsafe fn log_error() {
-    let error = kernel32::GetLastError();
+    let error = errhandlingapi::GetLastError();
     if error == 0 {
         return;
     }
 
     let mut string = vec![0u16; 127];
-    kernel32::FormatMessageW(winapi::FORMAT_MESSAGE_FROM_SYSTEM | winapi::FORMAT_MESSAGE_IGNORE_INSERTS,
+    winbase::FormatMessageW(winbase::FORMAT_MESSAGE_FROM_SYSTEM | winbase::FORMAT_MESSAGE_IGNORE_INSERTS,
                              ptr::null_mut(),
                              error,
-                             winapi::LANG_SYSTEM_DEFAULT as u32,
+                             ntdef::LANG_SYSTEM_DEFAULT as u32,
                              string.as_mut_ptr(),
                              string.len() as u32,
                              ptr::null_mut());
@@ -281,8 +287,8 @@ macro_rules! impl_invalidate {
 						wparent.invalidate();
 					//} 
 				}
-				if parent_hwnd != 0 as winapi::HWND {
-		    		user32::InvalidateRect(parent_hwnd, ptr::null_mut(), winapi::TRUE);
+				if parent_hwnd != 0 as ::winapi::shared::windef::HWND {
+		    		::winapi::um::winuser::InvalidateRect(parent_hwnd, ptr::null_mut(), ::winapi::shared::minwindef::TRUE);
 		    	}
 		    }
 		}

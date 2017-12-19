@@ -5,14 +5,19 @@ use plygui_api::{layout, ids, types, development};
 use plygui_api::traits::{UiControl, UiLayedOut, UiMultiContainer, UiLinearLayout, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_LAYOUT_LINEAR;
 
+use winapi::shared::windef;
+use winapi::shared::minwindef;
+use winapi::um::winuser;
+use winapi::um::libloaderapi;
+use winapi::ctypes::c_void;
+
 use std::{ptr, mem};
-use std::os::raw::c_void;
 use std::os::windows::ffi::OsStrExt;
 use std::ffi::OsStr;
 
 lazy_static! {
 	pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
-	//pub static ref INSTANCE: winapi::HINSTANCE = unsafe { kernel32::GetModuleHandleW(ptr::null()) };
+	//pub static ref INSTANCE: winuser::HINSTANCE = unsafe { kernel32::GetModuleHandleW(ptr::null()) };
 }
 
 #[repr(C)]
@@ -44,11 +49,11 @@ impl UiMember for LinearLayout {
     fn set_visibility(&mut self, visibility: types::Visibility) {
         self.base.control_base.member_base.visibility = visibility;
         unsafe {
-            user32::ShowWindow(self.base.hwnd,
+            winuser::ShowWindow(self.base.hwnd,
                                if self.base.control_base.member_base.visibility == types::Visibility::Invisible {
-                                   winapi::SW_HIDE
+                                   winuser::SW_HIDE
                                } else {
-                                   winapi::SW_SHOW
+                                   winuser::SW_SHOW
                                });
             self.base.invalidate();
         }
@@ -148,14 +153,14 @@ impl UiControl for LinearLayout {
         let selfptr = self as *mut _ as *mut c_void;
         let (pw, ph) = parent.size();
         let (hwnd, id) = unsafe { 
-        	self.base.hwnd = parent.native_id() as winapi::HWND; // required for measure, as we don't have own hwnd yet
+        	self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
 	        let (width, height, _) = self.measure(pw, ph);
 	        common::create_control_hwnd(px as i32,
 	                                                     py as i32,
 	                                                     width as i32,
 	                                                     height as i32,
-	                                                     parent.native_id() as winapi::HWND,
-	                                                     winapi::WS_EX_CONTROLPARENT,
+	                                                     parent.native_id() as windef::HWND,
+	                                                     winuser::WS_EX_CONTROLPARENT,
 	                                                     WINDOW_CLASS.as_ptr(),
 	                                                     "",
 	                                                     0,
@@ -184,7 +189,7 @@ impl UiControl for LinearLayout {
             child.on_removed_from_container(self2);
         }
         common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, None);
-        self.base.hwnd = 0 as winapi::HWND;
+        self.base.hwnd = 0 as windef::HWND;
         self.base.subclass_id = 0;
     }
     
@@ -294,7 +299,7 @@ impl development::UiDrawable for LinearLayout {
     	}
         if let Some((x, y)) = self.base.coords {
         	unsafe {
-	            user32::SetWindowPos(self.base.hwnd,
+	            winuser::SetWindowPos(self.base.hwnd,
 	                                 ptr::null_mut(),
 	                                 x as i32,
 	                                 y as i32,
@@ -359,7 +364,7 @@ impl development::UiDrawable for LinearLayout {
 }
 
 unsafe impl common::WindowsContainer for LinearLayout {
-    unsafe fn hwnd(&self) -> winapi::HWND {
+    unsafe fn hwnd(&self) -> windef::HWND {
         self.base.hwnd
     }
 }
@@ -374,36 +379,36 @@ unsafe fn register_window_class() -> Vec<u16> {
         .encode_wide()
         .chain(Some(0).into_iter())
         .collect::<Vec<_>>();
-    let class = winapi::WNDCLASSEXW {
-        cbSize: mem::size_of::<winapi::WNDCLASSEXW>() as winapi::UINT,
-        style: winapi::CS_DBLCLKS,
+    let class = winuser::WNDCLASSEXW {
+        cbSize: mem::size_of::<winuser::WNDCLASSEXW>() as minwindef::UINT,
+        style: winuser::CS_DBLCLKS,
         lpfnWndProc: Some(whandler),
         cbClsExtra: 0,
         cbWndExtra: 0,
-        hInstance: kernel32::GetModuleHandleW(ptr::null()),
-        hIcon: user32::LoadIconW(ptr::null_mut(), winapi::IDI_APPLICATION),
-        hCursor: user32::LoadCursorW(ptr::null_mut(), winapi::IDC_ARROW),
+        hInstance: libloaderapi::GetModuleHandleW(ptr::null()),
+        hIcon: winuser::LoadIconW(ptr::null_mut(), winuser::IDI_APPLICATION),
+        hCursor: winuser::LoadCursorW(ptr::null_mut(), winuser::IDC_ARROW),
         hbrBackground: ptr::null_mut(),
         lpszMenuName: ptr::null(),
         lpszClassName: class_name.as_ptr(),
         hIconSm: ptr::null_mut(),
     };
-    user32::RegisterClassExW(&class);
+    winuser::RegisterClassExW(&class);
     class_name
 }
 
-unsafe extern "system" fn whandler(hwnd: winapi::HWND, msg: winapi::UINT, wparam: winapi::WPARAM, lparam: winapi::LPARAM) -> winapi::LRESULT {
-    let ww = user32::GetWindowLongPtrW(hwnd, winapi::GWLP_USERDATA);
+unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
+    let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
-        if winapi::WM_CREATE == msg {
-            let cs: &mut winapi::CREATESTRUCTW = mem::transmute(lparam);
-            user32::SetWindowLongPtrW(hwnd, winapi::GWLP_USERDATA, cs.lpCreateParams as i64);
+        if winuser::WM_CREATE == msg {
+            let cs: &mut winuser::CREATESTRUCTW = mem::transmute(lparam);
+            winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, cs.lpCreateParams as isize);
         }
-        return user32::DefWindowProcW(hwnd, msg, wparam, lparam);
+        return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }
 
     match msg {
-        winapi::WM_SIZE => {
+        winuser::WM_SIZE => {
             let mut width = lparam as u16;
             let mut height = (lparam >> 16) as u16;
             let mut ll: &mut LinearLayout = mem::transmute(ww);
@@ -432,23 +437,23 @@ unsafe extern "system" fn whandler(hwnd: winapi::HWND, msg: winapi::UINT, wparam
                 (cb)(ll2, width, height);
             }
         }
-        winapi::WM_DESTROY => {
-            user32::PostQuitMessage(0);
+        winuser::WM_DESTROY => {
+            winuser::PostQuitMessage(0);
             return 0;
         }
-        /*winapi::WM_NOTIFY => {
-        	let hdr: winapi::LPNMHDR = mem::transmute(lparam);
+        /*winuser::WM_NOTIFY => {
+        	let hdr: winuser::LPNMHDR = mem::transmute(lparam);
         	println!("notify for {:?}", hdr);
         },
-        winapi::WM_COMMAND => {
-        	let hdr: winapi::LPNMHDR = mem::transmute(lparam);
+        winuser::WM_COMMAND => {
+        	let hdr: winuser::LPNMHDR = mem::transmute(lparam);
         	
         	println!("command for {:?}", hdr);
         }*/
         _ => {}
     }
 
-    user32::DefWindowProcW(hwnd, msg, wparam, lparam)
+    winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
 impl_invalidate!(LinearLayout);

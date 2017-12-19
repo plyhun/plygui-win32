@@ -4,8 +4,14 @@ use plygui_api::{layout, ids, types, development};
 use plygui_api::traits::{UiControl, UiLayedOut, UiButton, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_BUTTON;
 
+use winapi::shared::windef;
+use winapi::shared::minwindef;
+use winapi::um::winuser;
+use winapi::um::wingdi;
+use winapi::um::commctrl;
+use winapi::ctypes::c_void;
+
 use std::{ptr, mem, str};
-use std::os::raw::c_void;
 use std::os::windows::ffi::OsStrExt;
 use std::ffi::OsStr;
 
@@ -54,13 +60,13 @@ impl UiButton for Button {
     }
     fn set_label(&mut self, label: &str) {
     	self.label = label.into(); 
-    	if self.base.hwnd != 0 as winapi::HWND {
+    	if self.base.hwnd != 0 as windef::HWND {
     		let control_name = OsStr::new(&self.label)
 		        .encode_wide()
 		        .chain(Some(0).into_iter())
 		        .collect::<Vec<_>>();
 	    	unsafe {
-	    		user32::SetWindowTextW(self.base.hwnd, control_name.as_ptr());
+	    		winuser::SetWindowTextW(self.base.hwnd, control_name.as_ptr());
 	    	}
 	    	self.base.invalidate();
     	}
@@ -74,17 +80,17 @@ impl UiControl for Button {
 		let selfptr = self as *mut _ as *mut c_void;
         let (pw, ph) = parent.size();
         let (hwnd, id) = unsafe {
-        	self.base.hwnd = parent.native_id() as winapi::HWND; // required for measure, as we don't have own hwnd yet
+        	self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
 	        let (w, h, _) = self.measure(pw, ph);
 	        common::create_control_hwnd(x as i32,
 	                                                     y as i32,
 	                                                     w as i32,
 	                                                     h as i32,
-	                                                     parent.native_id() as winapi::HWND,
+	                                                     parent.native_id() as windef::HWND,
 	                                                     0,
 	                                                     WINDOW_CLASS.as_ptr(),
 	                                                     self.label.as_str(),
-	                                                     winapi::BS_PUSHBUTTON | winapi::WS_TABSTOP,
+	                                                     winuser::BS_PUSHBUTTON | winuser::WS_TABSTOP,
 	                                                     selfptr,
 	                                                     Some(handler))
         };
@@ -93,7 +99,7 @@ impl UiControl for Button {
 	}
     fn on_removed_from_container(&mut self, _: &UiContainer) {
     	common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, Some(handler));
-        self.base.hwnd = 0 as winapi::HWND;
+        self.base.hwnd = 0 as windef::HWND;
         self.base.subclass_id = 0;
     }
     
@@ -184,11 +190,11 @@ impl UiMember for Button {
     fn set_visibility(&mut self, visibility: types::Visibility) {
         self.base.control_base.member_base.visibility = visibility;
         unsafe {
-            user32::ShowWindow(self.base.hwnd,
+            winuser::ShowWindow(self.base.hwnd,
                                if self.base.control_base.member_base.visibility == types::Visibility::Invisible {
-                                   winapi::SW_HIDE
+                                   winuser::SW_HIDE
                                } else {
-                                   winapi::SW_SHOW
+                                   winuser::SW_SHOW
                                });
             self.base.invalidate();
         }
@@ -221,7 +227,7 @@ impl development::UiDrawable for Button {
     	}
         if let Some((x, y)) = self.base.coords {
         	unsafe {
-	            user32::SetWindowPos(self.base.hwnd,
+	            winuser::SetWindowPos(self.base.hwnd,
 	                                 ptr::null_mut(),
 	                                 x as i32,
 	                                 y as i32,
@@ -238,7 +244,7 @@ impl development::UiDrawable for Button {
     		types::Visibility::Gone => (0, 0),
     		_ => {
     			unsafe {
-		            let mut label_size: winapi::SIZE = mem::zeroed();
+		            let mut label_size: windef::SIZE = mem::zeroed();
 		            let w = match self.layout_width() {
 		                layout::Size::MatchParent => parent_width,
 		                layout::Size::Exact(w) => w,
@@ -248,7 +254,7 @@ impl development::UiDrawable for Button {
 		                            .encode_wide()
 		                            .chain(Some(0).into_iter())
 		                            .collect::<Vec<_>>();
-		                        gdi32::GetTextExtentPointW(user32::GetDC(self.base.hwnd),
+		                        wingdi::GetTextExtentPointW(winuser::GetDC(self.base.hwnd),
 		                                                   label.as_ptr(),
 		                                                   self.label.len() as i32,
 		                                                   &mut label_size);
@@ -265,7 +271,7 @@ impl development::UiDrawable for Button {
 		                            .encode_wide()
 		                            .chain(Some(0).into_iter())
 		                            .collect::<Vec<_>>();
-		                        gdi32::GetTextExtentPointW(user32::GetDC(self.base.hwnd),
+		                        wingdi::GetTextExtentPointW(winuser::GetDC(self.base.hwnd),
 		                                                   label.as_ptr(),
 		                                                   self.label.len() as i32,
 		                                                   &mut label_size);
@@ -293,20 +299,20 @@ pub(crate) fn spawn() -> Box<UiControl> {
 	Button::new("")
 }
 
-unsafe extern "system" fn handler(hwnd: winapi::HWND, msg: winapi::UINT, wparam: winapi::WPARAM, lparam: winapi::LPARAM, _: u64, param: u64) -> i64 {
+unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
     let button: &mut Button = mem::transmute(param);
-    let ww = user32::GetWindowLongPtrW(hwnd, winapi::GWLP_USERDATA);
+    let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
-        user32::SetWindowLongPtrW(hwnd, winapi::GWLP_USERDATA, param as i64);
+        winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as isize);
     }
     match msg {
-        winapi::WM_LBUTTONDOWN => {
+        winuser::WM_LBUTTONDOWN => {
             if let Some(ref mut cb) = button.h_left_clicked {
                 let mut button2: &mut Button = mem::transmute(param);
                 (cb)(button2);
             }
         }
-        winapi::WM_SIZE => {
+        winuser::WM_SIZE => {
             let width = lparam as u16;
             let height = (lparam >> 16) as u16;
 
@@ -318,7 +324,7 @@ unsafe extern "system" fn handler(hwnd: winapi::HWND, msg: winapi::UINT, wparam:
         _ => {}
     }
 
-    comctl32::DefSubclassProc(hwnd, msg, wparam, lparam)
+    commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
 }
 
 impl_invalidate!(Button);

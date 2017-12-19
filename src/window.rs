@@ -5,20 +5,26 @@ use plygui_api::{development, ids, types};
 use plygui_api::traits::{UiControl, UiWindow, UiSingleContainer, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_WINDOW;
 
+use winapi::shared::windef;
+use winapi::shared::minwindef;
+use winapi::shared::ntdef;
+use winapi::um::winuser;
+use winapi::um::libloaderapi;
+use winapi::ctypes::c_void;
+
 use std::{ptr, mem, str};
-use std::os::raw::c_void;
 use std::os::windows::ffi::OsStrExt;
 use std::ffi::OsStr;
 
 lazy_static! {
 	pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
-	//pub static ref INSTANCE: winapi::HINSTANCE = unsafe { kernel32::GetModuleHandleW(ptr::null()) };
+	//pub static ref INSTANCE: winuser::HINSTANCE = unsafe { kernel32::GetModuleHandleW(ptr::null()) };
 }
 
 #[repr(C)]
 pub struct Window {
     base: development::UiMemberBase,
-    hwnd: winapi::HWND,
+    hwnd: windef::HWND,
     child: Option<Box<UiControl>>,
 
     h_resize: Option<Box<FnMut(&mut UiMember, u16, u16)>>,
@@ -28,35 +34,35 @@ impl Window {
     pub(crate) fn new(title: &str, window_size: types::WindowStartSize, has_menu: bool) -> Box<Window> {
         unsafe {
             let mut rect = match window_size {
-                types::WindowStartSize::Exact(width, height) => winapi::RECT {
+                types::WindowStartSize::Exact(width, height) => windef::RECT {
                     left: 0,
                     top: 0,
                     right: width as i32,
                     bottom: height as i32,
                 },
                 types::WindowStartSize::Fullscreen => {
-                    let mut rect = winapi::RECT {
+                    let mut rect = windef::RECT {
                         left: 0,
                         right: 0,
                         top: 0,
                         bottom: 0,
                     };
-                    if user32::SystemParametersInfoW(
-                        winapi::winuser::SPI_GETWORKAREA,
+                    if winuser::SystemParametersInfoW(
+                        winuser::SPI_GETWORKAREA,
                         0,
                         &mut rect as *mut _ as *mut c_void,
                         0,
                     ) == 0
                     {
                         log_error();
-                        winapi::RECT {
+                        windef::RECT {
                             left: 0,
                             top: 0,
                             right: 640,
                             bottom: 480,
                         }
                     } else {
-                        winapi::RECT {
+                        windef::RECT {
                             left: 0,
                             top: 0,
                             right: rect.right,
@@ -65,10 +71,10 @@ impl Window {
                     }
                 }
             };
-            let style = winapi::WS_OVERLAPPEDWINDOW;
-            let exstyle = winapi::WS_EX_APPWINDOW;
+            let style = winuser::WS_OVERLAPPEDWINDOW;
+            let exstyle = winuser::WS_EX_APPWINDOW;
 
-            user32::AdjustWindowRectEx(&mut rect, style, winapi::FALSE, exstyle);
+            winuser::AdjustWindowRectEx(&mut rect, style, minwindef::FALSE, exstyle);
             let window_name = OsStr::new(title)
                 .encode_wide()
                 .chain(Some(0).into_iter())
@@ -85,22 +91,22 @@ impl Window {
                     },
                 ),
 
-                hwnd: 0 as winapi::HWND,
+                hwnd: 0 as windef::HWND,
                 child: None,
                 h_resize: None,
             });
 
             if INSTANCE as usize == 0 {
-                INSTANCE = kernel32::GetModuleHandleW(ptr::null());
+                INSTANCE = libloaderapi::GetModuleHandleW(ptr::null());
             }
 
-            let hwnd = user32::CreateWindowExW(
+            let hwnd = winuser::CreateWindowExW(
                 exstyle,
                 WINDOW_CLASS.as_ptr(),
-                window_name.as_ptr() as winapi::LPCWSTR,
-                style | winapi::WS_VISIBLE,
-                winapi::CW_USEDEFAULT,
-                winapi::CW_USEDEFAULT,
+                window_name.as_ptr() as ntdef::LPCWSTR,
+                style | winuser::WS_VISIBLE,
+                winuser::CW_USEDEFAULT,
+                winuser::CW_USEDEFAULT,
                 rect.right - rect.left,
                 rect.bottom - rect.top,
                 ptr::null_mut(),
@@ -116,12 +122,12 @@ impl Window {
     pub(crate) fn start(&mut self) {
         loop {
             unsafe {
-                let mut msg: winapi::MSG = mem::zeroed();
-                if user32::GetMessageW(&mut msg, ptr::null_mut(), 0, 0) <= 0 {
+                let mut msg: winuser::MSG = mem::zeroed();
+                if winuser::GetMessageW(&mut msg, ptr::null_mut(), 0, 0) <= 0 {
                     break;
                 } else {
-                    user32::TranslateMessage(&mut msg);
-                    user32::DispatchMessageW(&mut msg);
+                    winuser::TranslateMessage(&mut msg);
+                    winuser::DispatchMessageW(&mut msg);
                 }
             }
         }
@@ -207,12 +213,12 @@ impl UiMember for Window {
     fn set_visibility(&mut self, visibility: types::Visibility) {
         self.base.visibility = visibility;
         unsafe {
-            user32::ShowWindow(
+            winuser::ShowWindow(
                 self.hwnd,
                 if self.base.visibility == types::Visibility::Visible {
-                    winapi::SW_SHOW
+                    winuser::SW_SHOW
                 } else {
-                    winapi::SW_HIDE
+                    winuser::SW_HIDE
                 },
             );
         }
@@ -244,7 +250,7 @@ impl Drop for Window {
 }
 
 unsafe impl WindowsContainer for Window {
-    unsafe fn hwnd(&self) -> winapi::HWND {
+    unsafe fn hwnd(&self) -> windef::HWND {
         self.hwnd
     }
 }
@@ -255,36 +261,36 @@ unsafe fn register_window_class() -> Vec<u16> {
         .chain(Some(0).into_iter())
         .collect::<Vec<_>>();
 
-    let class = winapi::WNDCLASSEXW {
-        cbSize: mem::size_of::<winapi::WNDCLASSEXW>() as winapi::UINT,
-        style: winapi::CS_DBLCLKS,
+    let class = winuser::WNDCLASSEXW {
+        cbSize: mem::size_of::<winuser::WNDCLASSEXW>() as minwindef::UINT,
+        style: winuser::CS_DBLCLKS,
         lpfnWndProc: Some(handler),
         cbClsExtra: 0,
         cbWndExtra: 0,
-        hInstance: kernel32::GetModuleHandleW(ptr::null()),
-        hIcon: user32::LoadIconW(ptr::null_mut(), winapi::IDI_APPLICATION),
-        hCursor: user32::LoadCursorW(ptr::null_mut(), winapi::IDC_ARROW),
-        hbrBackground: (winapi::COLOR_BTNFACE + 1) as winapi::HBRUSH,
+        hInstance: libloaderapi::GetModuleHandleW(ptr::null()),
+        hIcon: winuser::LoadIconW(ptr::null_mut(), winuser::IDI_APPLICATION),
+        hCursor: winuser::LoadCursorW(ptr::null_mut(), winuser::IDC_ARROW),
+        hbrBackground: (winuser::COLOR_BTNFACE + 1) as windef::HBRUSH,
         lpszMenuName: ptr::null(),
         lpszClassName: class_name.as_ptr(),
         hIconSm: ptr::null_mut(),
     };
-    user32::RegisterClassExW(&class);
+    winuser::RegisterClassExW(&class);
     class_name
 }
 
-unsafe extern "system" fn handler(hwnd: winapi::HWND, msg: winapi::UINT, wparam: winapi::WPARAM, lparam: winapi::LPARAM) -> winapi::LRESULT {
-    let ww = user32::GetWindowLongPtrW(hwnd, winapi::GWLP_USERDATA);
+unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
+    let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
-        if winapi::WM_CREATE == msg {
-            let cs: &mut winapi::CREATESTRUCTW = mem::transmute(lparam);
-            user32::SetWindowLongPtrW(hwnd, winapi::GWLP_USERDATA, cs.lpCreateParams as i64);
+        if winuser::WM_CREATE == msg {
+            let cs: &mut winuser::CREATESTRUCTW = mem::transmute(lparam);
+            winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, cs.lpCreateParams as isize);
         }
-        return user32::DefWindowProcW(hwnd, msg, wparam, lparam);
+        return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }
 
     match msg {
-        winapi::WM_SIZE => {
+        winuser::WM_SIZE => {
             let width = lparam as u16;
             let height = (lparam >> 16) as u16;
             let mut w: &mut window::Window = mem::transmute(ww);
@@ -295,31 +301,31 @@ unsafe extern "system" fn handler(hwnd: winapi::HWND, msg: winapi::UINT, wparam:
             }
 
             if let Some(ref mut cb) = w.h_resize {
-                let w2: &mut Window = mem::transmute(user32::GetWindowLongPtrW(hwnd, winapi::GWLP_USERDATA));
+                let w2: &mut Window = mem::transmute(winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA));
                 (cb)(w2, width, height);
             }
         }
-        winapi::WM_DESTROY => {
-            user32::PostQuitMessage(0);
+        winuser::WM_DESTROY => {
+            winuser::PostQuitMessage(0);
             return 0;
         }
-        /*winapi::WM_PRINTCLIENT => {
-        	user32::SendMessageW(hwnd, winapi::WM_ERASEBKGND, wparam, lparam);
+        /*winuser::WM_PRINTCLIENT => {
+        	winuser::SendMessageW(hwnd, winuser::WM_ERASEBKGND, wparam, lparam);
 	        return 0;
         },*/
-        /*winapi::WM_NOTIFY => {
-        	let hdr: winapi::LPNMHDR = mem::transmute(lparam);
+        /*winuser::WM_NOTIFY => {
+        	let hdr: winuser::LPNMHDR = mem::transmute(lparam);
         	println!("notify for {:?}", hdr);
         },
-        winapi::WM_COMMAND => {
-        	let hdr: winapi::LPNMHDR = mem::transmute(lparam);
+        winuser::WM_COMMAND => {
+        	let hdr: winuser::LPNMHDR = mem::transmute(lparam);
         	
         	println!("command for {:?}", hdr);
         }*/
         _ => {}
     }
 
-    user32::DefWindowProcW(hwnd, msg, wparam, lparam)
+    winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
 unsafe fn is_control(_: &development::UiMemberBase) -> Option<&development::UiControlBase> {

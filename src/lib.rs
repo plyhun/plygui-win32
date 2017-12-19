@@ -7,11 +7,11 @@ extern crate lazy_static;
 extern crate plygui_api;
 
 extern crate winapi;
-extern crate gdi32;
+/*extern crate gdi32;
 extern crate kernel32;
 extern crate user32;
 extern crate comctl32;
-extern crate comdlg32;
+extern crate comdlg32;*/
 
 #[macro_use]
 pub mod common;
@@ -22,7 +22,7 @@ mod button;
 mod layout_linear;
 //mod layout_relative;
 
-pub type NativeId = winapi::HWND;
+//pub type NativeId = winapi::shared::windef::HWND;
 
 pub use self::application::Application;
 pub use self::window::Window;

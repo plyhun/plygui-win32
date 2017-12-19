@@ -6,9 +6,13 @@ use std::{mem, thread};
 use plygui_api::traits::{UiApplication, UiWindow};
 use plygui_api::types::WindowStartSize;
 
+use winapi::shared::windef;
+use winapi::um::winuser;
+use winapi::um::commctrl;
+
 pub struct Application {
     name: String,
-    windows: Vec<winapi::HWND>,
+    windows: Vec<windef::HWND>,
 }
 
 impl UiApplication for Application {
@@ -44,22 +48,22 @@ impl Application {
     }
 }
 
-fn start_window(hwnd: winapi::HWND) {
-	let w: &mut Window = unsafe { mem::transmute(user32::GetWindowLongPtrW(hwnd, winapi::GWLP_USERDATA)) };
+fn start_window(hwnd: windef::HWND) {
+	let w: &mut Window = unsafe { mem::transmute(winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA)) };
     w.start();
 }
 
 fn init_comctl() {
 	unsafe {
-    	let mut icc: winapi::INITCOMMONCONTROLSEX = mem::zeroed();
-    	icc.dwSize = mem::size_of::<winapi::INITCOMMONCONTROLSEX>() as u32;
-		icc.dwICC = winapi::ICC_STANDARD_CLASSES 
-			| winapi::ICC_LISTVIEW_CLASSES
-			| winapi::ICC_TAB_CLASSES
-			| winapi::ICC_PROGRESS_CLASS
-			| winapi::ICC_UPDOWN_CLASS
-			| winapi::ICC_BAR_CLASSES;
-		if comctl32::InitCommonControlsEx(&icc) == 0 {
+    	let mut icc: commctrl::INITCOMMONCONTROLSEX = mem::zeroed();
+    	icc.dwSize = mem::size_of::<commctrl::INITCOMMONCONTROLSEX>() as u32;
+		icc.dwICC = commctrl::ICC_STANDARD_CLASSES 
+			| commctrl::ICC_LISTVIEW_CLASSES
+			| commctrl::ICC_TAB_CLASSES
+			| commctrl::ICC_PROGRESS_CLASS
+			| commctrl::ICC_UPDOWN_CLASS
+			| commctrl::ICC_BAR_CLASSES;
+		if commctrl::InitCommonControlsEx(&icc) == 0 {
 			common::log_error();
 		}
 	}        
