@@ -194,7 +194,7 @@ impl UiControl for LinearLayout {
     }
     
     #[cfg(feature = "markup")]
-    fn fill_from_markup(&mut self, markup: &plygui_api::markup::Markup, registry: &plygui_api::markup::MarkupRegistry, ids: &mut plygui_api::markup::MarkupIds) {
+    fn fill_from_markup(&mut self, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
     	if markup.member_type != MEMBER_ID_LAYOUT_LINEAR && markup.member_type != plygui_api::markup::MEMBER_TYPE_LINEAR_LAYOUT {
 			match markup.id {
 				Some(ref id) => panic!("Markup does not belong to LinearLayout: {} ({})", markup.member_type, id),
@@ -202,12 +202,12 @@ impl UiControl for LinearLayout {
 			}
 		}
 		if let Some(ref id) = markup.id {
-    		ids.insert(id.clone(), self.id());
+    		registry.store_id(&id, self.id()).unwrap();
     	}
 		
     	for child_markup in markup.attributes.get(plygui_api::markup::CHILDREN).unwrap_or(&plygui_api::markup::MarkupNode::Children(vec![])).as_children() {
-    		let mut child = registry.get(&child_markup.member_type).unwrap()();
-    		child.fill_from_markup(child_markup, registry, ids);
+    		let mut child = registry.member(&child_markup.member_type).unwrap()();
+    		child.fill_from_markup(child_markup, registry);
 			self.push_child(child);
 		}		
     }

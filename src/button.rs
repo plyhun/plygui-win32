@@ -124,7 +124,7 @@ impl UiControl for Button {
     }
     
     #[cfg(feature = "markup")]
-    fn fill_from_markup(&mut self, markup: &plygui_api::markup::Markup, _: &plygui_api::markup::MarkupRegistry, ids: &mut plygui_api::markup::MarkupIds) {
+    fn fill_from_markup(&mut self, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
     	if markup.member_type != MEMBER_ID_BUTTON && markup.member_type != plygui_api::markup::MEMBER_TYPE_BUTTON {
 			match markup.id {
 				Some(ref id) => panic!("Markup does not belong to Button: {} ({})", markup.member_type, id),
@@ -132,9 +132,18 @@ impl UiControl for Button {
 			}
 		}		
     	if let Some(ref id) = markup.id {
-    		ids.insert(id.clone(), self.id());
+    		registry.store_id(&id, self.id()).unwrap();
     	}
-    	self.set_label(&markup.attributes.get("label").unwrap().as_attribute())
+    	
+    	self.set_label(&markup.attributes.get("label").unwrap().as_attribute());
+    	
+    	if let Some(on_left_click) = markup.attributes.get("on_left_click") {
+    		let callback = registry.callback(on_left_click.as_attribute()).unwrap();
+    		self.on_left_click(Some(Box::new(unsafe { 
+    			let callback: fn(&mut UiButton) = mem::transmute(*callback);
+    			callback 
+    		})));
+    	}
     }
 }
 
