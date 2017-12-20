@@ -3,7 +3,7 @@
 
 #[macro_use]
 extern crate lazy_static;
-
+#[macro_use]
 extern crate plygui_api;
 
 extern crate winapi;

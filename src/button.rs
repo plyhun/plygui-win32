@@ -125,25 +125,19 @@ impl UiControl for Button {
     
     #[cfg(feature = "markup")]
     fn fill_from_markup(&mut self, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
-    	if markup.member_type != MEMBER_ID_BUTTON && markup.member_type != plygui_api::markup::MEMBER_TYPE_BUTTON {
-			match markup.id {
-				Some(ref id) => panic!("Markup does not belong to Button: {} ({})", markup.member_type, id),
-				None => panic!("Markup does not belong to Button: {}", markup.member_type),
-			}
-		}		
-    	if let Some(ref id) = markup.id {
-    		registry.store_id(&id, self.id()).unwrap();
-    	}
+    	use plygui_api::markup::MEMBER_TYPE_BUTTON;
     	
-    	self.set_label(&markup.attributes.get("label").unwrap().as_attribute());
+    	fill_from_markup_base!(self, markup, registry, Button, [MEMBER_ID_BUTTON, MEMBER_TYPE_BUTTON]);
+    	fill_from_markup_label!(self, markup);
+    	fill_from_markup_callbacks!(self, markup, registry, ["on_left_click" => fn(&mut UiButton)]);
     	
-    	if let Some(on_left_click) = markup.attributes.get("on_left_click") {
+    	/*if let Some(on_left_click) = markup.attributes.get("on_left_click") {
     		let callback = registry.callback(on_left_click.as_attribute()).unwrap();
     		self.on_left_click(Some(Box::new(unsafe { 
     			let callback: fn(&mut UiButton) = mem::transmute(*callback);
     			callback 
     		})));
-    	}
+    	}*/
     }
 }
 
