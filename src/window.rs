@@ -134,7 +134,14 @@ impl Window {
     }
 }
 
-impl UiWindow for Window {}
+impl UiWindow for Window {
+	fn as_single_container(&self) -> &UiSingleContainer {
+		self
+	}
+	fn as_single_container_mut(&mut self) -> &mut UiSingleContainer {
+		self
+	}
+}
 
 impl UiContainer for Window {
     fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut UiControl> {
@@ -165,6 +172,12 @@ impl UiContainer for Window {
     fn is_single(&self) -> Option<&UiSingleContainer> {
         Some(self)
     }
+    fn as_member(&self) -> &UiMember {
+    	self
+    }
+	fn as_member_mut(&mut self) -> &mut UiMember {
+		self
+	}
 }
 
 impl UiSingleContainer for Window {
@@ -192,6 +205,12 @@ impl UiSingleContainer for Window {
             None
         }
     }
+    fn as_container(&self) -> &UiContainer {
+    	self
+    }
+	fn as_container_mut(&mut self) -> &mut UiContainer {
+		self
+	}
 }
 
 impl UiMember for Window {

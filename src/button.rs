@@ -71,6 +71,12 @@ impl UiButton for Button {
 	    	self.base.invalidate();
     	}
     }
+    fn as_control(&self) -> &UiControl {
+    	self
+    }
+	fn as_control_mut(&mut self) -> &mut UiControl {
+		self
+	}
 }
 
 impl UiControl for Button {
@@ -122,6 +128,12 @@ impl UiControl for Button {
     fn root_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
         self.base.root_mut()
     }
+    fn as_layed_out(&self) -> &UiLayedOut {
+    	self
+    }
+	fn as_layed_out_mut(&mut self) -> &mut UiLayedOut {
+		self
+	}
     
     #[cfg(feature = "markup")]
     fn fill_from_markup(&mut self, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
@@ -129,14 +141,14 @@ impl UiControl for Button {
     	
     	fill_from_markup_base!(self, markup, registry, Button, [MEMBER_ID_BUTTON, MEMBER_TYPE_BUTTON]);
     	fill_from_markup_label!(self, markup);
-    	fill_from_markup_callbacks!(self, markup, registry, ["on_left_click" => fn(&mut UiButton)]);
+    	fill_from_markup_callbacks!(self, markup, registry, ["on_left_click" => FnMut(&mut UiButton)]);
     	
     	/*if let Some(on_left_click) = markup.attributes.get("on_left_click") {
     		let callback = registry.callback(on_left_click.as_attribute()).unwrap();
-    		self.on_left_click(Some(Box::new(unsafe { 
-    			let callback: fn(&mut UiButton) = mem::transmute(*callback);
-    			callback 
-    		})));
+    		self.on_left_click(Some(unsafe { 
+    			let callback: *mut Box<FnMut(&mut UiButton)> = mem::transmute(*callback);
+    			*Box::from_raw(callback) 
+    		}));
     	}*/
     }
 }
@@ -178,6 +190,12 @@ impl UiLayedOut for Button {
 		self.base.control_base.layout.alignment = alignment;
 		self.base.invalidate();
 	}   
+	fn as_member(&self) -> &UiMember {
+		self
+	}
+	fn as_member_mut(&mut self) -> &mut UiMember {
+		self
+	}
 }
 
 impl UiMember for Button {

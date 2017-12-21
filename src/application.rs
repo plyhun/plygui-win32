@@ -3,8 +3,9 @@ use super::common::WindowsContainer;
 
 use std::{mem, thread};
 
-use plygui_api::traits::{UiApplication, UiWindow};
+use plygui_api::traits::{UiApplication, UiWindow, UiMember};
 use plygui_api::types::WindowStartSize;
+use plygui_api::ids::Id;
 
 use winapi::shared::windef;
 use winapi::um::winuser;
@@ -35,6 +36,33 @@ impl UiApplication for Application {
             }
         }
     }
+    fn find_member_by_id_mut(&mut self, id: Id) -> Option<&mut UiMember> {
+    	use plygui_api::traits::UiContainer;
+    	
+    	for window in self.windows.as_mut_slice() {
+    		let window = unsafe { common::cast_hwnd::<Window>(*window) };
+    		if window.id() == id {
+    			return Some(window);
+    		} else {
+    			return window.find_control_by_id_mut(id).map(|control| control.as_member_mut());
+    		}
+    	}
+    	None
+    }
+    fn find_member_by_id(&self, id: Id) -> Option<&UiMember> {
+    	use plygui_api::traits::UiContainer;
+    	
+    	for window in self.windows.as_slice() {
+    		let window = unsafe { common::cast_hwnd::<Window>(*window) };
+    		if window.id() == id {
+    			return Some(window);
+    		} else {
+    			return window.find_control_by_id_mut(id).map(|control| control.as_member());
+    		}
+    	}
+    	
+    	None
+    }   
 }
 
 impl Application {

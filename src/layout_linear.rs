@@ -125,6 +125,12 @@ impl UiLayedOut for LinearLayout {
 		self.base.control_base.layout.alignment = alignment;
 		self.base.invalidate();
 	}  
+	fn as_member(&self) -> &UiMember {
+		self
+	}
+	fn as_member_mut(&mut self) -> &mut UiMember {
+		self
+	}
 }
 
 impl UiControl for LinearLayout {
@@ -192,6 +198,12 @@ impl UiControl for LinearLayout {
         self.base.hwnd = 0 as windef::HWND;
         self.base.subclass_id = 0;
     }
+    fn as_layed_out(&self) -> &UiLayedOut {
+    	self
+    }
+	fn as_layed_out_mut(&mut self) -> &mut UiLayedOut {
+		self
+	}
     
     #[cfg(feature = "markup")]
     fn fill_from_markup(&mut self, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
@@ -243,6 +255,12 @@ impl UiContainer for LinearLayout {
     fn is_multi(&self) -> Option<&UiMultiContainer> {
         Some(self)
     }
+    fn as_member(&self) -> &UiMember {
+    	self
+    }
+	fn as_member_mut(&mut self) -> &mut UiMember {
+		self
+	}
 }
 
 impl UiMultiContainer for LinearLayout {
@@ -270,6 +288,12 @@ impl UiMultiContainer for LinearLayout {
     fn child_at_mut(&mut self, index: usize) -> Option<&mut Box<UiControl>> {
         self.children.get_mut(index)
     }
+    fn as_container(&self) -> &UiContainer {
+    	self
+    }
+	fn as_container_mut(&mut self) -> &mut UiContainer {
+		self
+	}
 }
 
 impl UiLinearLayout for LinearLayout {
@@ -279,6 +303,18 @@ impl UiLinearLayout for LinearLayout {
     fn set_orientation(&mut self, orientation: layout::Orientation) {
         self.orientation = orientation;
     }
+    fn as_control(&self) -> &UiControl {
+    	self
+    }
+	fn as_control_mut(&mut self) -> &mut UiControl {
+		self
+	}
+	fn as_multi_container(&self) -> &UiMultiContainer {
+		self
+	}
+	fn as_multi_container_mut(&mut self) -> &mut UiMultiContainer {
+		self
+	}
 }
 
 impl development::UiDrawable for LinearLayout {
