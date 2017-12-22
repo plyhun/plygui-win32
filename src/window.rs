@@ -23,11 +23,11 @@ lazy_static! {
 
 #[repr(C)]
 pub struct Window {
-    base: development::UiMemberBase,
+    base: development::UiMemberCommon,
     hwnd: windef::HWND,
     child: Option<Box<UiControl>>,
 
-    h_resize: Option<Box<FnMut(&mut UiMember, u16, u16)>>,
+    h_resize: Option<types::ResizeCallback>,
 }
 
 impl Window {
@@ -81,7 +81,7 @@ impl Window {
                 .collect::<Vec<_>>();
 
             let mut w = Box::new(Window {
-                base: development::UiMemberBase::with_params(
+                base: development::UiMemberCommon::with_params(
                     types::Visibility::Visible,
                     development::UiMemberFunctions {
                         fn_member_id: member_id,
@@ -222,13 +222,10 @@ impl UiMember for Window {
         )
     }
 
-    fn on_resize(&mut self, handler: Option<Box<FnMut(&mut UiMember, u16, u16)>>) {
+    fn on_resize(&mut self, handler: Option<types::ResizeCallback>) {
         self.h_resize = handler;
     }
 
-    fn member_id(&self) -> &'static str {
-        self.base.member_id()
-    }
     fn set_visibility(&mut self, visibility: types::Visibility) {
         self.base.visibility = visibility;
         unsafe {
@@ -245,18 +242,18 @@ impl UiMember for Window {
     fn visibility(&self) -> types::Visibility {
         self.base.visibility
     }
-    fn id(&self) -> ids::Id {
-        self.base.id
-    }
     fn is_control(&self) -> Option<&UiControl> {
         None
     }
     fn is_control_mut(&mut self) -> Option<&mut UiControl> {
         None
     }
-
-    unsafe fn native_id(&self) -> usize {
-        self.hwnd as usize
+    
+    fn as_base(&self) -> &types::UiMemberBase {
+    	self.base.as_ref()
+    }
+    fn as_base_mut(&mut self) -> &mut types::UiMemberBase {
+    	self.base.as_mut()
     }
 }
 
@@ -347,10 +344,10 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
     winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
-unsafe fn is_control(_: &development::UiMemberBase) -> Option<&development::UiControlBase> {
+unsafe fn is_control(_: &development::UiMemberCommon) -> Option<&development::UiControlCommon> {
     None
 }
-unsafe fn is_control_mut(_: &mut development::UiMemberBase) -> Option<&mut development::UiControlBase> {
+unsafe fn is_control_mut(_: &mut development::UiMemberCommon) -> Option<&mut development::UiControlCommon> {
     None
 }
 impl_size!(Window);

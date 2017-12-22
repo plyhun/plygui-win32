@@ -1,7 +1,7 @@
 use super::*;
 
-use plygui_api::{layout, ids, types, development};
-use plygui_api::traits::{UiControl, UiLayedOut, UiButton, UiMember, UiContainer};
+use plygui_api::{layout, types, development};
+use plygui_api::traits::{UiControl, UiLayable, UiButton, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_BUTTON;
 
 use winapi::shared::windef;
@@ -28,7 +28,7 @@ lazy_static! {
 pub struct Button {
     base: common::WindowsControlBase,
     label: String,
-    h_left_clicked: Option<Box<FnMut(&mut UiButton)>>,
+    h_left_clicked: Option<types::ClickCallback>,
 }
 
 impl Button {
@@ -52,7 +52,7 @@ impl Button {
 }
 
 impl UiButton for Button {
-    fn on_left_click(&mut self, handle: Option<Box<FnMut(&mut UiButton)>>) {
+    fn on_left_click(&mut self, handle: Option<types::ClickCallback>) {
         self.h_left_clicked = handle;
     }
     fn label(&self) -> &str {
@@ -116,22 +116,22 @@ impl UiControl for Button {
         None
     }
 
-    fn parent(&self) -> Option<&types::UiMemberCommon> {
+    fn parent(&self) -> Option<&UiMember> {
         self.base.parent()
     }
-    fn parent_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
+    fn parent_mut(&mut self) -> Option<&mut UiMember> {
         self.base.parent_mut()
     }
-    fn root(&self) -> Option<&types::UiMemberCommon> {
+    fn root(&self) -> Option<&UiMember> {
         self.base.root()
     }
-    fn root_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
+    fn root_mut(&mut self) -> Option<&mut UiMember> {
         self.base.root_mut()
     }
-    fn as_layed_out(&self) -> &UiLayedOut {
+    fn as_layable(&self) -> &UiLayable {
     	self
     }
-	fn as_layed_out_mut(&mut self) -> &mut UiLayedOut {
+	fn as_layable_mut(&mut self) -> &mut UiLayable {
 		self
 	}
     
@@ -141,19 +141,19 @@ impl UiControl for Button {
     	
     	fill_from_markup_base!(self, markup, registry, Button, [MEMBER_ID_BUTTON, MEMBER_TYPE_BUTTON]);
     	fill_from_markup_label!(self, markup);
-    	fill_from_markup_callbacks!(self, markup, registry, ["on_left_click" => FnMut(&mut UiButton)]);
+    	//fill_from_markup_callbacks!(self, markup, registry, ["on_left_click" => FnMut(&mut UiButton)]);
     	
-    	/*if let Some(on_left_click) = markup.attributes.get("on_left_click") {
-    		let callback = registry.callback(on_left_click.as_attribute()).unwrap();
+    	if let Some(on_left_click) = markup.attributes.get("on_left_click") {
+    		let callback: Box<FnMut(&mut UiButton)> = registry.callback(on_left_click.as_attribute()).unwrap();
     		self.on_left_click(Some(unsafe { 
     			let callback: *mut Box<FnMut(&mut UiButton)> = mem::transmute(*callback);
     			*Box::from_raw(callback) 
     		}));
-    	}*/
+    	}
     }
 }
 
-impl UiLayedOut for Button {
+impl UiLayable for Button {
 	fn layout_width(&self) -> layout::Size {
     	self.base.control_base.layout.width
     }
@@ -204,7 +204,7 @@ impl UiMember for Button {
         ((rect.right - rect.left) as u16, (rect.bottom - rect.top) as u16)
     }
 
-    fn on_resize(&mut self, handler: Option<Box<FnMut(&mut UiMember, u16, u16)>>) {
+    fn on_resize(&mut self, handler: Option<types::ResizeCallback>) {
         self.base.h_resize = handler;
     }
     
@@ -224,21 +224,18 @@ impl UiMember for Button {
         self.base.control_base.member_base.visibility
     } 
 
-    fn member_id(&self) -> &'static str {
-	    self.base.control_base.member_base.member_id()
-    }
-    fn id(&self) -> ids::Id {
-    	self.base.id()
-    }
-    unsafe fn native_id(&self) -> usize {
-	    self.base.hwnd as usize
-    }
     fn is_control(&self) -> Option<&UiControl> {
     	Some(self)
     }
     fn is_control_mut(&mut self) -> Option<&mut UiControl> {
     	Some(self)
     }     
+    fn as_base(&self) -> &types::UiMemberBase {
+    	self.base.control_base.member_base.as_ref()
+    }
+    fn as_base_mut(&mut self) -> &mut types::UiMemberBase {
+    	self.base.control_base.member_base.as_mut()
+    }   
 }
 
 impl development::UiDrawable for Button {

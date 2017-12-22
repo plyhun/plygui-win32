@@ -18,14 +18,14 @@ pub static mut INSTANCE: minwindef::HINSTANCE = 0 as minwindef::HINSTANCE;
 
 #[repr(C)]
 pub struct WindowsControlBase {
-	pub control_base: development::UiControlBase, 
+	pub control_base: development::UiControlCommon, 
 	
     pub hwnd: windef::HWND,
     pub subclass_id: usize,
     pub coords: Option<(i32, i32)>,
     pub measured_size: (u16, u16),
 
-    pub h_resize: Option<Box<FnMut(&mut UiMember, u16, u16)>>,
+    pub h_resize: Option<types::ResizeCallback>,
     
     invalidate: unsafe fn(this: &mut WindowsControlBase),
 }
@@ -33,8 +33,8 @@ pub struct WindowsControlBase {
 impl WindowsControlBase {
 	pub fn with_params(invalidate: unsafe fn(this: &mut WindowsControlBase), functions: development::UiMemberFunctions) -> WindowsControlBase {
         WindowsControlBase {
-        	control_base: development::UiControlBase {
-	        	member_base: development::UiMemberBase::with_params(types::Visibility::Visible, functions),
+        	control_base: development::UiControlCommon {
+	        	member_base: development::UiMemberCommon::with_params(types::Visibility::Visible, functions),
 		        layout: development::layout::LayoutBase {
 		            width: layout::Size::MatchParent,
 					height: layout::Size::WrapContent,
@@ -69,7 +69,7 @@ impl WindowsControlBase {
             }
     	}
     }
-    pub fn parent(&self) -> Option<&types::UiMemberCommon> {
+    pub fn parent(&self) -> Option<&types::UiMemberBase> {
         unsafe {
             let parent_hwnd = winuser::GetParent(self.hwnd);
             if parent_hwnd == self.hwnd {
@@ -80,7 +80,7 @@ impl WindowsControlBase {
             mem::transmute(parent_ptr as *mut c_void)
         }
     }
-    pub fn parent_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
+    pub fn parent_mut(&mut self) -> Option<&mut types::UiMemberBase> {
         unsafe {
             let parent_hwnd = winuser::GetParent(self.hwnd);
             if parent_hwnd == self.hwnd {
@@ -91,7 +91,7 @@ impl WindowsControlBase {
             mem::transmute(parent_ptr as *mut c_void)
         }
     }
-    pub fn root(&self) -> Option<&types::UiMemberCommon> {
+    pub fn root(&self) -> Option<&types::UiMemberBase> {
         unsafe {
             let parent_hwnd = winuser::GetAncestor(self.hwnd, 2); //GA_ROOT
             if parent_hwnd == self.hwnd {
@@ -102,7 +102,7 @@ impl WindowsControlBase {
             mem::transmute(parent_ptr as *mut c_void)
         }
     }
-    pub fn root_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
+    pub fn root_mut(&mut self) -> Option<&mut types::UiMemberBase> {
         unsafe {
             let parent_hwnd = winuser::GetAncestor(self.hwnd, 2); //GA_ROOT
             if parent_hwnd == self.hwnd {
@@ -274,7 +274,7 @@ macro_rules! impl_invalidate {
 			
 			let parent_hwnd = this.parent_hwnd();	
 			if let Some(parent_hwnd) = parent_hwnd {
-				let mparent = common::cast_hwnd::<plygui_api::development::UiMemberBase>(parent_hwnd);
+				let mparent = common::cast_hwnd::<plygui_api::development::UiMemberCommon>(parent_hwnd);
 				let (pw, ph) = mparent.size();
 				let this: &mut $typ = mem::transmute(this);
 				//let (_,_,changed) = 
@@ -297,10 +297,10 @@ macro_rules! impl_invalidate {
 #[macro_export]
 macro_rules! impl_is_control {
 	($typ: ty) => {
-		unsafe fn is_control(this: &::plygui_api::development::UiMemberBase) -> Option<&::plygui_api::development::UiControlBase> {
+		unsafe fn is_control(this: &::plygui_api::development::UiMemberCommon) -> Option<&::plygui_api::development::UiControlCommon> {
 			Some(&::plygui_api::utils::base_to_impl::<$typ>(this).base.control_base)
 		}
-		unsafe fn is_control_mut(this: &mut ::plygui_api::development::UiMemberBase) -> Option<&mut ::plygui_api::development::UiControlBase> {
+		unsafe fn is_control_mut(this: &mut ::plygui_api::development::UiMemberCommon) -> Option<&mut ::plygui_api::development::UiControlCommon> {
 			Some(&mut ::plygui_api::utils::base_to_impl_mut::<$typ>(this).base.control_base)
 		}
 	}
@@ -308,7 +308,7 @@ macro_rules! impl_is_control {
 #[macro_export]
 macro_rules! impl_size {
 	($typ: ty) => {
-		unsafe fn size(this: &::plygui_api::development::UiMemberBase) -> (u16, u16) {
+		unsafe fn size(this: &::plygui_api::development::UiMemberCommon) -> (u16, u16) {
 			::plygui_api::utils::base_to_impl::<$typ>(this).size()
 		}
 	}
@@ -316,7 +316,7 @@ macro_rules! impl_size {
 #[macro_export]
 macro_rules! impl_member_id {
 	($mem: expr) => {
-		unsafe fn member_id(_: &::plygui_api::development::UiMemberBase) -> &'static str {
+		unsafe fn member_id(_: &::plygui_api::development::UiMemberCommon) -> &'static str {
 			$mem
 		}
 	}
@@ -324,7 +324,7 @@ macro_rules! impl_member_id {
 #[macro_export]
 macro_rules! impl_measure {
 	($typ: ty) => {
-		unsafe fn measure(&mut UiMemberBase, w: u16, h: u16) -> (u16, u16, bool) {
+		unsafe fn measure(&mut UiMemberCommon, w: u16, h: u16) -> (u16, u16, bool) {
 			::plygui_api::utils::base_to_impl::<$typ>(this).measure(w, h)
 		}
 	}
@@ -332,7 +332,7 @@ macro_rules! impl_measure {
 #[macro_export]
 macro_rules! impl_draw {
 	($typ: ty) => {
-		unsafe fn draw(&mut UiMemberBase, coords: Option<(i32, i32)>) {
+		unsafe fn draw(&mut UiMemberCommon, coords: Option<(i32, i32)>) {
 			::plygui_api::utils::base_to_impl::<$typ>(this).draw(coords)
 		}
 	}

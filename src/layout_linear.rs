@@ -2,7 +2,7 @@ use super::*;
 use super::common::*;
 
 use plygui_api::{layout, ids, types, development};
-use plygui_api::traits::{UiControl, UiLayedOut, UiMultiContainer, UiLinearLayout, UiMember, UiContainer};
+use plygui_api::traits::{UiControl, UiLayable, UiMultiContainer, UiLinearLayout, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_LAYOUT_LINEAR;
 
 use winapi::shared::windef;
@@ -62,33 +62,30 @@ impl UiMember for LinearLayout {
         self.base.control_base.member_base.visibility
     }
 
-    fn id(&self) -> ids::Id {
-    	self.base.id()
-    }
     fn size(&self) -> (u16, u16) {
         let rect = unsafe { window_rect(self.base.hwnd) };
         ((rect.right - rect.left) as u16, (rect.bottom - rect.top) as u16)
     }
 
-    fn on_resize(&mut self, handler: Option<Box<FnMut(&mut UiMember, u16, u16)>>) {
+    fn on_resize(&mut self, handler: Option<types::ResizeCallback>) {
         self.base.h_resize = handler;
     }
 
-    fn member_id(&self) -> &'static str {
-    	self.base.control_base.member_base.member_id()
-    }
-    unsafe fn native_id(&self) -> usize {
-	    self.base.hwnd as usize
-    }
     fn is_control(&self) -> Option<&UiControl> {
     	Some(self)
     }
     fn is_control_mut(&mut self) -> Option<&mut UiControl> {
     	Some(self)
-    }     
+    }  
+    fn as_base(&self) -> &types::UiMemberBase {
+    	self.base.control_base.member_base.as_ref()
+    }
+    fn as_base_mut(&mut self) -> &mut types::UiMemberBase {
+    	self.base.control_base.member_base.as_mut()
+    }       
 }
 
-impl UiLayedOut for LinearLayout {
+impl UiLayable for LinearLayout {
 	fn layout_width(&self) -> layout::Size {
     	self.base.control_base.layout.width
     }
@@ -141,16 +138,16 @@ impl UiControl for LinearLayout {
         Some(self)
     }
 
-    fn parent(&self) -> Option<&types::UiMemberCommon> {
+    fn parent(&self) -> Option<&UiMember> {
         self.base.parent()
     }
-    fn parent_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
+    fn parent_mut(&mut self) -> Option<&mut UiMember> {
         self.base.parent_mut()
     }
-    fn root(&self) -> Option<&types::UiMemberCommon> {
+    fn root(&self) -> Option<&UiMember> {
         self.base.root()
     }
-    fn root_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
+    fn root_mut(&mut self) -> Option<&mut UiMember> {
         self.base.root_mut()
     }
     fn on_added_to_container(&mut self, parent: &UiContainer, px: u16, py: u16) {
@@ -198,10 +195,10 @@ impl UiControl for LinearLayout {
         self.base.hwnd = 0 as windef::HWND;
         self.base.subclass_id = 0;
     }
-    fn as_layed_out(&self) -> &UiLayedOut {
+    fn as_layable(&self) -> &UiLayable {
     	self
     }
-	fn as_layed_out_mut(&mut self) -> &mut UiLayedOut {
+	fn as_layable_mut(&mut self) -> &mut UiLayable {
 		self
 	}
     
