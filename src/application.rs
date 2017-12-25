@@ -41,7 +41,7 @@ impl UiApplication for Application {
     	
     	for window in self.windows.as_mut_slice() {
     		let window = unsafe { common::cast_hwnd::<Window>(*window) };
-    		if window.id() == id {
+    		if window.as_base().id() == id {
     			return Some(window);
     		} else {
     			return window.find_control_by_id_mut(id).map(|control| control.as_member_mut());
@@ -54,7 +54,7 @@ impl UiApplication for Application {
     	
     	for window in self.windows.as_slice() {
     		let window = unsafe { common::cast_hwnd::<Window>(*window) };
-    		if window.id() == id {
+    		if window.as_base().id() == id {
     			return Some(window);
     		} else {
     			return window.find_control_by_id_mut(id).map(|control| control.as_member());

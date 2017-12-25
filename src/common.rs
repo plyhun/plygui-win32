@@ -202,44 +202,7 @@ pub unsafe fn window_rect(hwnd: windef::HWND) -> windef::RECT {
     let mut rect: windef::RECT = mem::zeroed();
     winuser::GetClientRect(hwnd, &mut rect);
     rect
-}
-
-/*pub unsafe fn cast_uicontrol_to_windows(input: &mut Box<UiControl>) -> &mut WindowsControl {
-    use std::ops::DerefMut;
-    match input.role_mut() {
-        UiRoleMut::Button(_) => {
-            let a: &mut Box<button::Button> = mem::transmute(input);
-            a.deref_mut()
-        }
-        UiRoleMut::LinearLayout(_) => {
-            let a: &mut Box<layout_linear::LinearLayout> = mem::transmute(input);
-            a.deref_mut()
-        }
-        UiRoleMut::Window(_) => {
-            panic!("Window as a container child is impossible!");
-        }
-    }
-}
-
-pub unsafe fn cast_hwnd_to_windows<'a>(hwnd: HWND) -> Option<&'a mut WindowsControl> {
-	let hwnd_ptr = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
-    let parent_class = String::from_utf16_lossy(get_class_name_by_hwnd(hwnd).as_ref());
-    match parent_class.as_str() {
-        development::CLASS_ID_LAYOUT_LINEAR => {
-            let ll: &mut layout_linear::LinearLayout = mem::transmute(hwnd_ptr as *mut c_void);
-            return Some(ll);
-        },
-        development::CLASS_ID_WINDOW => {
-            let w: &mut window::Window = mem::transmute(hwnd_ptr as *mut c_void);
-            return Some(w);
-        },
-        button::CLASS_ID => {
-            let b: &mut button::Button = mem::transmute(hwnd_ptr as *mut c_void);
-            return Some(b);
-        },
-        _ => None,
-    }
-}*/    
+}  
 
 pub unsafe fn cast_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T where T: Sized {// TODO merge with above using T: Sized
 	let hwnd_ptr = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);

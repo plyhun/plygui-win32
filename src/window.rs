@@ -255,6 +255,9 @@ impl UiMember for Window {
     fn as_base_mut(&mut self) -> &mut types::UiMemberBase {
     	self.base.as_mut()
     }
+    unsafe fn native_id(&self) -> usize {
+        self.hwnd as usize
+    }
 }
 
 impl Drop for Window {
@@ -318,7 +321,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
 
             if let Some(ref mut cb) = w.h_resize {
                 let w2: &mut Window = mem::transmute(winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA));
-                (cb)(w2, width, height);
+                (cb.as_mut())(w2, width, height);
             }
         }
         winuser::WM_DESTROY => {

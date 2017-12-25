@@ -82,7 +82,11 @@ impl UiMember for LinearLayout {
     }
     fn as_base_mut(&mut self) -> &mut types::UiMemberBase {
     	self.base.control_base.member_base.as_mut()
-    }       
+    }     
+    
+    unsafe fn native_id(&self) -> usize {
+        self.base.hwnd as usize
+    }  
 }
 
 impl UiLayable for LinearLayout {
@@ -138,16 +142,16 @@ impl UiControl for LinearLayout {
         Some(self)
     }
 
-    fn parent(&self) -> Option<&UiMember> {
+    fn parent(&self) -> Option<&types::UiMemberBase> {
         self.base.parent()
     }
-    fn parent_mut(&mut self) -> Option<&mut UiMember> {
+    fn parent_mut(&mut self) -> Option<&mut types::UiMemberBase> {
         self.base.parent_mut()
     }
-    fn root(&self) -> Option<&UiMember> {
+    fn root(&self) -> Option<&types::UiMemberBase> {
         self.base.root()
     }
-    fn root_mut(&mut self) -> Option<&mut UiMember> {
+    fn root_mut(&mut self) -> Option<&mut types::UiMemberBase> {
         self.base.root_mut()
     }
     fn on_added_to_container(&mut self, parent: &UiContainer, px: u16, py: u16) {
@@ -213,11 +217,11 @@ impl UiControl for LinearLayout {
 
 impl UiContainer for LinearLayout {
     fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut UiControl> {
-        if self.id() == id_ {
+        if self.as_base().id() == id_ {
             return Some(self);
         }
         for child in self.children.as_mut_slice() {
-            if child.id() == id_ {
+            if child.as_base().id() == id_ {
                 return Some(child.as_mut());
             } else if let Some(c) = child.is_container_mut() {
                 let ret = c.find_control_by_id_mut(id_);
@@ -230,11 +234,11 @@ impl UiContainer for LinearLayout {
         None
     }
     fn find_control_by_id(&self, id_: ids::Id) -> Option<&UiControl> {
-        if self.id() == id_ {
+        if self.as_base().id() == id_ {
             return Some(self);
         }
         for child in self.children.as_slice() {
-            if child.id() == id_ {
+            if child.as_base().id() == id_ {
                 return Some(child.as_ref());
             } else if let Some(c) = child.is_container() {
                 let ret = c.find_control_by_id(id_);
@@ -456,7 +460,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
 
             if let Some(ref mut cb) = ll.base.h_resize {
                 let mut ll2: &mut LinearLayout = mem::transmute(ww);
-                (cb)(ll2, width, height);
+                (cb.as_mut())(ll2, width, height);
             }
         }
         winuser::WM_DESTROY => {

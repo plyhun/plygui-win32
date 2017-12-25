@@ -116,16 +116,16 @@ impl UiControl for Button {
         None
     }
 
-    fn parent(&self) -> Option<&UiMember> {
+    fn parent(&self) -> Option<&types::UiMemberBase> {
         self.base.parent()
     }
-    fn parent_mut(&mut self) -> Option<&mut UiMember> {
+    fn parent_mut(&mut self) -> Option<&mut types::UiMemberBase> {
         self.base.parent_mut()
     }
-    fn root(&self) -> Option<&UiMember> {
+    fn root(&self) -> Option<&types::UiMemberBase> {
         self.base.root()
     }
-    fn root_mut(&mut self) -> Option<&mut UiMember> {
+    fn root_mut(&mut self) -> Option<&mut types::UiMemberBase> {
         self.base.root_mut()
     }
     fn as_layable(&self) -> &UiLayable {
@@ -236,6 +236,9 @@ impl UiMember for Button {
     fn as_base_mut(&mut self) -> &mut types::UiMemberBase {
     	self.base.control_base.member_base.as_mut()
     }   
+    unsafe fn native_id(&self) -> usize {
+        self.base.hwnd as usize
+    }
 }
 
 impl development::UiDrawable for Button {
@@ -327,7 +330,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
         winuser::WM_LBUTTONDOWN => {
             if let Some(ref mut cb) = button.h_left_clicked {
                 let mut button2: &mut Button = mem::transmute(param);
-                (cb)(button2);
+                (cb.as_mut())(button2);
             }
         }
         winuser::WM_SIZE => {
@@ -336,7 +339,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
 
             if let Some(ref mut cb) = button.base.h_resize {
                 let mut button2: &mut Button = mem::transmute(param);
-                (cb)(button2, width, height);
+                (cb.as_mut())(button2, width, height);
             }
         }
         _ => {}
