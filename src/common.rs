@@ -3,7 +3,7 @@ use std::os::raw::c_void;
 use std::os::windows::ffi::OsStrExt;
 use std::ffi::OsStr;
 
-use plygui_api::{layout, development, ids, types};
+use plygui_api::{layout, development, ids, types, callbacks};
 use plygui_api::traits::{UiMember, UiContainer};
 
 use winapi::shared::windef;
@@ -25,7 +25,7 @@ pub struct WindowsControlBase {
     pub coords: Option<(i32, i32)>,
     pub measured_size: (u16, u16),
 
-    pub h_resize: Option<types::ResizeCallback>,
+    pub h_resize: Option<callbacks::Resize>,
     
     invalidate: unsafe fn(this: &mut WindowsControlBase),
 }

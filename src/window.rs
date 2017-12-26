@@ -1,7 +1,7 @@
 use super::*;
 use super::common::*;
 
-use plygui_api::{development, ids, types};
+use plygui_api::{development, ids, types, callbacks};
 use plygui_api::traits::{UiControl, UiWindow, UiSingleContainer, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_WINDOW;
 
@@ -27,7 +27,7 @@ pub struct Window {
     hwnd: windef::HWND,
     child: Option<Box<UiControl>>,
 
-    h_resize: Option<types::ResizeCallback>,
+    h_resize: Option<callbacks::Resize>,
 }
 
 impl Window {
@@ -222,7 +222,7 @@ impl UiMember for Window {
         )
     }
 
-    fn on_resize(&mut self, handler: Option<types::ResizeCallback>) {
+    fn on_resize(&mut self, handler: Option<callbacks::Resize>) {
         self.h_resize = handler;
     }
 

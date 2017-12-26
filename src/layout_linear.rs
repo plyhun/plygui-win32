@@ -1,7 +1,7 @@
 use super::*;
 use super::common::*;
 
-use plygui_api::{layout, ids, types, development};
+use plygui_api::{layout, ids, types, development, callbacks};
 use plygui_api::traits::{UiControl, UiLayable, UiMultiContainer, UiLinearLayout, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_LAYOUT_LINEAR;
 
@@ -67,7 +67,7 @@ impl UiMember for LinearLayout {
         ((rect.right - rect.left) as u16, (rect.bottom - rect.top) as u16)
     }
 
-    fn on_resize(&mut self, handler: Option<types::ResizeCallback>) {
+    fn on_resize(&mut self, handler: Option<callbacks::Resize>) {
         self.base.h_resize = handler;
     }
 

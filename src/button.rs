@@ -1,6 +1,6 @@
 use super::*;
 
-use plygui_api::{layout, types, development};
+use plygui_api::{layout, types, development, callbacks};
 use plygui_api::traits::{UiControl, UiLayable, UiButton, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_BUTTON;
 
@@ -28,7 +28,7 @@ lazy_static! {
 pub struct Button {
     base: common::WindowsControlBase,
     label: String,
-    h_left_clicked: Option<types::ClickCallback>,
+    h_left_clicked: Option<callbacks::Click>,
 }
 
 impl Button {
@@ -52,7 +52,7 @@ impl Button {
 }
 
 impl UiButton for Button {
-    fn on_left_click(&mut self, handle: Option<types::ClickCallback>) {
+    fn on_left_click(&mut self, handle: Option<callbacks::Click>) {
         self.h_left_clicked = handle;
     }
     fn label(&self) -> &str {
@@ -144,11 +144,8 @@ impl UiControl for Button {
     	//fill_from_markup_callbacks!(self, markup, registry, ["on_left_click" => FnMut(&mut UiButton)]);
     	
     	if let Some(on_left_click) = markup.attributes.get("on_left_click") {
-    		let callback: Box<FnMut(&mut UiButton)> = registry.callback(on_left_click.as_attribute()).unwrap();
-    		self.on_left_click(Some(unsafe { 
-    			let callback: *mut Box<FnMut(&mut UiButton)> = mem::transmute(*callback);
-    			*Box::from_raw(callback) 
-    		}));
+    		let callback: callbacks::Click = registry.pop_callback(on_left_click.as_attribute()).unwrap();
+    		self.on_left_click(Some(callback));
     	}
     }
 }
@@ -204,7 +201,7 @@ impl UiMember for Button {
         ((rect.right - rect.left) as u16, (rect.bottom - rect.top) as u16)
     }
 
-    fn on_resize(&mut self, handler: Option<types::ResizeCallback>) {
+    fn on_resize(&mut self, handler: Option<callbacks::Resize>) {
         self.base.h_resize = handler;
     }
     
@@ -236,6 +233,7 @@ impl UiMember for Button {
     fn as_base_mut(&mut self) -> &mut types::UiMemberBase {
     	self.base.control_base.member_base.as_mut()
     }   
+    
     unsafe fn native_id(&self) -> usize {
         self.base.hwnd as usize
     }
