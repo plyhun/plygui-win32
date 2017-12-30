@@ -346,6 +346,8 @@ impl development::UiDrawable for LinearLayout {
         }
     }
     fn measure(&mut self, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+    	use std::cmp::max;
+    	
     	let old_size = self.base.measured_size;
         self.base.measured_size = match self.visibility() {
         	types::Visibility::Gone => (0,0),
@@ -359,24 +361,29 @@ impl development::UiDrawable for LinearLayout {
 		        if let layout::Size::Exact(eh) = self.layout_height() {
 		            w = eh;
 		        }
+		        let (mut ww, mut wm, mut hh, mut hm) = (0, 0, 0, 0);
+		        for ref mut child in self.children.as_mut_slice() {
+                    let (cw, ch, _) = child.measure(w, h);
+                    ww += cw;
+                    hh += ch;
+                    wm = max(wm, cw);
+                    hm = max(hm, ch);
+                }
+		        
 		        match self.orientation {
 		            layout::Orientation::Vertical => {
 		                if let layout::Size::WrapContent = self.layout_height() {
-		                    let mut hh = 0;
-		                    for ref mut child in self.children.as_mut_slice() {
-		                        let (_, ch, _) = child.measure(w, h);
-		                        hh += ch;
-		                    }
 		                    h = hh;
+		                } 
+		                if let layout::Size::WrapContent = self.layout_width() {
+		                    w = wm;
 		                }
 		            }
 		            layout::Orientation::Horizontal => {
+		                if let layout::Size::WrapContent = self.layout_height() {
+		                    h = hm;
+		                }
 		                if let layout::Size::WrapContent = self.layout_width() {
-		                    let mut ww = 0;
-		                    for ref mut child in self.children.as_mut_slice() {
-		                        let (cw, _, _) = child.measure(w, h);
-		                        ww += cw;
-		                    }
 		                    w = ww;
 		                }
 		            }
