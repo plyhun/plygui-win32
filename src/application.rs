@@ -2,6 +2,7 @@ use super::*;
 use super::common::WindowsContainer;
 
 use std::{mem, thread};
+use std::borrow::Cow;
 
 use plygui_api::traits::{UiApplication, UiWindow, UiMember};
 use plygui_api::types::WindowStartSize;
@@ -24,8 +25,8 @@ impl UiApplication for Application {
         }
         w
     }
-    fn name(&self) -> &str {
-        self.name.as_str()
+    fn name<'a>(&'a self) -> Cow<'a, str> {
+        Cow::Borrowed(self.name.as_str())
     }
     fn start(&mut self) {
         for i in (0..self.windows.len()).rev() {
