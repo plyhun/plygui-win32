@@ -2,7 +2,7 @@ use super::*;
 use super::common::*;
 
 use plygui_api::{layout, ids, types, development, callbacks};
-use plygui_api::traits::{UiControl, UiLayable, UiMultiContainer, UiLinearLayout, UiMember, UiContainer};
+use plygui_api::traits::{UiControl, UiHasLayout, UiMultiContainer, UiLinearLayout, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_LAYOUT_LINEAR;
 
 use winapi::shared::windef;
@@ -89,7 +89,7 @@ impl UiMember for LinearLayout {
     }  
 }
 
-impl UiLayable for LinearLayout {
+impl UiHasLayout for LinearLayout {
 	fn layout_width(&self) -> layout::Size {
     	self.base.control_base.layout.width
     }
@@ -199,10 +199,10 @@ impl UiControl for LinearLayout {
         self.base.hwnd = 0 as windef::HWND;
         self.base.subclass_id = 0;
     }
-    fn as_layable(&self) -> &UiLayable {
+    fn as_has_layout(&self) -> &UiHasLayout {
     	self
     }
-	fn as_layable_mut(&mut self) -> &mut UiLayable {
+	fn as_has_layout_mut(&mut self) -> &mut UiHasLayout {
 		self
 	}
     

@@ -2,7 +2,7 @@ use super::*;
 use super::common::*;
 
 use plygui_api::{development, ids, types, callbacks};
-use plygui_api::traits::{UiControl, UiWindow, UiSingleContainer, UiMember, UiContainer};
+use plygui_api::traits::{UiControl, UiWindow, UiSingleContainer, UiMember, UiContainer, UiHasLabel};
 use plygui_api::members::MEMBER_ID_WINDOW;
 
 use winapi::shared::windef;
@@ -15,6 +15,7 @@ use winapi::ctypes::c_void;
 use std::{ptr, mem, str};
 use std::os::windows::ffi::OsStrExt;
 use std::ffi::OsStr;
+use std::borrow::Cow;
 
 lazy_static! {
 	pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
@@ -134,6 +135,29 @@ impl Window {
     }
 }
 
+impl UiHasLabel for Window {
+	fn label<'a>(&'a self) -> ::std::borrow::Cow<'a, str> {
+		if self.hwnd != 0 as windef::HWND {
+			let mut wbuffer = vec![0u16; 4096];
+			let len = unsafe { winuser::GetWindowTextW(self.hwnd, wbuffer.as_mut_slice().as_mut_ptr(), 4096) };
+			Cow::Owned(String::from_utf16_lossy(&wbuffer.as_slice()[..len as usize]))
+    	} else {
+    		panic!("Unattached window!");
+    	}
+	}
+    fn set_label(&mut self, label: &str) {
+    	if self.hwnd != 0 as windef::HWND {
+    		let control_name = OsStr::new(label)
+		        .encode_wide()
+		        .chain(Some(0).into_iter())
+		        .collect::<Vec<_>>();
+	    	unsafe {
+	    		winuser::SetWindowTextW(self.hwnd, control_name.as_ptr());
+	    	}
+    	}
+    }
+}
+
 impl UiWindow for Window {
 	fn as_single_container(&self) -> &UiSingleContainer {
 		self
@@ -145,9 +169,6 @@ impl UiWindow for Window {
 
 impl UiContainer for Window {
     fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut UiControl> {
-        /*if self.id() == id_ {
-			return Some(self);
-		} else*/
         if let Some(child) = self.child.as_mut() {
             if let Some(c) = child.is_container_mut() {
                 return c.find_control_by_id_mut(id_);
@@ -156,9 +177,6 @@ impl UiContainer for Window {
         None
     }
     fn find_control_by_id(&self, id_: ids::Id) -> Option<&UiControl> {
-        /*if self.id() == id_ {
-			return Some(self);
-		} else*/
         if let Some(child) = self.child.as_ref() {
             if let Some(c) = child.is_container() {
                 return c.find_control_by_id(id_);

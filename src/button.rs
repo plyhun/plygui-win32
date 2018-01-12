@@ -1,7 +1,7 @@
 use super::*;
 
 use plygui_api::{layout, types, development, callbacks};
-use plygui_api::traits::{UiControl, UiLayable, UiButton, UiMember, UiContainer};
+use plygui_api::traits::{UiControl, UiClickable, UiHasLabel, UiHasLayout, UiButton, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_BUTTON;
 
 use winapi::shared::windef;
@@ -14,6 +14,7 @@ use winapi::ctypes::c_void;
 use std::{ptr, mem, str};
 use std::os::windows::ffi::OsStrExt;
 use std::ffi::OsStr;
+use std::borrow::Cow;
 
 pub const CLASS_ID: &str = "Button";
 
@@ -51,12 +52,9 @@ impl Button {
     }
 }
 
-impl UiButton for Button {
-    fn on_left_click(&mut self, handle: Option<callbacks::Click>) {
-        self.h_left_clicked = handle;
-    }
-    fn label(&self) -> &str {
-        self.label.as_ref()
+impl UiHasLabel for Button {
+    fn label<'a>(&'a self) -> Cow<'a, str> {
+        Cow::Borrowed(self.label.as_ref())
     }
     fn set_label(&mut self, label: &str) {
     	self.label = label.into(); 
@@ -70,13 +68,34 @@ impl UiButton for Button {
 	    	}
 	    	self.base.invalidate();
     	}
-    }
+    }	
+}
+
+impl UiClickable for Button {
+	fn on_click(&mut self, handle: Option<callbacks::Click>) {
+        self.h_left_clicked = handle;
+    }    
+}
+
+impl UiButton for Button {
     fn as_control(&self) -> &UiControl {
     	self
     }
 	fn as_control_mut(&mut self) -> &mut UiControl {
 		self
 	}
+	fn as_has_label(&self) -> &UiHasLabel {
+    	self
+    }
+	fn as_has_label_mut(&mut self) -> &mut UiHasLabel {
+		self
+	}
+    fn as_clickable(&self) -> &UiClickable {
+    	self
+    }
+	fn as_clickable_mut(&mut self) -> &mut UiClickable {
+		self
+	}	
 }
 
 impl UiControl for Button {
@@ -128,10 +147,10 @@ impl UiControl for Button {
     fn root_mut(&mut self) -> Option<&mut types::UiMemberBase> {
         self.base.root_mut()
     }
-    fn as_layable(&self) -> &UiLayable {
+    fn as_has_layout(&self) -> &UiHasLayout {
     	self
     }
-	fn as_layable_mut(&mut self) -> &mut UiLayable {
+	fn as_has_layout_mut(&mut self) -> &mut UiHasLayout {
 		self
 	}
     
@@ -150,7 +169,7 @@ impl UiControl for Button {
     }
 }
 
-impl UiLayable for Button {
+impl UiHasLayout for Button {
 	fn layout_width(&self) -> layout::Size {
     	self.base.control_base.layout.width
     }
