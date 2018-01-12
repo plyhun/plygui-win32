@@ -15,6 +15,7 @@ use std::{ptr, mem, str};
 use std::os::windows::ffi::OsStrExt;
 use std::ffi::OsStr;
 use std::borrow::Cow;
+use std::cmp::max;
 
 pub const CLASS_ID: &str = "Button";
 
@@ -99,18 +100,20 @@ impl UiButton for Button {
 }
 
 impl UiControl for Button {
-	fn on_added_to_container(&mut self, parent: &UiContainer, x: u16, y: u16) {
+	fn on_added_to_container(&mut self, parent: &UiContainer, x: i32, y: i32) {
 		use plygui_api::development::UiDrawable;
 		
 		let selfptr = self as *mut _ as *mut c_void;
         let (pw, ph) = parent.size();
+        //let (lp,tp,rp,bp) = self.base.control_base.layout.padding.into();
+    	let (lm,tm,rm,bm) = self.base.control_base.layout.margin.into();
         let (hwnd, id) = unsafe {
         	self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
 	        let (w, h, _) = self.measure(pw, ph);
-	        common::create_control_hwnd(x as i32,
-	                                                     y as i32,
-	                                                     w as i32,
-	                                                     h as i32,
+	        common::create_control_hwnd(x as i32 + lm,
+	                                                     y as i32 + tm,
+	                                                     w as i32 - rm,
+	                                                     h as i32 - bm,
 	                                                     parent.native_id() as windef::HWND,
 	                                                     0,
 	                                                     WINDOW_CLASS.as_ptr(),
@@ -179,11 +182,14 @@ impl UiHasLayout for Button {
 	fn layout_gravity(&self) -> layout::Gravity {
 		self.base.control_base.layout.gravity
 	}
-	fn layout_orientation(&self) -> layout::Orientation {
-		self.base.control_base.layout.orientation
-	}
 	fn layout_alignment(&self) -> layout::Alignment {
 		self.base.control_base.layout.alignment
+	}
+	fn layout_padding(&self) -> layout::BoundarySize {
+		self.base.control_base.layout.padding
+	}
+	fn layout_margin(&self) -> layout::BoundarySize {
+		self.base.control_base.layout.margin
 	}
 	
 	fn set_layout_width(&mut self, width: layout::Size) {
@@ -198,14 +204,18 @@ impl UiHasLayout for Button {
 		self.base.control_base.layout.gravity = gravity;
 		self.base.invalidate();
 	}
-	fn set_layout_orientation(&mut self, orientation: layout::Orientation) {
-		self.base.control_base.layout.orientation = orientation;
-		self.base.invalidate();
-	}
 	fn set_layout_alignment(&mut self, alignment: layout::Alignment) {
 		self.base.control_base.layout.alignment = alignment;
 		self.base.invalidate();
-	}   
+	}  
+	fn set_layout_padding(&mut self, padding: layout::BoundarySizeArgs) {
+		self.base.control_base.layout.padding = padding.into();
+		self.base.invalidate();
+	}
+	fn set_layout_margin(&mut self, margin: layout::BoundarySizeArgs) {
+		self.base.control_base.layout.margin = margin.into();
+		self.base.invalidate();
+	} 
 	fn as_member(&self) -> &UiMember {
 		self
 	}
@@ -263,20 +273,24 @@ impl development::UiDrawable for Button {
     	if coords.is_some() {
     		self.base.coords = coords;
     	}
+        //let (lp,tp,rp,bp) = self.base.control_base.layout.padding.into();
+    	let (lm,tm,rm,bm) = self.base.control_base.layout.margin.into();
         if let Some((x, y)) = self.base.coords {
         	unsafe {
 	            winuser::SetWindowPos(self.base.hwnd,
 	                                 ptr::null_mut(),
-	                                 x as i32,
-	                                 y as i32,
-	                                 self.base.measured_size.0 as i32,
-	                                 self.base.measured_size.1 as i32,
+	                                 x + lm,
+	                                 y + tm,
+	                                 self.base.measured_size.0 as i32 - rm,
+	                                 self.base.measured_size.1 as i32 - bm,
 	                                 0);
 	        }
         }
     }
     fn measure(&mut self, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
     	let old_size = self.base.measured_size;
+    	let (lp,tp,rp,bp) = self.base.control_base.layout.padding.into();
+    	let (lm,tm,rm,bm) = self.base.control_base.layout.margin.into();
     	
     	self.base.measured_size = match self.visibility() {
     		types::Visibility::Gone => (0, 0),
@@ -317,7 +331,7 @@ impl development::UiDrawable for Button {
 		                    label_size.cy as u16
 		                } 
 		            };
-		            (w, h)
+		            (max(0, w as i32 + lm + rm + lp + rp) as u16, max(0, h as i32 + tm + bm + tp + bp) as u16)
 		        }
     		}
     	};

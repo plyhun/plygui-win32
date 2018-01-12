@@ -35,13 +35,13 @@ impl WindowsControlBase {
         WindowsControlBase {
         	control_base: development::UiControlCommon {
 	        	member_base: development::UiMemberCommon::with_params(types::Visibility::Visible, functions),
-		        layout: development::layout::LayoutBase {
-		            width: layout::Size::MatchParent,
+	        	layout: layout::Attributes {
+	        		width: layout::Size::MatchParent,
 					height: layout::Size::WrapContent,
 					gravity: layout::gravity::CENTER_HORIZONTAL | layout::gravity::TOP,
-					orientation: layout::Orientation::Vertical,
-					alignment: layout::Alignment::None,
-	            },
+					..
+					Default::default()
+	        	}
         	},
         	hwnd: 0 as windef::HWND,
             h_resize: None,

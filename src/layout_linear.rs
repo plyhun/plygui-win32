@@ -2,7 +2,7 @@ use super::*;
 use super::common::*;
 
 use plygui_api::{layout, ids, types, development, callbacks};
-use plygui_api::traits::{UiControl, UiHasLayout, UiMultiContainer, UiLinearLayout, UiMember, UiContainer};
+use plygui_api::traits::{UiControl, UiHasLayout, UiMultiContainer, UiLinearLayout, UiMember, UiContainer, UiHasOrientation};
 use plygui_api::members::MEMBER_ID_LAYOUT_LINEAR;
 
 use winapi::shared::windef;
@@ -14,6 +14,7 @@ use winapi::ctypes::c_void;
 use std::{ptr, mem};
 use std::os::windows::ffi::OsStrExt;
 use std::ffi::OsStr;
+//use std::cmp::max;
 
 lazy_static! {
 	pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
@@ -89,6 +90,16 @@ impl UiMember for LinearLayout {
     }  
 }
 
+impl UiHasOrientation for LinearLayout {
+	fn layout_orientation(&self) -> layout::Orientation {
+		self.orientation
+	}
+	fn set_layout_orientation(&mut self, orientation: layout::Orientation) {
+		self.orientation = orientation;
+		self.base.invalidate();
+	}
+}
+
 impl UiHasLayout for LinearLayout {
 	fn layout_width(&self) -> layout::Size {
     	self.base.control_base.layout.width
@@ -99,11 +110,14 @@ impl UiHasLayout for LinearLayout {
 	fn layout_gravity(&self) -> layout::Gravity {
 		self.base.control_base.layout.gravity
 	}
-	fn layout_orientation(&self) -> layout::Orientation {
-		self.base.control_base.layout.orientation
-	}
 	fn layout_alignment(&self) -> layout::Alignment {
 		self.base.control_base.layout.alignment
+	}
+	fn layout_padding(&self) -> layout::BoundarySize {
+		self.base.control_base.layout.padding
+	}
+	fn layout_margin(&self) -> layout::BoundarySize {
+		self.base.control_base.layout.margin
 	}
 	
 	fn set_layout_width(&mut self, width: layout::Size) {
@@ -118,14 +132,19 @@ impl UiHasLayout for LinearLayout {
 		self.base.control_base.layout.gravity = gravity;
 		self.base.invalidate();
 	}
-	fn set_layout_orientation(&mut self, orientation: layout::Orientation) {
-		self.base.control_base.layout.orientation = orientation;
-		self.base.invalidate();
-	}
 	fn set_layout_alignment(&mut self, alignment: layout::Alignment) {
 		self.base.control_base.layout.alignment = alignment;
 		self.base.invalidate();
 	}  
+	fn set_layout_padding(&mut self, padding: layout::BoundarySizeArgs) {
+		self.base.control_base.layout.padding = padding.into();
+		self.base.invalidate();
+	}
+	fn set_layout_margin(&mut self, margin: layout::BoundarySizeArgs) {
+		self.base.control_base.layout.margin = margin.into();
+		self.base.invalidate();
+	}
+	
 	fn as_member(&self) -> &UiMember {
 		self
 	}
@@ -154,18 +173,20 @@ impl UiControl for LinearLayout {
     fn root_mut(&mut self) -> Option<&mut types::UiMemberBase> {
         self.base.root_mut()
     }
-    fn on_added_to_container(&mut self, parent: &UiContainer, px: u16, py: u16) {
+    fn on_added_to_container(&mut self, parent: &UiContainer, px: i32, py: i32) {
     	use plygui_api::development::UiDrawable;
     	
         let selfptr = self as *mut _ as *mut c_void;
         let (pw, ph) = parent.size();
+        let (width, height, _) = self.measure(pw, ph);
+        let (lp,tp,_,_) = self.base.control_base.layout.padding.into();
+    	let (lm,tm,rm,bm) = self.base.control_base.layout.margin.into();
         let (hwnd, id) = unsafe { 
         	self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
-	        let (width, height, _) = self.measure(pw, ph);
-	        common::create_control_hwnd(px as i32,
-	                                                     py as i32,
-	                                                     width as i32,
-	                                                     height as i32,
+	        common::create_control_hwnd(px as i32 + lm,
+	                                                     py as i32 + tm,
+	                                                     width as i32 - rm,
+	                                                     height as i32 - bm,
 	                                                     parent.native_id() as windef::HWND,
 	                                                     winuser::WS_EX_CONTROLPARENT,
 	                                                     WINDOW_CLASS.as_ptr(),
@@ -177,15 +198,15 @@ impl UiControl for LinearLayout {
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
         self.base.coords = Some((px as i32, py as i32));
-        let mut x = 0;
-        let mut y = 0;
+        let mut x = lp;
+        let mut y = tp;
         for ref mut child in self.children.as_mut_slice() {
             let self2: &mut LinearLayout = unsafe { mem::transmute(selfptr) };
             child.on_added_to_container(self2, x, y);
             let (xx, yy) = child.size();
             match self.orientation {
-                layout::Orientation::Horizontal => x += xx,
-                layout::Orientation::Vertical => y += yy,
+                layout::Orientation::Horizontal => x += xx as i32,
+                layout::Orientation::Vertical => y += yy as i32,
             }
         }
     }
@@ -316,6 +337,12 @@ impl UiLinearLayout for LinearLayout {
 	fn as_multi_container_mut(&mut self) -> &mut UiMultiContainer {
 		self
 	}
+	fn as_has_orientation(&self) -> &UiHasOrientation {
+		self
+	}
+	fn as_has_orientation_mut(&mut self) -> &mut UiHasOrientation {
+		self
+	}
 }
 
 impl development::UiDrawable for LinearLayout {
@@ -323,18 +350,20 @@ impl development::UiDrawable for LinearLayout {
     	if coords.is_some() {
     		self.base.coords = coords;
     	}
+    	let (lp,tp,_,_) = self.base.control_base.layout.padding.into();
+    	let (lm,tm,rm,bm) = self.base.control_base.layout.margin.into();
         if let Some((x, y)) = self.base.coords {
         	unsafe {
 	            winuser::SetWindowPos(self.base.hwnd,
 	                                 ptr::null_mut(),
-	                                 x as i32,
-	                                 y as i32,
-	                                 self.base.measured_size.0 as i32,
-	                                 self.base.measured_size.1 as i32,
+	                                 x + lm,
+	                                 y + tm,
+	                                 self.base.measured_size.0 as i32 - rm,
+	                                 self.base.measured_size.1 as i32 - bm,
 	                                 0);
 	        }
-        	let mut x = 0;
-	        let mut y = 0;
+        	let mut x = lp;
+	        let mut y = tp;
 	        for ref mut child in self.children.as_mut_slice() {
 	            child.draw(Some((x, y)));
 	            let (xx, yy) = child.size();
@@ -349,7 +378,9 @@ impl development::UiDrawable for LinearLayout {
     	use std::cmp::max;
     	
     	let old_size = self.base.measured_size;
-        self.base.measured_size = match self.visibility() {
+    	let (lp,tp,rp,bp) = self.base.control_base.layout.padding.into();
+    	let (lm,tm,rm,bm) = self.base.control_base.layout.margin.into();
+    	self.base.measured_size = match self.visibility() {
         	types::Visibility::Gone => (0,0),
         	_ => {
         		let mut w = parent_width;
@@ -388,10 +419,10 @@ impl development::UiDrawable for LinearLayout {
 		                }
 		            }
 		        }
-		        (w, h)
+		        (max(0, w as i32 + lm + rm + lp + rp) as u16, max(0, h as i32 + tm + bm + tp + bp) as u16)
         	}
         };
-        (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
+    	(self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
     }
 
 }
