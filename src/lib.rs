@@ -18,16 +18,16 @@ pub mod common;
 
 mod application;
 mod window;
-mod button;
-mod layout_linear;
+//mod button;
+//mod layout_linear;
 //mod layout_relative;
 
 //pub type NativeId = winapi::shared::windef::HWND;
 
 pub use self::application::Application;
 pub use self::window::Window;
-pub use self::button::Button;
-pub use self::layout_linear::LinearLayout;
+//pub use self::button::Button;
+//pub use self::layout_linear::LinearLayout;
 //pub use self::layout_relative::RelativeLayout;
 
 #[cfg(feature = "markup")]

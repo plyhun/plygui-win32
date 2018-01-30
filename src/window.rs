@@ -1,5 +1,4 @@
 use super::*;
-use super::common::*;
 
 use plygui_api::{development, ids, types, callbacks};
 use plygui_api::traits::{UiControl, UiWindow, UiSingleContainer, UiMember, UiContainer, UiHasLabel};
@@ -24,7 +23,7 @@ lazy_static! {
 
 #[repr(C)]
 pub struct Window {
-    base: development::UiMemberCommon,
+    //base: development::UiMemberCommon,
     hwnd: windef::HWND,
     child: Option<Box<UiControl>>,
 
@@ -55,7 +54,7 @@ impl Window {
                         0,
                     ) == 0
                     {
-                        log_error();
+                        common::log_error();
                         windef::RECT {
                             left: 0,
                             top: 0,
@@ -82,23 +81,15 @@ impl Window {
                 .collect::<Vec<_>>();
 
             let mut w = Box::new(Window {
-                base: development::UiMemberCommon::with_params(
-                    types::Visibility::Visible,
-                    development::UiMemberFunctions {
-                        fn_member_id: member_id,
-                        fn_is_control: is_control,
-                        fn_is_control_mut: is_control_mut,
-                        fn_size: size,
-                    },
-                ),
+                base: Default::default(),
 
                 hwnd: 0 as windef::HWND,
                 child: None,
                 h_resize: None,
             });
 
-            if INSTANCE as usize == 0 {
-                INSTANCE = libloaderapi::GetModuleHandleW(ptr::null());
+            if common::INSTANCE as usize == 0 {
+                common::INSTANCE = libloaderapi::GetModuleHandleW(ptr::null());
             }
 
             let hwnd = winuser::CreateWindowExW(
@@ -112,7 +103,7 @@ impl Window {
                 rect.bottom - rect.top,
                 ptr::null_mut(),
                 ptr::null_mut(),
-                INSTANCE,
+                common::INSTANCE,
                 w.as_mut() as *mut _ as *mut c_void,
             );
 
@@ -135,7 +126,9 @@ impl Window {
     }
 }
 
-impl UiHasLabel for Window {
+impl development::UiWindowExtension for Window {}
+
+impl development::UiHasLabelExtension for Window {
 	fn label<'a>(&'a self) -> ::std::borrow::Cow<'a, str> {
 		if self.hwnd != 0 as windef::HWND {
 			let mut wbuffer = vec![0u16; 4096];
@@ -158,16 +151,7 @@ impl UiHasLabel for Window {
     }
 }
 
-impl UiWindow for Window {
-	fn as_single_container(&self) -> &UiSingleContainer {
-		self
-	}
-	fn as_single_container_mut(&mut self) -> &mut UiSingleContainer {
-		self
-	}
-}
-
-impl UiContainer for Window {
+impl development::UiContainerExtension for Window {
     fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut UiControl> {
         if let Some(child) = self.child.as_mut() {
             if let Some(c) = child.is_container_mut() {
@@ -184,28 +168,16 @@ impl UiContainer for Window {
         }
         None
     }
-    fn is_single_mut(&mut self) -> Option<&mut UiSingleContainer> {
-        Some(self)
-    }
-    fn is_single(&self) -> Option<&UiSingleContainer> {
-        Some(self)
-    }
-    fn as_member(&self) -> &UiMember {
-    	self
-    }
-	fn as_member_mut(&mut self) -> &mut UiMember {
-		self
-	}
 }
 
-impl UiSingleContainer for Window {
+impl development::UiSingleContainerExtension for Window {
     fn set_child(&mut self, mut child: Option<Box<UiControl>>) -> Option<Box<UiControl>> {
         let mut old = self.child.take();
         if let Some(old) = old.as_mut() {
             old.on_removed_from_container(self);
         }
         if let Some(new) = child.as_mut() {
-            new.on_added_to_container(self, 0, 0); //TODO padding
+            new.on_added_to_container(self, 0, 0); 
 
         }
         self.child = child;
@@ -223,17 +195,11 @@ impl UiSingleContainer for Window {
             None
         }
     }
-    fn as_container(&self) -> &UiContainer {
-    	self
-    }
-	fn as_container_mut(&mut self) -> &mut UiContainer {
-		self
-	}
 }
 
-impl UiMember for Window {
+impl development::UiMemberExtension for Window {
     fn size(&self) -> (u16, u16) {
-        let rect = unsafe { window_rect(self.hwnd) };
+        let rect = unsafe { common::window_rect(self.hwnd) };
         (
             (rect.right - rect.left) as u16,
             (rect.bottom - rect.top) as u16,
@@ -260,19 +226,6 @@ impl UiMember for Window {
     fn visibility(&self) -> types::Visibility {
         self.base.visibility
     }
-    fn is_control(&self) -> Option<&UiControl> {
-        None
-    }
-    fn is_control_mut(&mut self) -> Option<&mut UiControl> {
-        None
-    }
-    
-    fn as_base(&self) -> &types::UiMemberBase {
-    	self.base.as_ref()
-    }
-    fn as_base_mut(&mut self) -> &mut types::UiMemberBase {
-    	self.base.as_mut()
-    }
     unsafe fn native_id(&self) -> usize {
         self.hwnd as usize
     }
@@ -280,15 +233,11 @@ impl UiMember for Window {
 
 impl Drop for Window {
     fn drop(&mut self) {
+    	use plygui_api::development::{UiMemberExtension, UiSingleContainerExtension};
+    	
         self.set_child(None);
         self.set_visibility(types::Visibility::Gone);
-        destroy_hwnd(self.hwnd, 0, None);
-    }
-}
-
-unsafe impl WindowsContainer for Window {
-    unsafe fn hwnd(&self) -> windef::HWND {
-        self.hwnd
+        common::destroy_hwnd(self.hwnd, 0, None);
     }
 }
 
@@ -338,7 +287,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             }
 
             if let Some(ref mut cb) = w.h_resize {
-                let w2: &mut Window = mem::transmute(winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA));
+                let w2: &mut development::UiMemberBase<Window> = mem::transmute(winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA));
                 (cb.as_mut())(w2, width, height);
             }
         }
@@ -364,12 +313,3 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
 
     winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
-
-unsafe fn is_control(_: &development::UiMemberCommon) -> Option<&development::UiControlCommon> {
-    None
-}
-unsafe fn is_control_mut(_: &mut development::UiMemberCommon) -> Option<&mut development::UiControlCommon> {
-    None
-}
-impl_size!(Window);
-impl_member_id!(MEMBER_ID_WINDOW);

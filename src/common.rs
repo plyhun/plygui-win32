@@ -16,9 +16,14 @@ use winapi::um::errhandlingapi;
 
 pub static mut INSTANCE: minwindef::HINSTANCE = 0 as minwindef::HINSTANCE;
 
+pub trait WindowsControl: development::UiControlExtension {
+	fn hwnd(&self) -> windef::HWND;
+	fn invalidate(&mut self); 
+}
+
 #[repr(C)]
-pub struct WindowsControlBase {
-	pub control_base: development::UiControlCommon, 
+pub struct WindowsControlBase<T: WindowsControl> {
+	pub control_base: development::UiControlBase<T>, 
 	
     pub hwnd: windef::HWND,
     pub subclass_id: usize,
@@ -26,30 +31,20 @@ pub struct WindowsControlBase {
     pub measured_size: (u16, u16),
 
     pub h_resize: Option<callbacks::Resize>,
-    
-    invalidate: unsafe fn(this: &mut WindowsControlBase),
 }
 
-impl WindowsControlBase {
-	pub fn with_params(invalidate: unsafe fn(this: &mut WindowsControlBase), functions: development::UiMemberFunctions) -> WindowsControlBase {
+impl <T: WindowsControl> WindowsControlBase<T> {
+	pub fn new(inner: T) -> WindowsControlBase<T> {
         WindowsControlBase {
-        	control_base: development::UiControlCommon {
-	        	member_base: development::UiMemberCommon::with_params(types::Visibility::Visible, functions),
-	        	layout: layout::Attributes {
-	        		width: layout::Size::MatchParent,
-					height: layout::Size::WrapContent,
-					gravity: layout::gravity::CENTER_HORIZONTAL | layout::gravity::TOP,
-					..
-					Default::default()
-	        	}
+        	control_base: development::UiControlBase {
+        		common: Default::default(),
+        		inner: inner,
         	},
         	hwnd: 0 as windef::HWND,
             h_resize: None,
             subclass_id: 0,
             measured_size: (0, 0),
             coords: None,
-            
-            invalidate: invalidate,
         }
     }
 	
@@ -113,10 +108,6 @@ impl WindowsControlBase {
             mem::transmute(parent_ptr as *mut c_void)
         }
     }
-}
-
-pub unsafe trait WindowsContainer: UiContainer + UiMember {
-    unsafe fn hwnd(&self) -> windef::HWND;
 }
 
 pub unsafe fn get_class_name_by_hwnd(hwnd: windef::HWND) -> Vec<u16> {

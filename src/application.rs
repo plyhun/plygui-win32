@@ -1,5 +1,4 @@
 use super::*;
-use super::common::WindowsContainer;
 
 use std::{mem, thread};
 use std::borrow::Cow;
@@ -14,14 +13,14 @@ use winapi::um::commctrl;
 
 pub struct Application {
     name: String,
-    windows: Vec<windef::HWND>,
+    window: windef::HWND,
 }
 
 impl UiApplication for Application {
     fn new_window(&mut self, title: &str, size: WindowStartSize, has_menu: bool) -> Box<UiWindow> {
         let w = Window::new(title, size, has_menu);
         unsafe {
-            self.windows.push(w.hwnd());
+            self.window = w.hwnd();
         }
         w
     }
@@ -29,40 +28,31 @@ impl UiApplication for Application {
         Cow::Borrowed(self.name.as_str())
     }
     fn start(&mut self) {
-        for i in (0..self.windows.len()).rev() {
-            if i > 0 {
-                thread::spawn(move || {});
-            } else {
-                start_window(self.windows[i]);
-            }
+        if self.window > 0 {
+            thread::spawn(move || {});
+        } else {
+            start_window(self.window);
         }
     }
     fn find_member_by_id_mut(&mut self, id: Id) -> Option<&mut UiMember> {
     	use plygui_api::traits::UiContainer;
     	
-    	for window in self.windows.as_mut_slice() {
-    		let window = unsafe { common::cast_hwnd::<Window>(*window) };
-    		if window.as_base().id() == id {
-    			return Some(window);
-    		} else {
-    			return window.find_control_by_id_mut(id).map(|control| control.as_member_mut());
-    		}
-    	}
-    	None
-    }
+    	let window = unsafe { common::cast_hwnd::<Window>(self.window) };
+		if window.as_base().id() == id {
+			return Some(window);
+		} else {
+			return window.find_control_by_id_mut(id).map(|control| control.as_member_mut());
+		}
+	}
     fn find_member_by_id(&self, id: Id) -> Option<&UiMember> {
     	use plygui_api::traits::UiContainer;
     	
-    	for window in self.windows.as_slice() {
-    		let window = unsafe { common::cast_hwnd::<Window>(*window) };
-    		if window.as_base().id() == id {
-    			return Some(window);
-    		} else {
-    			return window.find_control_by_id_mut(id).map(|control| control.as_member());
-    		}
-    	}
-    	
-    	None
+    	let window = unsafe { common::cast_hwnd::<Window>(self.window) };
+		if window.as_base().id() == id {
+			return Some(window);
+		} else {
+			return window.find_control_by_id_mut(id).map(|control| control.as_member());
+		}
     }   
 }
 
@@ -72,7 +62,7 @@ impl Application {
     	//Id::next();
 	    Box::new(Application {
                      name: name.into(),
-                     windows: Vec::with_capacity(1),
+                     window: 0,
                  })
     }
 }
