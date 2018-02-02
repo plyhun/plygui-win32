@@ -97,10 +97,6 @@ impl Window {
                 h_resize: None,
             });
 
-            if INSTANCE as usize == 0 {
-                INSTANCE = libloaderapi::GetModuleHandleW(ptr::null());
-            }
-
             let hwnd = winuser::CreateWindowExW(
                 exstyle,
                 WINDOW_CLASS.as_ptr(),
@@ -112,7 +108,7 @@ impl Window {
                 rect.bottom - rect.top,
                 ptr::null_mut(),
                 ptr::null_mut(),
-                INSTANCE,
+                hinstance(),
                 w.as_mut() as *mut _ as *mut c_void,
             );
 
@@ -136,35 +132,37 @@ impl Window {
 }
 
 impl UiHasLabel for Window {
-	fn label<'a>(&'a self) -> ::std::borrow::Cow<'a, str> {
-		if self.hwnd != 0 as windef::HWND {
-			let mut wbuffer = vec![0u16; 4096];
-			let len = unsafe { winuser::GetWindowTextW(self.hwnd, wbuffer.as_mut_slice().as_mut_ptr(), 4096) };
-			Cow::Owned(String::from_utf16_lossy(&wbuffer.as_slice()[..len as usize]))
-    	} else {
-    		panic!("Unattached window!");
-    	}
-	}
+    fn label<'a>(&'a self) -> ::std::borrow::Cow<'a, str> {
+        if self.hwnd != 0 as windef::HWND {
+            let mut wbuffer = vec![0u16; 4096];
+            let len = unsafe { winuser::GetWindowTextW(self.hwnd, wbuffer.as_mut_slice().as_mut_ptr(), 4096) };
+            Cow::Owned(String::from_utf16_lossy(
+                &wbuffer.as_slice()[..len as usize],
+            ))
+        } else {
+            panic!("Unattached window!");
+        }
+    }
     fn set_label(&mut self, label: &str) {
-    	if self.hwnd != 0 as windef::HWND {
-    		let control_name = OsStr::new(label)
-		        .encode_wide()
-		        .chain(Some(0).into_iter())
-		        .collect::<Vec<_>>();
-	    	unsafe {
-	    		winuser::SetWindowTextW(self.hwnd, control_name.as_ptr());
-	    	}
-    	}
+        if self.hwnd != 0 as windef::HWND {
+            let control_name = OsStr::new(label)
+                .encode_wide()
+                .chain(Some(0).into_iter())
+                .collect::<Vec<_>>();
+            unsafe {
+                winuser::SetWindowTextW(self.hwnd, control_name.as_ptr());
+            }
+        }
     }
 }
 
 impl UiWindow for Window {
-	fn as_single_container(&self) -> &UiSingleContainer {
-		self
-	}
-	fn as_single_container_mut(&mut self) -> &mut UiSingleContainer {
-		self
-	}
+    fn as_single_container(&self) -> &UiSingleContainer {
+        self
+    }
+    fn as_single_container_mut(&mut self) -> &mut UiSingleContainer {
+        self
+    }
 }
 
 impl UiContainer for Window {
@@ -191,11 +189,11 @@ impl UiContainer for Window {
         Some(self)
     }
     fn as_member(&self) -> &UiMember {
-    	self
+        self
     }
-	fn as_member_mut(&mut self) -> &mut UiMember {
-		self
-	}
+    fn as_member_mut(&mut self) -> &mut UiMember {
+        self
+    }
 }
 
 impl UiSingleContainer for Window {
@@ -224,11 +222,11 @@ impl UiSingleContainer for Window {
         }
     }
     fn as_container(&self) -> &UiContainer {
-    	self
+        self
     }
-	fn as_container_mut(&mut self) -> &mut UiContainer {
-		self
-	}
+    fn as_container_mut(&mut self) -> &mut UiContainer {
+        self
+    }
 }
 
 impl UiMember for Window {
@@ -266,12 +264,12 @@ impl UiMember for Window {
     fn is_control_mut(&mut self) -> Option<&mut UiControl> {
         None
     }
-    
+
     fn as_base(&self) -> &types::UiMemberBase {
-    	self.base.as_ref()
+        self.base.as_ref()
     }
     fn as_base_mut(&mut self) -> &mut types::UiMemberBase {
-    	self.base.as_mut()
+        self.base.as_mut()
     }
     unsafe fn native_id(&self) -> usize {
         self.hwnd as usize
