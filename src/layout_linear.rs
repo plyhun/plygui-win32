@@ -546,9 +546,3 @@ impl_is_control!(LinearLayout);
 impl_size!(LinearLayout);
 impl_member_id!(MEMBER_ID_LAYOUT_LINEAR);
 
-impl Drop for LinearLayout {
-    fn drop(&mut self) {
-        self.set_visibility(types::Visibility::Gone);
-        common::destroy_hwnd(self.base.hwnd, 0, None);
-    }
-}

@@ -363,13 +363,6 @@ impl development::UiDrawable for Button {
     }
 }
 
-impl Drop for Button {
-    fn drop(&mut self) {
-        self.set_visibility(types::Visibility::Gone);
-        common::destroy_hwnd(self.base.hwnd, 0, None);
-    }
-}
-
 #[allow(dead_code)]
 pub(crate) fn spawn() -> Box<UiControl> {
     Button::new("")
