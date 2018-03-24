@@ -31,15 +31,7 @@ pub struct LinearLayout {
 impl LinearLayout {
     pub fn new(orientation: layout::Orientation) -> Box<LinearLayout> {
         Box::new(LinearLayout {
-            base: common::WindowsControlBase::with_params(
-                invalidate_impl,
-                development::UiMemberFunctions {
-                    fn_member_id: member_id,
-                    fn_is_control: is_control,
-                    fn_is_control_mut: is_control_mut,
-                    fn_size: size,
-                },
-            ),
+            base: common::WindowsControlBase::new(),
             orientation: orientation,
             children: Vec::new(),
         })
@@ -83,13 +75,6 @@ impl UiMember for LinearLayout {
     fn is_control_mut(&mut self) -> Option<&mut UiControl> {
         Some(self)
     }
-    fn as_base(&self) -> &types::UiMemberBase {
-        self.base.control_base.member_base.as_ref()
-    }
-    fn as_base_mut(&mut self) -> &mut types::UiMemberBase {
-        self.base.control_base.member_base.as_mut()
-    }
-
     unsafe fn native_id(&self) -> usize {
         self.base.hwnd as usize
     }
@@ -332,12 +317,6 @@ impl UiMultiContainer for LinearLayout {
 }
 
 impl UiLinearLayout for LinearLayout {
-    fn orientation(&self) -> layout::Orientation {
-        self.orientation
-    }
-    fn set_orientation(&mut self, orientation: layout::Orientation) {
-        self.orientation = orientation;
-    }
     fn as_control(&self) -> &UiControl {
         self
     }
@@ -540,9 +519,3 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
 
     winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
-
-impl_invalidate!(LinearLayout);
-impl_is_control!(LinearLayout);
-impl_size!(LinearLayout);
-impl_member_id!(MEMBER_ID_LAYOUT_LINEAR);
-

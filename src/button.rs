@@ -36,15 +36,7 @@ pub struct Button {
 impl Button {
     pub fn new(label: &str) -> Box<Button> {
         let b = Box::new(Button {
-            base: common::WindowsControlBase::with_params(
-                invalidate_impl,
-                development::UiMemberFunctions {
-                    fn_member_id: member_id,
-                    fn_is_control: is_control,
-                    fn_is_control_mut: is_control_mut,
-                    fn_size: size,
-                },
-            ),
+            base: common::WindowsControlBase::new(),
             h_left_clicked: None,
             label: label.to_owned(),
         });
@@ -269,13 +261,6 @@ impl UiMember for Button {
     fn is_control_mut(&mut self) -> Option<&mut UiControl> {
         Some(self)
     }
-    fn as_base(&self) -> &types::UiMemberBase {
-        self.base.control_base.member_base.as_ref()
-    }
-    fn as_base_mut(&mut self) -> &mut types::UiMemberBase {
-        self.base.control_base.member_base.as_mut()
-    }
-
     unsafe fn native_id(&self) -> usize {
         self.base.hwnd as usize
     }
@@ -395,8 +380,3 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
 
     commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
 }
-
-impl_invalidate!(Button);
-impl_is_control!(Button);
-impl_size!(Button);
-impl_member_id!(MEMBER_ID_BUTTON);

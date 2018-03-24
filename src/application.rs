@@ -7,19 +7,22 @@ use std::borrow::Cow;
 use plygui_api::traits::{UiApplication, UiWindow, UiMember};
 use plygui_api::types::WindowStartSize;
 use plygui_api::ids::Id;
+use plygui_api::development;
 
 use winapi::shared::windef;
 use winapi::um::winuser;
 use winapi::um::commctrl;
 
-pub struct Application {
+pub struct WindowsApplication {
     name: String,
     windows: Vec<windef::HWND>,
 }
 
-impl UiApplication for Application {
+pub type Application = WindowsApplication;
+
+impl development::ApplicationInner for WindowsApplication {
     fn new_window(&mut self, title: &str, size: WindowStartSize, has_menu: bool) -> Box<UiWindow> {
-        let w = Window::new(title, size, has_menu);
+        let w = window::WindowsWindow::new(title, size, has_menu);
         unsafe {
             self.windows.push(w.hwnd());
         }
@@ -70,12 +73,14 @@ impl UiApplication for Application {
     }
 }
 
-impl Application {
-    pub fn with_name(name: &str) -> Box<Application> {
+impl WindowsApplication {
+    pub fn with_name(name: &str) -> Box<UiApplication> {
         init_comctl();
-        Box::new(Application {
-            name: name.into(),
-            windows: Vec::with_capacity(1),
+        Box::new(development::Application {
+	        inner: Application {
+	            name: name.into(),
+	            windows: Vec::with_capacity(1),
+	        }
         })
     }
 }

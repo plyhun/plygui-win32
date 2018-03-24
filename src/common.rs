@@ -22,48 +22,59 @@ lazy_static! {
 	static ref INSTANCE: usize = unsafe { libloaderapi::GetModuleHandleW(ptr::null()) as usize };
 }
 
+#[derive(Debug,Clone,Copy,PartialEq,Eq,PartialOrd,Ord,Hash)]
+pub struct Hwnd(windef::HWND);
+
+impl From<windef::HWND> for Hwnd {
+	fn from(a: windef::HWND) -> Hwnd {
+		Hwnd(a)
+	}
+}
+impl From<Hwnd> for windef::HWND {
+	fn from(a: Hwnd) -> windef::HWND {
+		a.0
+	}
+}
+impl From<Hwnd> for usize {
+	fn from(a: Hwnd) -> usize {
+		a.0 as usize
+	}
+}
+impl development::NativeId for Hwnd {}
+
 #[repr(C)]
 pub struct WindowsControlBase {
-    pub control_base: development::UiControlCommon,
-
+	pub id: ids::Id,
+	pub visibility: types::Visibility,
+    pub layout: layout::Attributes,
+	
     pub hwnd: windef::HWND,
     pub subclass_id: usize,
     pub coords: Option<(i32, i32)>,
     pub measured_size: (u16, u16),
 
     pub h_resize: Option<callbacks::Resize>,
-
-    invalidate: unsafe fn(this: &mut WindowsControlBase),
 }
 
 impl WindowsControlBase {
-    pub fn with_params(invalidate: unsafe fn(this: &mut WindowsControlBase), functions: development::UiMemberFunctions) -> WindowsControlBase {
+    pub fn new() -> WindowsControlBase {
         WindowsControlBase {
-            control_base: development::UiControlCommon {
-                member_base: development::UiMemberCommon::with_params(types::Visibility::Visible, functions),
-                layout: layout::Attributes {
-                    width: layout::Size::MatchParent,
-                    height: layout::Size::WrapContent,
-                    gravity: layout::gravity::CENTER_HORIZONTAL | layout::gravity::TOP,
-                    ..Default::default()
-                },
+            id: ids::Id::next(),
+            layout: layout::Attributes {
+                width: layout::Size::MatchParent,
+                height: layout::Size::WrapContent,
+                gravity: layout::gravity::CENTER_HORIZONTAL | layout::gravity::TOP,
+                ..Default::default()
             },
+            visibility: types::Visibility::Visible,
             hwnd: 0 as windef::HWND,
             h_resize: None,
             subclass_id: 0,
             measured_size: (0, 0),
             coords: None,
-
-            invalidate: invalidate,
         }
     }
 
-    pub fn invalidate(&mut self) {
-        unsafe { (self.invalidate)(self) }
-    }
-    pub fn id(&self) -> ids::Id {
-        self.control_base.member_base.id
-    }
     pub fn parent_hwnd(&self) -> Option<windef::HWND> {
         unsafe {
             let parent_hwnd = winuser::GetParent(self.hwnd);
@@ -74,7 +85,7 @@ impl WindowsControlBase {
             }
         }
     }
-    pub fn parent(&self) -> Option<&types::UiMemberBase> {
+    /*pub fn parent(&self) -> Option<&types::UiMemberBase> {
         unsafe {
             let parent_hwnd = winuser::GetParent(self.hwnd);
             if parent_hwnd == self.hwnd {
@@ -117,7 +128,7 @@ impl WindowsControlBase {
             let parent_ptr = winuser::GetWindowLongPtrW(parent_hwnd, winuser::GWLP_USERDATA);
             mem::transmute(parent_ptr as *mut c_void)
         }
-    }
+    }*/
 }
 
 pub unsafe trait WindowsContainer: UiContainer + UiMember {
@@ -251,7 +262,7 @@ pub unsafe fn log_error() {
     );
 }
 
-#[macro_export]
+/*#[macro_export]
 macro_rules! impl_invalidate {
 	($typ: ty) => {
 		unsafe fn invalidate_impl(this: &mut common::WindowsControlBase) {
@@ -321,4 +332,4 @@ macro_rules! impl_draw {
 			::plygui_api::utils::base_to_impl::<$typ>(this).draw(coords)
 		}
 	}
-}
+}*/
