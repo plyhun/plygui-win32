@@ -332,12 +332,6 @@ impl UiMultiContainer for LinearLayout {
 }
 
 impl UiLinearLayout for LinearLayout {
-    fn orientation(&self) -> layout::Orientation {
-        self.orientation
-    }
-    fn set_orientation(&mut self, orientation: layout::Orientation) {
-        self.orientation = orientation;
-    }
     fn as_control(&self) -> &UiControl {
         self
     }
