@@ -334,6 +334,8 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
                 child.measure(width, height);
                 child.draw(Some((0, 0))); //TODO padding
             }
+            
+            ::winapi::um::winuser::InvalidateRect(w.hwnd, ptr::null_mut(), ::winapi::shared::minwindef::TRUE);
 
             if let Some(ref mut cb) = w.h_resize {
                 let w2: &mut Window = mem::transmute(winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA));

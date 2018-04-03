@@ -18,6 +18,7 @@ use std::borrow::Cow;
 use std::cmp::max;
 
 pub const CLASS_ID: &str = "Button";
+const DEFAULT_PADDING: i32 = 6;
 
 lazy_static! {
 	pub static ref WINDOW_CLASS: Vec<u16> = OsStr::new(CLASS_ID)
@@ -35,7 +36,7 @@ pub struct Button {
 
 impl Button {
     pub fn new(label: &str) -> Box<Button> {
-        let b = Box::new(Button {
+        let mut b = Box::new(Button {
             base: common::WindowsControlBase::with_params(
                 invalidate_impl,
                 development::UiMemberFunctions {
@@ -48,7 +49,7 @@ impl Button {
             h_left_clicked: None,
             label: label.to_owned(),
         });
-
+		b.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
         b
     }
 }
