@@ -18,6 +18,7 @@ use std::ffi::OsStr;
 lazy_static! {
 	pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
 }
+const DEFAULT_PADDING: i32 = 6;
 
 #[repr(C)]
 pub struct LinearLayout {
@@ -28,7 +29,7 @@ pub struct LinearLayout {
 
 impl LinearLayout {
     pub fn new(orientation: layout::Orientation) -> Box<LinearLayout> {
-        Box::new(LinearLayout {
+        let mut ll = Box::new(LinearLayout {
                      base: common::WindowsControlBase::with_params(invalidate_impl,
                                                                    development::UiMemberFunctions {
                                                                        fn_member_id: member_id,
@@ -38,7 +39,9 @@ impl LinearLayout {
                                                                    }),
                      orientation: orientation,
                      children: Vec::new(),
-                 })
+                 });
+        ll.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
+        ll
     }
 }
 
@@ -173,7 +176,7 @@ impl UiControl for LinearLayout {
         use plygui_api::development::UiDrawable;
 
         let selfptr = self as *mut _ as *mut c_void;
-        let (pw, ph) = parent.size();
+        let (pw, ph) = parent.draw_area_size();
         let (width, height, _) = self.measure(pw, ph);
         let (lp, tp, _, _) = self.base.control_base.layout.padding.into();
         let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
@@ -181,8 +184,8 @@ impl UiControl for LinearLayout {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
             common::create_control_hwnd(px as i32 + lm,
                                         py as i32 + tm,
-                                        width as i32 - rm,
-                                        height as i32 - bm,
+                                        width as i32 - rm - lm,
+                                        height as i32 - bm - tm,
                                         parent.native_id() as windef::HWND,
                                         winuser::WS_EX_CONTROLPARENT,
                                         WINDOW_CLASS.as_ptr(),
@@ -194,8 +197,8 @@ impl UiControl for LinearLayout {
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
         self.base.coords = Some((px as i32, py as i32));
-        let mut x = lp;
-        let mut y = tp;
+        let mut x = lp + lm;
+        let mut y = tp + tm;
         for ref mut child in self.children.as_mut_slice() {
             let self2: &mut LinearLayout = unsafe { mem::transmute(selfptr) };
             child.on_added_to_container(self2, x, y);
@@ -352,12 +355,12 @@ impl development::UiDrawable for LinearLayout {
                                       ptr::null_mut(),
                                       x + lm,
                                       y + tm,
-                                      self.base.measured_size.0 as i32 - rm,
-                                      self.base.measured_size.1 as i32 - bm,
+                                      self.base.measured_size.0 as i32 - rm - lm,
+                                      self.base.measured_size.1 as i32 - bm - tm,
                                       0);
             }
-            let mut x = lp;
-            let mut y = tp;
+            let mut x = lp + lm;
+            let mut y = tp + tm;
             for ref mut child in self.children.as_mut_slice() {
                 child.draw(Some((x, y)));
                 let (xx, yy) = child.size();
@@ -370,53 +373,75 @@ impl development::UiDrawable for LinearLayout {
     }
     fn measure(&mut self, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
         use std::cmp::max;
-
-        let old_size = self.base.measured_size;
-        let (lp, tp, rp, bp) = self.base.control_base.layout.padding.into();
-        let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
-        self.base.measured_size = match self.visibility() {
-            types::Visibility::Gone => (0, 0),
-            _ => {
-                let mut w = parent_width;
-                let mut h = parent_height;
-
-                if let layout::Size::Exact(ew) = self.layout_width() {
-                    w = ew;
-                }
-                if let layout::Size::Exact(eh) = self.layout_height() {
-                    w = eh;
-                }
-                let (mut ww, mut wm, mut hh, mut hm) = (0, 0, 0, 0);
-                for ref mut child in self.children.as_mut_slice() {
-                    let (cw, ch, _) = child.measure(w, h);
-                    ww += cw;
-                    hh += ch;
-                    wm = max(wm, cw);
-                    hm = max(hm, ch);
-                }
-
-                match self.orientation {
-                    layout::Orientation::Vertical => {
-                        if let layout::Size::WrapContent = self.layout_height() {
-                            h = hh;
-                        }
-                        if let layout::Size::WrapContent = self.layout_width() {
-                            w = wm;
-                        }
-                    }
-                    layout::Orientation::Horizontal => {
-                        if let layout::Size::WrapContent = self.layout_height() {
-                            h = hm;
-                        }
-                        if let layout::Size::WrapContent = self.layout_width() {
-                            w = ww;
-                        }
-                    }
-                }
-                (max(0, w as i32 + lm + rm + lp + rp) as u16, max(0, h as i32 + tm + bm + tp + bp) as u16)
-            }
+    	
+    	let orientation = self.layout_orientation();
+    	let old_size = self.base.measured_size;
+    	let (lp,tp,rp,bp) = self.base.control_base.layout.padding.into();
+    	let (lm,tm,rm,bm) = self.base.control_base.layout.margin.into();
+    	let hp = lm + rm + lp + rp;
+    	let vp = tm + bm + tp + bp;
+    	self.base.measured_size = match self.visibility() {
+        	types::Visibility::Gone => (0,0),
+        	_ => {
+        		let mut measured = false;
+        		let w = match self.layout_width() {
+        			layout::Size::Exact(w) => w,
+        			layout::Size::MatchParent => parent_width,
+        			layout::Size::WrapContent => {
+	        			let mut w = 0;
+		                for ref mut child in self.children.as_mut_slice() {
+		                    let (cw, _, _) = child.measure(
+		                    	max(0, parent_width as i32 - hp) as u16, 
+		                    	max(0, parent_height as i32 - vp) as u16
+		                    );
+		                    match orientation {
+		                    	layout::Orientation::Horizontal => {
+			                    	w += cw;
+			                    },
+		                    	layout::Orientation::Vertical => {
+			                    	w = max(w, cw);
+			                    },
+		                    }
+		                }
+	        			measured = true;
+	        			max(0, w as i32 + hp) as u16
+        			}
+        		};
+        		let h = match self.layout_height() {
+        			layout::Size::Exact(h) => h,
+        			layout::Size::MatchParent => parent_height,
+        			layout::Size::WrapContent => {
+	        			let mut h = 0;
+		                for ref mut child in self.children.as_mut_slice() {
+		                    let ch = if measured {
+		                    	child.size().1
+		                    } else {
+		                    	let (_, ch, _) = child.measure(
+			                    	max(0, parent_width as i32 - hp) as u16, 
+			                    	max(0, parent_height as i32 - vp) as u16
+			                    );
+		                    	ch
+		                    };
+		                    match orientation {
+		                    	layout::Orientation::Horizontal => {
+			                    	h = max(h, ch);
+			                    },
+		                    	layout::Orientation::Vertical => {
+			                    	h += ch;
+			                    },
+		                    }
+		                }
+	        			max(0, h as i32 + vp) as u16
+        			}
+        		};
+        		(w, h)
+        	}
         };
-        (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
+    	(
+            self.base.measured_size.0,
+            self.base.measured_size.1,
+            self.base.measured_size != old_size,
+        )
     }
 }
 
@@ -475,7 +500,9 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             let mut y = 0;
             for ref mut child in ll.children.as_mut_slice() {
                 let (cw, ch, _) = child.measure(width, height);
-                child.draw(Some((x, y))); //TODO padding
+                let (lp, tp, _, _) = ll.base.control_base.layout.padding.into();
+		        let (lm, tm, _, _) = ll.base.control_base.layout.margin.into();
+		        child.draw(Some((x + lp + lm, y + tp + tm))); 
                 match o {
                     layout::Orientation::Horizontal if width >= cw => {
                         x += cw as i32;

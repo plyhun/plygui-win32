@@ -318,9 +318,8 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
 
             if let Some(ref mut child) = w.child {
                 child.measure(width, height);
-                child.draw(Some((0, 0))); //TODO padding
+                child.draw(Some((0, 0))); 
             }
-
             ::winapi::um::winuser::InvalidateRect(w.hwnd, ptr::null_mut(), ::winapi::shared::minwindef::TRUE);
 
             if let Some(ref mut cb) = w.h_resize {
@@ -332,10 +331,6 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             winuser::PostQuitMessage(0);
             return 0;
         }
-        /*winuser::WM_PRINTCLIENT => {
-        	winuser::SendMessageW(hwnd, winuser::WM_ERASEBKGND, wparam, lparam);
-	        return 0;
-        },*/
         /*winuser::WM_NOTIFY => {
         	let hdr: winuser::LPNMHDR = mem::transmute(lparam);
         	println!("notify for {:?}", hdr);

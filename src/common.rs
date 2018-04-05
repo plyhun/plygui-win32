@@ -212,7 +212,6 @@ pub unsafe fn window_rect(hwnd: windef::HWND) -> windef::RECT {
 pub unsafe fn cast_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T
     where T: Sized
 {
-    // TODO merge with above using T: Sized
     let hwnd_ptr = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     mem::transmute(hwnd_ptr as *mut c_void)
 }
@@ -248,15 +247,14 @@ macro_rules! impl_invalidate {
 				let mparent = common::cast_hwnd::<plygui_api::development::UiMemberCommon>(parent_hwnd);
 				let (pw, ph) = mparent.size();
 				let this: &mut $typ = mem::transmute(this);
-				//let (_,_,changed) = 
-				this.measure(pw, ph);
+				let (_,_,changed) = this.measure(pw, ph);
 				this.draw(None);		
 						
 				if mparent.is_control().is_some() {
 					let wparent = common::cast_hwnd::<common::WindowsControlBase>(parent_hwnd);
-					//if changed {
+					if changed {
 						wparent.invalidate();
-					//} 
+					} 
 				}
 				if parent_hwnd != 0 as ::winapi::shared::windef::HWND {
 		    		::winapi::um::winuser::InvalidateRect(parent_hwnd, ptr::null_mut(), ::winapi::shared::minwindef::TRUE);

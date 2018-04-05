@@ -103,16 +103,15 @@ impl UiControl for Button {
         use plygui_api::development::UiDrawable;
 
         let selfptr = self as *mut _ as *mut c_void;
-        let (pw, ph) = parent.size();
-        //let (lp,tp,rp,bp) = self.base.control_base.layout.padding.into();
+        let (pw, ph) = parent.draw_area_size();
         let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
         let (hwnd, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
             let (w, h, _) = self.measure(pw, ph);
             common::create_control_hwnd(x as i32 + lm,
                                         y as i32 + tm,
-                                        w as i32 - rm,
-                                        h as i32 - bm,
+                                        w as i32 - rm - lm,
+                                        h as i32 - bm - tm,
                                         parent.native_id() as windef::HWND,
                                         0,
                                         WINDOW_CLASS.as_ptr(),
@@ -278,7 +277,6 @@ impl development::UiDrawable for Button {
         if coords.is_some() {
             self.base.coords = coords;
         }
-        //let (lp,tp,rp,bp) = self.base.control_base.layout.padding.into();
         let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
         if let Some((x, y)) = self.base.coords {
             unsafe {
@@ -286,8 +284,8 @@ impl development::UiDrawable for Button {
                                       ptr::null_mut(),
                                       x + lm,
                                       y + tm,
-                                      self.base.measured_size.0 as i32 - rm,
-                                      self.base.measured_size.1 as i32 - bm,
+                                      self.base.measured_size.0 as i32 - rm - lm,
+                                      self.base.measured_size.1 as i32 - bm - tm,
                                       0);
             }
         }
@@ -302,8 +300,8 @@ impl development::UiDrawable for Button {
             _ => unsafe {
                 let mut label_size: windef::SIZE = mem::zeroed();
                 let w = match self.layout_width() {
-                    layout::Size::MatchParent => parent_width,
-                    layout::Size::Exact(w) => w,
+                    layout::Size::MatchParent => parent_width as i32,
+                    layout::Size::Exact(w) => w as i32,
                     layout::Size::WrapContent => {
                         if label_size.cx < 1 {
                             let label = OsStr::new(self.label.as_str())
@@ -315,12 +313,12 @@ impl development::UiDrawable for Button {
                                                         self.label.len() as i32,
                                                         &mut label_size);
                         }
-                        label_size.cx as u16
+                        label_size.cx as i32 + lm + rm + lp + rp
                     } 
                 };
                 let h = match self.layout_height() {
-                    layout::Size::MatchParent => parent_height,
-                    layout::Size::Exact(h) => h,
+                    layout::Size::MatchParent => parent_height as i32,
+                    layout::Size::Exact(h) => h as i32,
                     layout::Size::WrapContent => {
                         if label_size.cy < 1 {
                             let label = OsStr::new(self.label.as_str())
@@ -332,10 +330,10 @@ impl development::UiDrawable for Button {
                                                         self.label.len() as i32,
                                                         &mut label_size);
                         }
-                        label_size.cy as u16
+                        label_size.cy as i32 + tm + bm + tp + bp
                     } 
                 };
-                (max(0, w as i32 + lm + rm + lp + rp) as u16, max(0, h as i32 + tm + bm + tp + bp) as u16)
+                (max(0, w) as u16, max(0, h) as u16)
             },
         };
         (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
