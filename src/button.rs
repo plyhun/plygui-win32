@@ -37,19 +37,17 @@ pub struct Button {
 impl Button {
     pub fn new(label: &str) -> Box<Button> {
         let mut b = Box::new(Button {
-            base: common::WindowsControlBase::with_params(
-                invalidate_impl,
-                development::UiMemberFunctions {
-                    fn_member_id: member_id,
-                    fn_is_control: is_control,
-                    fn_is_control_mut: is_control_mut,
-                    fn_size: size,
-                },
-            ),
-            h_left_clicked: None,
-            label: label.to_owned(),
-        });
-		b.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
+                                 base: common::WindowsControlBase::with_params(invalidate_impl,
+                                                                               development::UiMemberFunctions {
+                                                                                   fn_member_id: member_id,
+                                                                                   fn_is_control: is_control,
+                                                                                   fn_is_control_mut: is_control_mut,
+                                                                                   fn_size: size,
+                                                                               }),
+                                 h_left_clicked: None,
+                                 label: label.to_owned(),
+                             });
+        b.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
         b
     }
 }
@@ -111,19 +109,17 @@ impl UiControl for Button {
         let (hwnd, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
             let (w, h, _) = self.measure(pw, ph);
-            common::create_control_hwnd(
-                x as i32 + lm,
-                y as i32 + tm,
-                w as i32 - rm,
-                h as i32 - bm,
-                parent.native_id() as windef::HWND,
-                0,
-                WINDOW_CLASS.as_ptr(),
-                self.label.as_str(),
-                winuser::BS_PUSHBUTTON | winuser::WS_TABSTOP,
-                selfptr,
-                Some(handler),
-            )
+            common::create_control_hwnd(x as i32 + lm,
+                                        y as i32 + tm,
+                                        w as i32 - rm,
+                                        h as i32 - bm,
+                                        parent.native_id() as windef::HWND,
+                                        0,
+                                        WINDOW_CLASS.as_ptr(),
+                                        self.label.as_str(),
+                                        winuser::BS_PUSHBUTTON | winuser::WS_TABSTOP,
+                                        selfptr,
+                                        Some(handler))
         };
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
@@ -164,18 +160,18 @@ impl UiControl for Button {
     fn fill_from_markup(&mut self, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
         use plygui_api::markup::MEMBER_TYPE_BUTTON;
 
-        fill_from_markup_base!(
-            self,
-            markup,
-            registry,
-            Button,
-            [MEMBER_ID_BUTTON, MEMBER_TYPE_BUTTON]
-        );
+        fill_from_markup_base!(self,
+                               markup,
+                               registry,
+                               Button,
+                               [MEMBER_ID_BUTTON, MEMBER_TYPE_BUTTON]);
         fill_from_markup_label!(self, markup);
         //fill_from_markup_callbacks!(self, markup, registry, ["on_left_click" => FnMut(&mut UiButton)]);
 
         if let Some(on_left_click) = markup.attributes.get("on_click") {
-            let callback: callbacks::Click = registry.pop_callback(on_left_click.as_attribute()).unwrap();
+            let callback: callbacks::Click = registry
+                .pop_callback(on_left_click.as_attribute())
+                .unwrap();
             self.on_click(Some(callback));
         }
     }
@@ -236,10 +232,7 @@ impl UiHasLayout for Button {
 impl UiMember for Button {
     fn size(&self) -> (u16, u16) {
         let rect = unsafe { common::window_rect(self.base.hwnd) };
-        (
-            (rect.right - rect.left) as u16,
-            (rect.bottom - rect.top) as u16,
-        )
+        ((rect.right - rect.left) as u16, (rect.bottom - rect.top) as u16)
     }
 
     fn on_resize(&mut self, handler: Option<callbacks::Resize>) {
@@ -249,14 +242,12 @@ impl UiMember for Button {
     fn set_visibility(&mut self, visibility: types::Visibility) {
         self.base.control_base.member_base.visibility = visibility;
         unsafe {
-            winuser::ShowWindow(
-                self.base.hwnd,
-                if self.base.control_base.member_base.visibility == types::Visibility::Invisible {
-                    winuser::SW_HIDE
-                } else {
-                    winuser::SW_SHOW
-                },
-            );
+            winuser::ShowWindow(self.base.hwnd,
+                                if self.base.control_base.member_base.visibility == types::Visibility::Invisible {
+                                    winuser::SW_HIDE
+                                } else {
+                                    winuser::SW_SHOW
+                                });
             self.base.invalidate();
         }
     }
@@ -291,15 +282,13 @@ impl development::UiDrawable for Button {
         let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
         if let Some((x, y)) = self.base.coords {
             unsafe {
-                winuser::SetWindowPos(
-                    self.base.hwnd,
-                    ptr::null_mut(),
-                    x + lm,
-                    y + tm,
-                    self.base.measured_size.0 as i32 - rm,
-                    self.base.measured_size.1 as i32 - bm,
-                    0,
-                );
+                winuser::SetWindowPos(self.base.hwnd,
+                                      ptr::null_mut(),
+                                      x + lm,
+                                      y + tm,
+                                      self.base.measured_size.0 as i32 - rm,
+                                      self.base.measured_size.1 as i32 - bm,
+                                      0);
             }
         }
     }
@@ -321,12 +310,10 @@ impl development::UiDrawable for Button {
                                 .encode_wide()
                                 .chain(Some(0).into_iter())
                                 .collect::<Vec<_>>();
-                            wingdi::GetTextExtentPointW(
-                                winuser::GetDC(self.base.hwnd),
-                                label.as_ptr(),
-                                self.label.len() as i32,
-                                &mut label_size,
-                            );
+                            wingdi::GetTextExtentPointW(winuser::GetDC(self.base.hwnd),
+                                                        label.as_ptr(),
+                                                        self.label.len() as i32,
+                                                        &mut label_size);
                         }
                         label_size.cx as u16
                     } 
@@ -340,27 +327,18 @@ impl development::UiDrawable for Button {
                                 .encode_wide()
                                 .chain(Some(0).into_iter())
                                 .collect::<Vec<_>>();
-                            wingdi::GetTextExtentPointW(
-                                winuser::GetDC(self.base.hwnd),
-                                label.as_ptr(),
-                                self.label.len() as i32,
-                                &mut label_size,
-                            );
+                            wingdi::GetTextExtentPointW(winuser::GetDC(self.base.hwnd),
+                                                        label.as_ptr(),
+                                                        self.label.len() as i32,
+                                                        &mut label_size);
                         }
                         label_size.cy as u16
                     } 
                 };
-                (
-                    max(0, w as i32 + lm + rm + lp + rp) as u16,
-                    max(0, h as i32 + tm + bm + tp + bp) as u16,
-                )
+                (max(0, w as i32 + lm + rm + lp + rp) as u16, max(0, h as i32 + tm + bm + tp + bp) as u16)
             },
         };
-        (
-            self.base.measured_size.0,
-            self.base.measured_size.1,
-            self.base.measured_size != old_size,
-        )
+        (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
     }
 }
 

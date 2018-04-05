@@ -132,27 +132,24 @@ pub unsafe fn get_class_name_by_hwnd(hwnd: windef::HWND) -> Vec<u16> {
     name
 }
 
-pub unsafe fn create_control_hwnd(
-    x: i32,
-    y: i32,
-    w: i32,
-    h: i32,
-    parent: windef::HWND,
-    ex_style: minwindef::DWORD,
-    class_name: ntdef::LPCWSTR,
-    control_name: &str,
-    style: minwindef::DWORD,
-    param: minwindef::LPVOID,
-    handler: Option<
-        unsafe extern "system" fn(windef::HWND,
-                                  msg: minwindef::UINT,
-                                  minwindef::WPARAM,
-                                  minwindef::LPARAM,
-                                  usize,
-                                  usize)
-                                  -> isize,
-    >,
-) -> (windef::HWND, usize) {
+pub unsafe fn create_control_hwnd(x: i32,
+                                  y: i32,
+                                  w: i32,
+                                  h: i32,
+                                  parent: windef::HWND,
+                                  ex_style: minwindef::DWORD,
+                                  class_name: ntdef::LPCWSTR,
+                                  control_name: &str,
+                                  style: minwindef::DWORD,
+                                  param: minwindef::LPVOID,
+                                  handler: Option<unsafe extern "system" fn(windef::HWND,
+                                                                            msg: minwindef::UINT,
+                                                                            minwindef::WPARAM,
+                                                                            minwindef::LPARAM,
+                                                                            usize,
+                                                                            usize)
+                                                                            -> isize>)
+                                  -> (windef::HWND, usize) {
     let mut style = style;
     if (style & winuser::WS_TABSTOP) != 0 {
         style |= winuser::WS_GROUP;
@@ -169,39 +166,33 @@ pub unsafe fn create_control_hwnd(
         .encode_wide()
         .chain(Some(0).into_iter())
         .collect::<Vec<_>>();
-    let hwnd = winuser::CreateWindowExW(
-        ex_style,
-        class_name,
-        control_name.as_ptr(),
-        style | winuser::WS_CHILD | winuser::WS_VISIBLE,
-        x,
-        y,
-        w,
-        h,
-        parent,
-        ptr::null_mut(),
-        hinstance(),
-        param,
-    );
+    let hwnd = winuser::CreateWindowExW(ex_style,
+                                        class_name,
+                                        control_name.as_ptr(),
+                                        style | winuser::WS_CHILD | winuser::WS_VISIBLE,
+                                        x,
+                                        y,
+                                        w,
+                                        h,
+                                        parent,
+                                        ptr::null_mut(),
+                                        hinstance(),
+                                        param);
     log_error();
     commctrl::SetWindowSubclass(hwnd, handler, subclass_id as usize, param as usize);
     log_error();
     (hwnd, subclass_id as usize)
 }
 
-pub fn destroy_hwnd(
-    hwnd: windef::HWND,
-    subclass_id: usize,
-    handler: Option<
-        unsafe extern "system" fn(windef::HWND,
-                                  msg: minwindef::UINT,
-                                  minwindef::WPARAM,
-                                  minwindef::LPARAM,
-                                  usize,
-                                  usize)
-                                  -> isize,
-    >,
-) {
+pub fn destroy_hwnd(hwnd: windef::HWND,
+                    subclass_id: usize,
+                    handler: Option<unsafe extern "system" fn(windef::HWND,
+                                                              msg: minwindef::UINT,
+                                                              minwindef::WPARAM,
+                                                              minwindef::LPARAM,
+                                                              usize,
+                                                              usize)
+                                                              -> isize>) {
     unsafe {
         if subclass_id != 0 {
             commctrl::RemoveWindowSubclass(hwnd, handler, subclass_id);
@@ -219,8 +210,7 @@ pub unsafe fn window_rect(hwnd: windef::HWND) -> windef::RECT {
 }
 
 pub unsafe fn cast_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T
-where
-    T: Sized,
+    where T: Sized
 {
     // TODO merge with above using T: Sized
     let hwnd_ptr = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
@@ -234,21 +224,17 @@ pub unsafe fn log_error() {
     }
 
     let mut string = vec![0u16; 127];
-    winbase::FormatMessageW(
-        winbase::FORMAT_MESSAGE_FROM_SYSTEM | winbase::FORMAT_MESSAGE_IGNORE_INSERTS,
-        ptr::null_mut(),
-        error,
-        ntdef::LANG_SYSTEM_DEFAULT as u32,
-        string.as_mut_ptr(),
-        string.len() as u32,
-        ptr::null_mut(),
-    );
+    winbase::FormatMessageW(winbase::FORMAT_MESSAGE_FROM_SYSTEM | winbase::FORMAT_MESSAGE_IGNORE_INSERTS,
+                            ptr::null_mut(),
+                            error,
+                            ntdef::LANG_SYSTEM_DEFAULT as u32,
+                            string.as_mut_ptr(),
+                            string.len() as u32,
+                            ptr::null_mut());
 
-    println!(
-        "Last error #{}: {}",
-        error,
-        String::from_utf16_lossy(&string)
-    );
+    println!("Last error #{}: {}",
+             error,
+             String::from_utf16_lossy(&string));
 }
 
 #[macro_export]
@@ -276,49 +262,6 @@ macro_rules! impl_invalidate {
 		    		::winapi::um::winuser::InvalidateRect(parent_hwnd, ptr::null_mut(), ::winapi::shared::minwindef::TRUE);
 		    	}
 		    }
-		}
-	}
-}
-#[macro_export]
-macro_rules! impl_is_control {
-	($typ: ty) => {
-		unsafe fn is_control(this: &::plygui_api::development::UiMemberCommon) -> Option<&::plygui_api::development::UiControlCommon> {
-			Some(&::plygui_api::utils::base_to_impl::<$typ>(this).base.control_base)
-		}
-		unsafe fn is_control_mut(this: &mut ::plygui_api::development::UiMemberCommon) -> Option<&mut ::plygui_api::development::UiControlCommon> {
-			Some(&mut ::plygui_api::utils::base_to_impl_mut::<$typ>(this).base.control_base)
-		}
-	}
-}
-#[macro_export]
-macro_rules! impl_size {
-	($typ: ty) => {
-		unsafe fn size(this: &::plygui_api::development::UiMemberCommon) -> (u16, u16) {
-			::plygui_api::utils::base_to_impl::<$typ>(this).size()
-		}
-	}
-}
-#[macro_export]
-macro_rules! impl_member_id {
-	($mem: expr) => {
-		unsafe fn member_id(_: &::plygui_api::development::UiMemberCommon) -> &'static str {
-			$mem
-		}
-	}
-}
-#[macro_export]
-macro_rules! impl_measure {
-	($typ: ty) => {
-		unsafe fn measure(&mut UiMemberCommon, w: u16, h: u16) -> (u16, u16, bool) {
-			::plygui_api::utils::base_to_impl::<$typ>(this).measure(w, h)
-		}
-	}
-}
-#[macro_export]
-macro_rules! impl_draw {
-	($typ: ty) => {
-		unsafe fn draw(&mut UiMemberCommon, coords: Option<(i32, i32)>) {
-			::plygui_api::utils::base_to_impl::<$typ>(this).draw(coords)
 		}
 	}
 }

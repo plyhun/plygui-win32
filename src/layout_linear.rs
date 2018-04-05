@@ -14,11 +14,9 @@ use winapi::ctypes::c_void;
 use std::{ptr, mem};
 use std::os::windows::ffi::OsStrExt;
 use std::ffi::OsStr;
-//use std::cmp::max;
 
 lazy_static! {
 	pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
-	//pub static ref INSTANCE: winuser::HINSTANCE = unsafe { kernel32::GetModuleHandleW(ptr::null()) };
 }
 
 #[repr(C)]
@@ -31,18 +29,16 @@ pub struct LinearLayout {
 impl LinearLayout {
     pub fn new(orientation: layout::Orientation) -> Box<LinearLayout> {
         Box::new(LinearLayout {
-            base: common::WindowsControlBase::with_params(
-                invalidate_impl,
-                development::UiMemberFunctions {
-                    fn_member_id: member_id,
-                    fn_is_control: is_control,
-                    fn_is_control_mut: is_control_mut,
-                    fn_size: size,
-                },
-            ),
-            orientation: orientation,
-            children: Vec::new(),
-        })
+                     base: common::WindowsControlBase::with_params(invalidate_impl,
+                                                                   development::UiMemberFunctions {
+                                                                       fn_member_id: member_id,
+                                                                       fn_is_control: is_control,
+                                                                       fn_is_control_mut: is_control_mut,
+                                                                       fn_size: size,
+                                                                   }),
+                     orientation: orientation,
+                     children: Vec::new(),
+                 })
     }
 }
 
@@ -50,14 +46,12 @@ impl UiMember for LinearLayout {
     fn set_visibility(&mut self, visibility: types::Visibility) {
         self.base.control_base.member_base.visibility = visibility;
         unsafe {
-            winuser::ShowWindow(
-                self.base.hwnd,
-                if self.base.control_base.member_base.visibility == types::Visibility::Invisible {
-                    winuser::SW_HIDE
-                } else {
-                    winuser::SW_SHOW
-                },
-            );
+            winuser::ShowWindow(self.base.hwnd,
+                                if self.base.control_base.member_base.visibility == types::Visibility::Invisible {
+                                    winuser::SW_HIDE
+                                } else {
+                                    winuser::SW_SHOW
+                                });
             self.base.invalidate();
         }
     }
@@ -67,10 +61,7 @@ impl UiMember for LinearLayout {
 
     fn size(&self) -> (u16, u16) {
         let rect = unsafe { window_rect(self.base.hwnd) };
-        (
-            (rect.right - rect.left) as u16,
-            (rect.bottom - rect.top) as u16,
-        )
+        ((rect.right - rect.left) as u16, (rect.bottom - rect.top) as u16)
     }
 
     fn on_resize(&mut self, handler: Option<callbacks::Resize>) {
@@ -188,19 +179,17 @@ impl UiControl for LinearLayout {
         let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
         let (hwnd, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
-            common::create_control_hwnd(
-                px as i32 + lm,
-                py as i32 + tm,
-                width as i32 - rm,
-                height as i32 - bm,
-                parent.native_id() as windef::HWND,
-                winuser::WS_EX_CONTROLPARENT,
-                WINDOW_CLASS.as_ptr(),
-                "",
-                0,
-                selfptr,
-                None,
-            )
+            common::create_control_hwnd(px as i32 + lm,
+                                        py as i32 + tm,
+                                        width as i32 - rm,
+                                        height as i32 - bm,
+                                        parent.native_id() as windef::HWND,
+                                        winuser::WS_EX_CONTROLPARENT,
+                                        WINDOW_CLASS.as_ptr(),
+                                        "",
+                                        0,
+                                        selfptr,
+                                        None)
         };
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
@@ -238,13 +227,11 @@ impl UiControl for LinearLayout {
     fn fill_from_markup(&mut self, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
         use plygui_api::markup::MEMBER_TYPE_LINEAR_LAYOUT;
 
-        fill_from_markup_base!(
-            self,
-            markup,
-            registry,
-            LinearLayout,
-            [MEMBER_ID_LAYOUT_LINEAR, MEMBER_TYPE_LINEAR_LAYOUT]
-        );
+        fill_from_markup_base!(self,
+                               markup,
+                               registry,
+                               LinearLayout,
+                               [MEMBER_ID_LAYOUT_LINEAR, MEMBER_TYPE_LINEAR_LAYOUT]);
         fill_from_markup_children!(self, markup, registry);
     }
 }
@@ -361,15 +348,13 @@ impl development::UiDrawable for LinearLayout {
         let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
         if let Some((x, y)) = self.base.coords {
             unsafe {
-                winuser::SetWindowPos(
-                    self.base.hwnd,
-                    ptr::null_mut(),
-                    x + lm,
-                    y + tm,
-                    self.base.measured_size.0 as i32 - rm,
-                    self.base.measured_size.1 as i32 - bm,
-                    0,
-                );
+                winuser::SetWindowPos(self.base.hwnd,
+                                      ptr::null_mut(),
+                                      x + lm,
+                                      y + tm,
+                                      self.base.measured_size.0 as i32 - rm,
+                                      self.base.measured_size.1 as i32 - bm,
+                                      0);
             }
             let mut x = lp;
             let mut y = tp;
@@ -428,17 +413,10 @@ impl development::UiDrawable for LinearLayout {
                         }
                     }
                 }
-                (
-                    max(0, w as i32 + lm + rm + lp + rp) as u16,
-                    max(0, h as i32 + tm + bm + tp + bp) as u16,
-                )
+                (max(0, w as i32 + lm + rm + lp + rp) as u16, max(0, h as i32 + tm + bm + tp + bp) as u16)
             }
         };
-        (
-            self.base.measured_size.0,
-            self.base.measured_size.1,
-            self.base.measured_size != old_size,
-        )
+        (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
     }
 }
 
@@ -539,4 +517,3 @@ impl_invalidate!(LinearLayout);
 impl_is_control!(LinearLayout);
 impl_size!(LinearLayout);
 impl_member_id!(MEMBER_ID_LAYOUT_LINEAR);
-

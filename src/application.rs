@@ -45,9 +45,9 @@ impl UiApplication for Application {
             if window.as_base().id() == id {
                 return Some(window);
             } else {
-                return window.find_control_by_id_mut(id).map(|control| {
-                    control.as_member_mut()
-                });
+                return window
+                           .find_control_by_id_mut(id)
+                           .map(|control| control.as_member_mut());
             }
         }
         None
@@ -60,9 +60,9 @@ impl UiApplication for Application {
             if window.as_base().id() == id {
                 return Some(window);
             } else {
-                return window.find_control_by_id_mut(id).map(|control| {
-                    control.as_member()
-                });
+                return window
+                           .find_control_by_id_mut(id)
+                           .map(|control| control.as_member());
             }
         }
 
@@ -74,9 +74,9 @@ impl Application {
     pub fn with_name(name: &str) -> Box<Application> {
         init_comctl();
         Box::new(Application {
-            name: name.into(),
-            windows: Vec::with_capacity(1),
-        })
+                     name: name.into(),
+                     windows: Vec::with_capacity(1),
+                 })
     }
 }
 

@@ -19,7 +19,6 @@ use std::borrow::Cow;
 
 lazy_static! {
 	pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
-	//pub static ref INSTANCE: winuser::HINSTANCE = unsafe { kernel32::GetModuleHandleW(ptr::null()) };
 }
 
 #[repr(C)]
@@ -35,12 +34,14 @@ impl Window {
     pub(crate) fn new(title: &str, window_size: types::WindowStartSize, has_menu: bool) -> Box<Window> {
         unsafe {
             let mut rect = match window_size {
-                types::WindowStartSize::Exact(width, height) => windef::RECT {
-                    left: 0,
-                    top: 0,
-                    right: width as i32,
-                    bottom: height as i32,
-                },
+                types::WindowStartSize::Exact(width, height) => {
+                    windef::RECT {
+                        left: 0,
+                        top: 0,
+                        right: width as i32,
+                        bottom: height as i32,
+                    }
+                }
                 types::WindowStartSize::Fullscreen => {
                     let mut rect = windef::RECT {
                         left: 0,
@@ -48,13 +49,10 @@ impl Window {
                         top: 0,
                         bottom: 0,
                     };
-                    if winuser::SystemParametersInfoW(
-                        winuser::SPI_GETWORKAREA,
-                        0,
-                        &mut rect as *mut _ as *mut c_void,
-                        0,
-                    ) == 0
-                    {
+                    if winuser::SystemParametersInfoW(winuser::SPI_GETWORKAREA,
+                                                      0,
+                                                      &mut rect as *mut _ as *mut c_void,
+                                                      0) == 0 {
                         log_error();
                         windef::RECT {
                             left: 0,
@@ -82,35 +80,31 @@ impl Window {
                 .collect::<Vec<_>>();
 
             let mut w = Box::new(Window {
-                base: development::UiMemberCommon::with_params(
-                    types::Visibility::Visible,
-                    development::UiMemberFunctions {
-                        fn_member_id: member_id,
-                        fn_is_control: is_control,
-                        fn_is_control_mut: is_control_mut,
-                        fn_size: size,
-                    },
-                ),
+                                     base: development::UiMemberCommon::with_params(types::Visibility::Visible,
+                                                                                    development::UiMemberFunctions {
+                                                                                        fn_member_id: member_id,
+                                                                                        fn_is_control: is_control,
+                                                                                        fn_is_control_mut: is_control_mut,
+                                                                                        fn_size: size,
+                                                                                    }),
 
-                hwnd: 0 as windef::HWND,
-                child: None,
-                h_resize: None,
-            });
+                                     hwnd: 0 as windef::HWND,
+                                     child: None,
+                                     h_resize: None,
+                                 });
 
-            let hwnd = winuser::CreateWindowExW(
-                exstyle,
-                WINDOW_CLASS.as_ptr(),
-                window_name.as_ptr() as ntdef::LPCWSTR,
-                style | winuser::WS_VISIBLE,
-                winuser::CW_USEDEFAULT,
-                winuser::CW_USEDEFAULT,
-                rect.right - rect.left,
-                rect.bottom - rect.top,
-                ptr::null_mut(),
-                ptr::null_mut(),
-                hinstance(),
-                w.as_mut() as *mut _ as *mut c_void,
-            );
+            let hwnd = winuser::CreateWindowExW(exstyle,
+                                                WINDOW_CLASS.as_ptr(),
+                                                window_name.as_ptr() as ntdef::LPCWSTR,
+                                                style | winuser::WS_VISIBLE,
+                                                winuser::CW_USEDEFAULT,
+                                                winuser::CW_USEDEFAULT,
+                                                rect.right - rect.left,
+                                                rect.bottom - rect.top,
+                                                ptr::null_mut(),
+                                                ptr::null_mut(),
+                                                hinstance(),
+                                                w.as_mut() as *mut _ as *mut c_void);
 
             w.hwnd = hwnd;
             w
@@ -136,9 +130,7 @@ impl UiHasLabel for Window {
         if self.hwnd != 0 as windef::HWND {
             let mut wbuffer = vec![0u16; 4096];
             let len = unsafe { winuser::GetWindowTextW(self.hwnd, wbuffer.as_mut_slice().as_mut_ptr(), 4096) };
-            Cow::Owned(String::from_utf16_lossy(
-                &wbuffer.as_slice()[..len as usize],
-            ))
+            Cow::Owned(String::from_utf16_lossy(&wbuffer.as_slice()[..len as usize]))
         } else {
             panic!("Unattached window!");
         }
@@ -203,8 +195,7 @@ impl UiSingleContainer for Window {
             old.on_removed_from_container(self);
         }
         if let Some(new) = child.as_mut() {
-            new.on_added_to_container(self, 0, 0); //TODO padding
-
+            new.on_added_to_container(self, 0, 0);
         }
         self.child = child;
 
@@ -232,10 +223,7 @@ impl UiSingleContainer for Window {
 impl UiMember for Window {
     fn size(&self) -> (u16, u16) {
         let rect = unsafe { window_rect(self.hwnd) };
-        (
-            (rect.right - rect.left) as u16,
-            (rect.bottom - rect.top) as u16,
-        )
+        ((rect.right - rect.left) as u16, (rect.bottom - rect.top) as u16)
     }
 
     fn on_resize(&mut self, handler: Option<callbacks::Resize>) {
@@ -245,14 +233,12 @@ impl UiMember for Window {
     fn set_visibility(&mut self, visibility: types::Visibility) {
         self.base.visibility = visibility;
         unsafe {
-            winuser::ShowWindow(
-                self.hwnd,
-                if self.base.visibility == types::Visibility::Visible {
-                    winuser::SW_SHOW
-                } else {
-                    winuser::SW_HIDE
-                },
-            );
+            winuser::ShowWindow(self.hwnd,
+                                if self.base.visibility == types::Visibility::Visible {
+                                    winuser::SW_SHOW
+                                } else {
+                                    winuser::SW_HIDE
+                                });
         }
     }
     fn visibility(&self) -> types::Visibility {
@@ -334,7 +320,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
                 child.measure(width, height);
                 child.draw(Some((0, 0))); //TODO padding
             }
-            
+
             ::winapi::um::winuser::InvalidateRect(w.hwnd, ptr::null_mut(), ::winapi::shared::minwindef::TRUE);
 
             if let Some(ref mut cb) = w.h_resize {
