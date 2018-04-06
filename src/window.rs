@@ -31,7 +31,7 @@ pub struct Window {
 }
 
 impl Window {
-    pub(crate) fn new(title: &str, window_size: types::WindowStartSize, has_menu: bool) -> Box<Window> {
+    pub(crate) fn new(title: &str, window_size: types::WindowStartSize, menu: types::WindowMenu) -> Box<Window> {
         unsafe {
             let mut rect = match window_size {
                 types::WindowStartSize::Exact(width, height) => {
