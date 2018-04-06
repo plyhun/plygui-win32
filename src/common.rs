@@ -229,9 +229,9 @@ pub unsafe fn window_rect(hwnd: windef::HWND) -> windef::RECT {
     rect
 }
 
-pub unsafe fn cast_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T
+pub unsafe fn cast_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut Box<T>
 where
-    T: Sized,
+    T: ?Sized,
 {
     // TODO merge with above using T: Sized
     let hwnd_ptr = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);

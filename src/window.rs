@@ -1,7 +1,8 @@
 use super::*;
 use super::common::*;
 
-use plygui_api::{development, ids, types, callbacks, traits};
+use plygui_api::development::{SingleContainerInner, MemberInner, Member, SingleContainer, HasLabelInner, WindowInner, ContainerInner, HasInner};
+use plygui_api::{ids, types, callbacks, traits};
 use plygui_api::members::MEMBER_ID_WINDOW;
 
 use winapi::shared::windef;
@@ -18,7 +19,6 @@ use std::borrow::Cow;
 
 lazy_static! {
 	pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
-	//pub static ref INSTANCE: winuser::HINSTANCE = unsafe { kernel32::GetModuleHandleW(ptr::null()) };
 }
 
 #[repr(C)]
@@ -27,15 +27,17 @@ pub struct WindowsWindow {
 	visibility: types::Visibility,
 	
     hwnd: windef::HWND,
-    child: Option<Box<traits::UiControl>>,
+    child: Option<types::Dbox<traits::UiControl>>,
 
     h_resize: Option<callbacks::Resize>,
 }
 
-pub type Window = development::Member<development::SingleContainer<WindowsWindow>>;
+pub type Window = Member<SingleContainer<WindowsWindow>>;
 
 impl WindowsWindow {
-    pub(crate) fn new(title: &str, window_size: types::WindowStartSize, has_menu: bool) -> Box<traits::UiWindow> {
+    pub(crate) fn new(title: &str, window_size: types::WindowStartSize, has_menu: bool) -> types::Dbox<traits::UiWindow> {
+    	use plygui_api::development::HasInner;
+    	
         unsafe {
             let mut rect = match window_size {
                 types::WindowStartSize::Exact(width, height) => windef::RECT {
@@ -83,19 +85,17 @@ impl WindowsWindow {
                 .encode_wide()
                 .chain(Some(0).into_iter())
                 .collect::<Vec<_>>();
-
-            let mut w = Box::new(development::Member {
-	            inner: development::SingleContainer {
-		            inner: WindowsWindow {
+                
+            let w: Box<traits::UiWindow> = Box::new(Window::with_inner(WindowsWindow {
 		                id: ids::Id::next(),
 		                visibility: types::Visibility::Visible,
 		
 		                hwnd: 0 as windef::HWND,
 		                child: None,
 		                h_resize: None,
-		            }
-	            }
-            });
+		            }));    
+ 
+            let mut w: Box<Box<traits::UiWindow>> = Box::new(w);
 
             let hwnd = winuser::CreateWindowExW(
                 exstyle,
@@ -112,7 +112,7 @@ impl WindowsWindow {
                 w.as_mut() as *mut _ as *mut c_void,
             );
 
-            w.hwnd = hwnd;
+            w.as_single_container_mut().as_container_mut().as_member_mut().as_any_mut().downcast_mut::<Window>().unwrap().as_inner_mut().hwnd = hwnd;
             w
         }
     }
@@ -131,7 +131,7 @@ impl WindowsWindow {
     }
 }
 
-impl development::HasLabelInner for WindowsWindow {
+impl HasLabelInner for WindowsWindow {
     fn label<'a>(&'a self) -> ::std::borrow::Cow<'a, str> {
         if self.hwnd != 0 as windef::HWND {
             let mut wbuffer = vec![0u16; 4096];
@@ -156,10 +156,10 @@ impl development::HasLabelInner for WindowsWindow {
     }
 }
 
-impl development::WindowInner for WindowsWindow {
+impl WindowInner for WindowsWindow {
 }
 
-impl development::ContainerInner for WindowsWindow {
+impl ContainerInner for WindowsWindow {
     fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut traits::UiControl> {
         if let Some(child) = self.child.as_mut() {
             if let Some(c) = child.is_container_mut() {
@@ -178,36 +178,37 @@ impl development::ContainerInner for WindowsWindow {
     }
 }
 
-impl development::SingleContainerInner for WindowsWindow {
-    fn set_child(&mut self, mut child: Option<Box<traits::UiControl>>) -> Option<Box<traits::UiControl>> {
+impl SingleContainerInner for WindowsWindow {
+    fn set_child(&mut self, mut child: Option<types::Dbox<traits::UiControl>>) -> Option<types::Dbox<traits::UiControl>> {
         let mut old = self.child.take();
         if let Some(old) = old.as_mut() {
-        	let outer_self: &mut Window = unsafe {mem::transmute(self)};
+        	let outer_self: &mut Box<traits::UiWindow> = unsafe { common::cast_hwnd(self.hwnd) };
+        	let outer_self = outer_self.as_single_container_mut().as_container_mut();
             old.on_removed_from_container(outer_self);
         }
         if let Some(new) = child.as_mut() {
-            let outer_self: &mut Window = unsafe {mem::transmute(self)};
-            new.on_added_to_container(outer_self, 0, 0); //TODO padding
-
+            let outer_self: &mut Box<traits::UiWindow> = unsafe { common::cast_hwnd(self.hwnd) }; 
+        	let outer_self = outer_self.as_single_container_mut().as_container_mut();
+            new.on_added_to_container(outer_self, 0, 0); 
         }
         self.child = child;
 
         old
     }
     fn child(&self) -> Option<&traits::UiControl> {
-        self.child.as_ref().map(|c| c.as_ref())
+        self.child.as_ref().map(|c| c.as_ref().as_ref())
     }
     fn child_mut(&mut self) -> Option<&mut traits::UiControl> {
         //self.child.as_mut().map(|c|c.as_mut()) // WTF ??
         if let Some(child) = self.child.as_mut() {
-            Some(child.as_mut())
+            Some(child.as_mut().as_mut())
         } else {
             None
         }
     }
 }
 
-impl development::MemberInner for WindowsWindow {
+impl MemberInner for WindowsWindow {
 	type Id = common::Hwnd;
 	
     fn id(&self) -> ids::Id { self.id }
@@ -247,7 +248,7 @@ impl development::MemberInner for WindowsWindow {
 
 impl Drop for WindowsWindow {
     fn drop(&mut self) {
-        self.set_child(None);
+    	self.set_child(None);
         self.set_visibility(types::Visibility::Gone);
         destroy_hwnd(self.hwnd, 0, None);
     }
@@ -291,16 +292,16 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
         winuser::WM_SIZE => {
             let width = lparam as u16;
             let height = (lparam >> 16) as u16;
-            let mut w: &mut window::Window = mem::transmute(ww);
+            let mut w: &mut Box<traits::UiWindow> = mem::transmute(ww);
 
-            if let Some(ref mut child) = w.child {
+            if let Some(ref mut child) = w.as_single_container_mut().as_container_mut().as_member_mut().as_any_mut().downcast_mut::<window::Window>().unwrap().as_inner_mut().child {
                 child.measure(width, height);
                 child.draw(Some((0, 0))); //TODO padding
             }
 
-            if let Some(ref mut cb) = w.h_resize {
-                let w2: &mut Window = mem::transmute(winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA));
-                (cb.as_mut())(w2, width, height);
+            if let Some(ref mut cb) = w.as_single_container_mut().as_container_mut().as_member_mut().as_any_mut().downcast_mut::<window::Window>().unwrap().as_inner_mut().h_resize {
+                let mut w2: &mut Box<traits::UiWindow> = mem::transmute(ww);
+                (cb.as_mut())(w2.as_single_container_mut().as_container_mut().as_member_mut(), width, height);
             }
         }
         winuser::WM_DESTROY => {
