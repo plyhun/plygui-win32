@@ -1,8 +1,7 @@
 use super::*;
 
-use plygui_api::{layout, types, development, callbacks};
-use plygui_api::traits::{UiControl, UiClickable, UiHasLabel, UiHasLayout, UiButton, UiMember, UiContainer};
-use plygui_api::members::MEMBER_ID_BUTTON;
+use plygui_api::development::{HasInner, Drawable};
+use plygui_api::{traits, layout, types, development, callbacks, ids};
 
 use winapi::shared::windef;
 use winapi::shared::minwindef;
@@ -26,26 +25,16 @@ lazy_static! {
         .collect::<Vec<_>>();
 }
 
+pub type Button = development::Member<development::Control<WindowsButton>>;
+
 #[repr(C)]
-pub struct Button {
+pub struct WindowsButton {
     base: common::WindowsControlBase,
     label: String,
     h_left_clicked: Option<callbacks::Click>,
 }
 
-impl Button {
-    pub fn new(label: &str) -> Box<Button> {
-        let b = Box::new(Button {
-            base: common::WindowsControlBase::new(),
-            h_left_clicked: None,
-            label: label.to_owned(),
-        });
-
-        b
-    }
-}
-
-impl UiHasLabel for Button {
+impl development::HasLabelInner for WindowsButton {
     fn label<'a>(&'a self) -> Cow<'a, str> {
         Cow::Borrowed(self.label.as_ref())
     }
@@ -59,46 +48,36 @@ impl UiHasLabel for Button {
             unsafe {
                 winuser::SetWindowTextW(self.base.hwnd, control_name.as_ptr());
             }
-            self.base.invalidate();
+            self.invalidate();
         }
     }
 }
 
-impl UiClickable for Button {
+impl development::ClickableInner for WindowsButton {
     fn on_click(&mut self, handle: Option<callbacks::Click>) {
         self.h_left_clicked = handle;
     }
 }
 
-impl UiButton for Button {
-    fn as_control(&self) -> &UiControl {
-        self
-    }
-    fn as_control_mut(&mut self) -> &mut UiControl {
-        self
-    }
-    fn as_has_label(&self) -> &UiHasLabel {
-        self
-    }
-    fn as_has_label_mut(&mut self) -> &mut UiHasLabel {
-        self
-    }
-    fn as_clickable(&self) -> &UiClickable {
-        self
-    }
-    fn as_clickable_mut(&mut self) -> &mut UiClickable {
-        self
+impl development::ButtonInner for WindowsButton {
+    fn with_label(label: &str) -> types::Dbox<traits::UiButton> {
+        let b: Box<traits::UiButton> = Box::new(Button::with_inner(WindowsButton {
+            base: common::WindowsControlBase::new(),
+            h_left_clicked: None,
+            label: label.to_owned(),
+        }));
+        Box::new(b)
     }
 }
 
-impl UiControl for Button {
-    fn on_added_to_container(&mut self, parent: &UiContainer, x: i32, y: i32) {
-        use plygui_api::development::UiDrawable;
+impl development::ControlInner for WindowsButton {
+    fn on_added_to_container(&mut self, parent: &traits::UiContainer, x: i32, y: i32) {
+        use plygui_api::development::OuterDrawable;
 
         let selfptr = self as *mut _ as *mut c_void;
         let (pw, ph) = parent.size();
-        //let (lp,tp,rp,bp) = self.base.control_base.layout.padding.into();
-        let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
+        //let (lp,tp,rp,bp) = self.base.layout.padding.into();
+        let (lm, tm, rm, bm) = self.base.layout.margin.into();
         let (hwnd, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
             let (w, h, _) = self.measure(pw, ph);
@@ -119,36 +98,10 @@ impl UiControl for Button {
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
     }
-    fn on_removed_from_container(&mut self, _: &UiContainer) {
+    fn on_removed_from_container(&mut self, _: &traits::UiContainer) {
         common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, Some(handler));
         self.base.hwnd = 0 as windef::HWND;
         self.base.subclass_id = 0;
-    }
-
-    fn is_container_mut(&mut self) -> Option<&mut UiContainer> {
-        None
-    }
-    fn is_container(&self) -> Option<&UiContainer> {
-        None
-    }
-
-    fn parent(&self) -> Option<&types::UiMemberBase> {
-        self.base.parent()
-    }
-    fn parent_mut(&mut self) -> Option<&mut types::UiMemberBase> {
-        self.base.parent_mut()
-    }
-    fn root(&self) -> Option<&types::UiMemberBase> {
-        self.base.root()
-    }
-    fn root_mut(&mut self) -> Option<&mut types::UiMemberBase> {
-        self.base.root_mut()
-    }
-    fn as_has_layout(&self) -> &UiHasLayout {
-        self
-    }
-    fn as_has_layout_mut(&mut self) -> &mut UiHasLayout {
-        self
     }
 
     #[cfg(feature = "markup")]
@@ -172,60 +125,56 @@ impl UiControl for Button {
     }
 }
 
-impl UiHasLayout for Button {
+impl development::HasLayoutInner for WindowsButton {
     fn layout_width(&self) -> layout::Size {
-        self.base.control_base.layout.width
+        self.base.layout.width
     }
     fn layout_height(&self) -> layout::Size {
-        self.base.control_base.layout.height
+        self.base.layout.height
     }
     fn layout_gravity(&self) -> layout::Gravity {
-        self.base.control_base.layout.gravity
+        self.base.layout.gravity
     }
     fn layout_alignment(&self) -> layout::Alignment {
-        self.base.control_base.layout.alignment
+        self.base.layout.alignment
     }
     fn layout_padding(&self) -> layout::BoundarySize {
-        self.base.control_base.layout.padding
+        self.base.layout.padding
     }
     fn layout_margin(&self) -> layout::BoundarySize {
-        self.base.control_base.layout.margin
+        self.base.layout.margin
     }
 
     fn set_layout_width(&mut self, width: layout::Size) {
-        self.base.control_base.layout.width = width;
-        self.base.invalidate();
+        self.base.layout.width = width;
+        self.invalidate();
     }
     fn set_layout_height(&mut self, height: layout::Size) {
-        self.base.control_base.layout.height = height;
-        self.base.invalidate();
+        self.base.layout.height = height;
+        self.invalidate();
     }
     fn set_layout_gravity(&mut self, gravity: layout::Gravity) {
-        self.base.control_base.layout.gravity = gravity;
-        self.base.invalidate();
+        self.base.layout.gravity = gravity;
+        self.invalidate();
     }
     fn set_layout_alignment(&mut self, alignment: layout::Alignment) {
-        self.base.control_base.layout.alignment = alignment;
-        self.base.invalidate();
+        self.base.layout.alignment = alignment;
+        self.invalidate();
     }
     fn set_layout_padding(&mut self, padding: layout::BoundarySizeArgs) {
-        self.base.control_base.layout.padding = padding.into();
-        self.base.invalidate();
+        self.base.layout.padding = padding.into();
+        self.invalidate();
     }
     fn set_layout_margin(&mut self, margin: layout::BoundarySizeArgs) {
-        self.base.control_base.layout.margin = margin.into();
-        self.base.invalidate();
-    }
-    fn as_member(&self) -> &UiMember {
-        self
-    }
-    fn as_member_mut(&mut self) -> &mut UiMember {
-        self
+        self.base.layout.margin = margin.into();
+        self.invalidate();
     }
 }
 
-impl UiMember for Button {
-    fn size(&self) -> (u16, u16) {
+impl development::MemberInner for WindowsButton {
+    type Id = common::Hwnd;
+	
+	fn size(&self) -> (u16, u16) {
         let rect = unsafe { common::window_rect(self.base.hwnd) };
         (
             (rect.right - rect.left) as u16,
@@ -238,41 +187,37 @@ impl UiMember for Button {
     }
 
     fn set_visibility(&mut self, visibility: types::Visibility) {
-        self.base.control_base.member_base.visibility = visibility;
+        self.base.visibility = visibility;
         unsafe {
             winuser::ShowWindow(
                 self.base.hwnd,
-                if self.base.control_base.member_base.visibility == types::Visibility::Invisible {
+                if self.base.visibility == types::Visibility::Invisible {
                     winuser::SW_HIDE
                 } else {
                     winuser::SW_SHOW
                 },
             );
-            self.base.invalidate();
+            self.invalidate();
         }
     }
     fn visibility(&self) -> types::Visibility {
-        self.base.control_base.member_base.visibility
+        self.base.visibility
     }
+    
+    fn id(&self) -> ids::Id { self.base.id }
 
-    fn is_control(&self) -> Option<&UiControl> {
-        Some(self)
-    }
-    fn is_control_mut(&mut self) -> Option<&mut UiControl> {
-        Some(self)
-    }
-    unsafe fn native_id(&self) -> usize {
-        self.base.hwnd as usize
+    unsafe fn native_id(&self) -> Self::Id {
+        self.base.hwnd.into()
     }
 }
 
-impl development::UiDrawable for Button {
+impl development::Drawable for WindowsButton {
     fn draw(&mut self, coords: Option<(i32, i32)>) {
         if coords.is_some() {
             self.base.coords = coords;
         }
-        //let (lp,tp,rp,bp) = self.base.control_base.layout.padding.into();
-        let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
+        //let (lp,tp,rp,bp) = self.base.layout.padding.into();
+        let (lm, tm, rm, bm) = self.base.layout.margin.into();
         if let Some((x, y)) = self.base.coords {
             unsafe {
                 winuser::SetWindowPos(
@@ -289,14 +234,14 @@ impl development::UiDrawable for Button {
     }
     fn measure(&mut self, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
         let old_size = self.base.measured_size;
-        let (lp, tp, rp, bp) = self.base.control_base.layout.padding.into();
-        let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
+        let (lp, tp, rp, bp) = self.base.layout.padding.into();
+        let (lm, tm, rm, bm) = self.base.layout.margin.into();
 
-        self.base.measured_size = match self.visibility() {
+        self.base.measured_size = match self.base.visibility {
             types::Visibility::Gone => (0, 0),
             _ => unsafe {
                 let mut label_size: windef::SIZE = mem::zeroed();
-                let w = match self.layout_width() {
+                let w = match self.base.layout.width {
                     layout::Size::MatchParent => parent_width,
                     layout::Size::Exact(w) => w,
                     layout::Size::WrapContent => {
@@ -315,7 +260,7 @@ impl development::UiDrawable for Button {
                         label_size.cx as u16
                     } 
                 };
-                let h = match self.layout_height() {
+                let h = match self.base.layout.height {
                     layout::Size::MatchParent => parent_height,
                     layout::Size::Exact(h) => h,
                     layout::Size::WrapContent => {
@@ -346,11 +291,32 @@ impl development::UiDrawable for Button {
             self.base.measured_size != old_size,
         )
     }
+    fn invalidate(&mut self) {
+    	let parent_hwnd = self.base.parent_hwnd();	
+		if let Some(parent_hwnd) = parent_hwnd {
+			let mparent = common::cast_hwnd::<plygui_api::development::UiMemberCommon>(parent_hwnd);
+			let (pw, ph) = mparent.size();
+			let this: &mut $typ = mem::transmute(this);
+			//let (_,_,changed) = 
+			this.measure(pw, ph);
+			this.draw(None);		
+					
+			if mparent.is_control().is_some() {
+				let wparent = common::cast_hwnd::<common::WindowsControlBase>(parent_hwnd);
+				//if changed {
+					wparent.invalidate();
+				//} 
+			}
+			if parent_hwnd != 0 as ::winapi::shared::windef::HWND {
+	    		::winapi::um::winuser::InvalidateRect(parent_hwnd, ptr::null_mut(), ::winapi::shared::minwindef::TRUE);
+	    	}
+	    }
+    }
 }
 
 #[allow(dead_code)]
-pub(crate) fn spawn() -> Box<UiControl> {
-    Button::new("")
+pub(crate) fn spawn() -> types::Dbox<traits::UiControl> {
+    Button::with_label("")
 }
 
 unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {

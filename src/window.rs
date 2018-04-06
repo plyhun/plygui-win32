@@ -3,7 +3,6 @@ use super::common::*;
 
 use plygui_api::development::{SingleContainerInner, MemberInner, Member, SingleContainer, HasLabelInner, WindowInner, ContainerInner, HasInner};
 use plygui_api::{ids, types, callbacks, traits};
-use plygui_api::members::MEMBER_ID_WINDOW;
 
 use winapi::shared::windef;
 use winapi::shared::minwindef;
@@ -35,7 +34,48 @@ pub struct WindowsWindow {
 pub type Window = Member<SingleContainer<WindowsWindow>>;
 
 impl WindowsWindow {
-    pub(crate) fn new(title: &str, window_size: types::WindowStartSize, has_menu: bool) -> types::Dbox<traits::UiWindow> {
+    pub(crate) fn start(&mut self) {
+        loop {
+            unsafe {
+                let mut msg: winuser::MSG = mem::zeroed();
+                if winuser::GetMessageW(&mut msg, ptr::null_mut(), 0, 0) <= 0 {
+                    break;
+                } else {
+                    winuser::TranslateMessage(&mut msg);
+                    winuser::DispatchMessageW(&mut msg);
+                }
+            }
+        }
+    }
+}
+
+impl HasLabelInner for WindowsWindow {
+    fn label<'a>(&'a self) -> ::std::borrow::Cow<'a, str> {
+        if self.hwnd != 0 as windef::HWND {
+            let mut wbuffer = vec![0u16; 4096];
+            let len = unsafe { winuser::GetWindowTextW(self.hwnd, wbuffer.as_mut_slice().as_mut_ptr(), 4096) };
+            Cow::Owned(String::from_utf16_lossy(
+                &wbuffer.as_slice()[..len as usize],
+            ))
+        } else {
+            panic!("Unattached window!");
+        }
+    }
+    fn set_label(&mut self, label: &str) {
+        if self.hwnd != 0 as windef::HWND {
+            let control_name = OsStr::new(label)
+                .encode_wide()
+                .chain(Some(0).into_iter())
+                .collect::<Vec<_>>();
+            unsafe {
+                winuser::SetWindowTextW(self.hwnd, control_name.as_ptr());
+            }
+        }
+    }
+}
+
+impl WindowInner for WindowsWindow {
+	fn with_params(title: &str, window_size: types::WindowStartSize, menu: types::WindowMenu) -> types::Dbox<traits::UiWindow> {
     	use plygui_api::development::HasInner;
     	
         unsafe {
@@ -116,47 +156,6 @@ impl WindowsWindow {
             w
         }
     }
-    pub(crate) fn start(&mut self) {
-        loop {
-            unsafe {
-                let mut msg: winuser::MSG = mem::zeroed();
-                if winuser::GetMessageW(&mut msg, ptr::null_mut(), 0, 0) <= 0 {
-                    break;
-                } else {
-                    winuser::TranslateMessage(&mut msg);
-                    winuser::DispatchMessageW(&mut msg);
-                }
-            }
-        }
-    }
-}
-
-impl HasLabelInner for WindowsWindow {
-    fn label<'a>(&'a self) -> ::std::borrow::Cow<'a, str> {
-        if self.hwnd != 0 as windef::HWND {
-            let mut wbuffer = vec![0u16; 4096];
-            let len = unsafe { winuser::GetWindowTextW(self.hwnd, wbuffer.as_mut_slice().as_mut_ptr(), 4096) };
-            Cow::Owned(String::from_utf16_lossy(
-                &wbuffer.as_slice()[..len as usize],
-            ))
-        } else {
-            panic!("Unattached window!");
-        }
-    }
-    fn set_label(&mut self, label: &str) {
-        if self.hwnd != 0 as windef::HWND {
-            let control_name = OsStr::new(label)
-                .encode_wide()
-                .chain(Some(0).into_iter())
-                .collect::<Vec<_>>();
-            unsafe {
-                winuser::SetWindowTextW(self.hwnd, control_name.as_ptr());
-            }
-        }
-    }
-}
-
-impl WindowInner for WindowsWindow {
 }
 
 impl ContainerInner for WindowsWindow {
@@ -255,7 +254,7 @@ impl Drop for WindowsWindow {
 }
 
 unsafe fn register_window_class() -> Vec<u16> {
-    let class_name = OsStr::new(MEMBER_ID_WINDOW)
+    let class_name = OsStr::new("PlyguiWin32Button")
         .encode_wide()
         .chain(Some(0).into_iter())
         .collect::<Vec<_>>();
@@ -295,7 +294,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             let mut w: &mut Box<traits::UiWindow> = mem::transmute(ww);
 
             if let Some(ref mut child) = w.as_single_container_mut().as_container_mut().as_member_mut().as_any_mut().downcast_mut::<window::Window>().unwrap().as_inner_mut().child {
-                child.measure(width, height);
+            	child.measure(width, height);
                 child.draw(Some((0, 0))); //TODO padding
             }
 

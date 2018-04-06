@@ -17,13 +17,21 @@ pub struct WindowsApplication {
     windows: Vec<windef::HWND>,
 }
 
-pub type Application = WindowsApplication;
+pub type Application = development::Application<WindowsApplication>;
 
 impl development::ApplicationInner for WindowsApplication {
-    fn new_window(&mut self, title: &str, size: types::WindowStartSize, has_menu: bool) -> types::Dbox<traits::UiWindow> {
-    	use plygui_api::development::{MemberInner, HasInner};
+	fn with_name(name: &str) -> types::Dbox<traits::UiApplication> {
+        init_comctl();
+        let a: Box<traits::UiApplication> = Box::new(development::Application::with_inner(WindowsApplication {
+	            name: name.into(),
+	            windows: Vec::with_capacity(1),
+	        }));
+        Box::new(a)
+    }
+    fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::WindowMenu) -> types::Dbox<traits::UiWindow> {
+    	use plygui_api::development::{MemberInner, HasInner, WindowInner};
     	
-        let mut w = window::WindowsWindow::new(title, size, has_menu);
+        let mut w = window::WindowsWindow::with_params(title, size, menu);
         unsafe {
             self.windows.push(w.as_single_container_mut().as_container_mut().as_member_mut().as_any_mut().downcast_mut::<window::Window>().unwrap().as_inner_mut().native_id().into());
         }
@@ -67,16 +75,6 @@ impl development::ApplicationInner for WindowsApplication {
         }
 
         None
-    }
-}
-
-impl WindowsApplication {
-    pub fn with_name(name: &str) -> Box<traits::UiApplication> {
-        init_comctl();
-        Box::new(development::Application::with_inner(Application {
-	            name: name.into(),
-	            windows: Vec::with_capacity(1),
-	        }))
     }
 }
 
