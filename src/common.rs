@@ -162,13 +162,13 @@ pub unsafe fn create_control_hwnd(x: i32,
         hasher.write_usize(class_name as usize);
         hasher.finish()
     };
-    let control_name = OsStr::new(control_name)
+    let os_control_name = OsStr::new(control_name)
         .encode_wide()
         .chain(Some(0).into_iter())
         .collect::<Vec<_>>();
     let hwnd = winuser::CreateWindowExW(ex_style,
                                         class_name,
-                                        control_name.as_ptr(),
+                                        os_control_name.as_ptr(),
                                         style | winuser::WS_CHILD | winuser::WS_VISIBLE,
                                         x,
                                         y,
@@ -178,9 +178,11 @@ pub unsafe fn create_control_hwnd(x: i32,
                                         ptr::null_mut(),
                                         hinstance(),
                                         param);
-    log_error();
+    if hwnd.is_null() {
+    	log_error();
+    	panic!("Cannot create window {}", control_name);
+    }
     commctrl::SetWindowSubclass(hwnd, handler, subclass_id as usize, param as usize);
-    log_error();
     (hwnd, subclass_id as usize)
 }
 
@@ -197,8 +199,8 @@ pub fn destroy_hwnd(hwnd: windef::HWND,
         if subclass_id != 0 {
             commctrl::RemoveWindowSubclass(hwnd, handler, subclass_id);
         }
-        if winuser::DestroyWindow(hwnd) == 0 {
-            //panic!("Cannot destroy window!");
+        if winuser::DestroyWindow(hwnd) == 0 && winuser::IsWindow(hwnd) > 0 {
+	        log_error();
         }
     }
 }
@@ -216,6 +218,10 @@ pub unsafe fn cast_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T
     &mut *(hwnd_ptr as *mut T)
 }
 
+#[cfg(not(debug_assertions))]
+pub unsafe fn log_error() {}
+
+#[cfg(debug_assertions)]
 pub unsafe fn log_error() {
     let error = errhandlingapi::GetLastError();
     if error == 0 {

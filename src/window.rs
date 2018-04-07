@@ -205,7 +205,7 @@ impl UiSingleContainer for Window {
         self.child.as_ref().map(|c| c.as_ref())
     }
     fn child_mut(&mut self) -> Option<&mut UiControl> {
-        //self.child.as_mut().map(|c|c.as_mut()) // WTF ??
+        //self.child.as_mut().map(|c| c.as_mut()) // WTF ??
         if let Some(child) = self.child.as_mut() {
             Some(child.as_mut())
         } else {

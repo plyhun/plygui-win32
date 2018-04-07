@@ -186,7 +186,7 @@ impl UiControl for LinearLayout {
                                         py as i32 + tm,
                                         width as i32 - rm - lm,
                                         height as i32 - bm - tm,
-                                        parent.native_id() as windef::HWND,
+                                        self.base.hwnd,
                                         winuser::WS_EX_CONTROLPARENT,
                                         WINDOW_CLASS.as_ptr(),
                                         "",

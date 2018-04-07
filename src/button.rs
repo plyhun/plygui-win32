@@ -112,7 +112,7 @@ impl UiControl for Button {
                                         y as i32 + tm,
                                         w as i32 - rm - lm,
                                         h as i32 - bm - tm,
-                                        parent.native_id() as windef::HWND,
+                                        self.base.hwnd,
                                         0,
                                         WINDOW_CLASS.as_ptr(),
                                         self.label.as_str(),
@@ -297,8 +297,8 @@ impl development::UiDrawable for Button {
 
         self.base.measured_size = match self.visibility() {
             types::Visibility::Gone => (0, 0),
-            _ => unsafe {
-                let mut label_size: windef::SIZE = mem::zeroed();
+            _ => {
+                let mut label_size: windef::SIZE = unsafe { mem::zeroed() };
                 let w = match self.layout_width() {
                     layout::Size::MatchParent => parent_width as i32,
                     layout::Size::Exact(w) => w as i32,
@@ -308,10 +308,10 @@ impl development::UiDrawable for Button {
                                 .encode_wide()
                                 .chain(Some(0).into_iter())
                                 .collect::<Vec<_>>();
-                            wingdi::GetTextExtentPointW(winuser::GetDC(self.base.hwnd),
+                            unsafe { wingdi::GetTextExtentPointW(winuser::GetDC(self.base.hwnd),
                                                         label.as_ptr(),
                                                         self.label.len() as i32,
-                                                        &mut label_size);
+                                                        &mut label_size); }
                         }
                         label_size.cx as i32 + lm + rm + lp + rp
                     } 
@@ -325,10 +325,10 @@ impl development::UiDrawable for Button {
                                 .encode_wide()
                                 .chain(Some(0).into_iter())
                                 .collect::<Vec<_>>();
-                            wingdi::GetTextExtentPointW(winuser::GetDC(self.base.hwnd),
+                            unsafe { wingdi::GetTextExtentPointW(winuser::GetDC(self.base.hwnd),
                                                         label.as_ptr(),
                                                         self.label.len() as i32,
-                                                        &mut label_size);
+                                                        &mut label_size); }
                         }
                         label_size.cy as i32 + tm + bm + tp + bp
                     } 
