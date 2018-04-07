@@ -117,8 +117,8 @@ impl Window {
                 if winuser::GetMessageW(&mut msg, ptr::null_mut(), 0, 0) <= 0 {
                     break;
                 } else {
-                    winuser::TranslateMessage(&mut msg);
-                    winuser::DispatchMessageW(&mut msg);
+                    winuser::TranslateMessage(&msg);
+                    winuser::DispatchMessageW(&msg);
                 }
             }
         }
@@ -126,7 +126,7 @@ impl Window {
 }
 
 impl UiHasLabel for Window {
-    fn label<'a>(&'a self) -> ::std::borrow::Cow<'a, str> {
+    fn label(&self) -> ::std::borrow::Cow<str> {
         if self.hwnd != 0 as windef::HWND {
             let mut wbuffer = vec![0u16; 4096];
             let len = unsafe { winuser::GetWindowTextW(self.hwnd, wbuffer.as_mut_slice().as_mut_ptr(), 4096) };

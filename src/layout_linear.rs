@@ -37,7 +37,7 @@ impl LinearLayout {
                                                                        fn_is_control_mut: is_control_mut,
                                                                        fn_size: size,
                                                                    }),
-                     orientation: orientation,
+                     orientation,
                      children: Vec::new(),
                  });
         ll.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
@@ -199,8 +199,8 @@ impl UiControl for LinearLayout {
         self.base.coords = Some((px as i32, py as i32));
         let mut x = lp + lm;
         let mut y = tp + tm;
-        for ref mut child in self.children.as_mut_slice() {
-            let self2: &mut LinearLayout = unsafe { mem::transmute(selfptr) };
+        for child in self.children.as_mut_slice() {
+            let self2: &mut LinearLayout = unsafe { &mut *(selfptr as *mut LinearLayout) };
             child.on_added_to_container(self2, x, y);
             let (xx, yy) = child.size();
             match self.orientation {
@@ -211,8 +211,8 @@ impl UiControl for LinearLayout {
     }
     fn on_removed_from_container(&mut self, _: &UiContainer) {
         let selfptr = self as *mut _ as *mut c_void;
-        for ref mut child in self.children.as_mut_slice() {
-            let self2: &mut LinearLayout = unsafe { mem::transmute(selfptr) };
+        for child in self.children.as_mut_slice() {
+            let self2: &mut LinearLayout = unsafe { &mut *(selfptr as *mut LinearLayout) };
             child.on_removed_from_container(self2);
         }
         common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, None);
@@ -361,7 +361,7 @@ impl development::UiDrawable for LinearLayout {
             }
             let mut x = lp + lm;
             let mut y = tp + tm;
-            for ref mut child in self.children.as_mut_slice() {
+            for child in self.children.as_mut_slice() {
                 child.draw(Some((x, y)));
                 let (xx, yy) = child.size();
                 match self.orientation {
@@ -389,7 +389,7 @@ impl development::UiDrawable for LinearLayout {
         			layout::Size::MatchParent => parent_width,
         			layout::Size::WrapContent => {
 	        			let mut w = 0;
-		                for ref mut child in self.children.as_mut_slice() {
+		                for child in self.children.as_mut_slice() {
 		                    let (cw, _, _) = child.measure(
 		                    	max(0, parent_width as i32 - hp) as u16, 
 		                    	max(0, parent_height as i32 - vp) as u16
@@ -412,7 +412,7 @@ impl development::UiDrawable for LinearLayout {
         			layout::Size::MatchParent => parent_height,
         			layout::Size::WrapContent => {
 	        			let mut h = 0;
-		                for ref mut child in self.children.as_mut_slice() {
+		                for child in self.children.as_mut_slice() {
 		                    let ch = if measured {
 		                    	child.size().1
 		                    } else {
@@ -500,7 +500,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
 
             let mut x = 0;
             let mut y = 0;
-            for ref mut child in ll.children.as_mut_slice() {
+            for child in ll.children.as_mut_slice() {
                 let (lp, tp, rp, bp) = ll.base.control_base.layout.padding.into();
 		        let (lm, tm, rm, bm) = ll.base.control_base.layout.margin.into();
 		        let hp = lm + rm + lp + rp;

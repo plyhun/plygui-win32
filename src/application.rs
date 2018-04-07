@@ -25,7 +25,7 @@ impl UiApplication for Application {
         }
         w
     }
-    fn name<'a>(&'a self) -> Cow<'a, str> {
+    fn name(&self) -> Cow<str> {
         Cow::Borrowed(self.name.as_str())
     }
     fn start(&mut self) {
@@ -44,10 +44,8 @@ impl UiApplication for Application {
             let window = unsafe { common::cast_hwnd::<Window>(*window) };
             if window.as_base().id() == id {
                 return Some(window);
-            } else {
-                return window
-                           .find_control_by_id_mut(id)
-                           .map(|control| control.as_member_mut());
+            } else if let Some(control) = window.find_control_by_id_mut(id) {
+	            return Some(control.as_member_mut());           
             }
         }
         None
@@ -59,10 +57,8 @@ impl UiApplication for Application {
             let window = unsafe { common::cast_hwnd::<Window>(*window) };
             if window.as_base().id() == id {
                 return Some(window);
-            } else {
-                return window
-                           .find_control_by_id_mut(id)
-                           .map(|control| control.as_member());
+            } else if let Some(control) = window.find_control_by_id(id) {
+	            return Some(control.as_member());           
             }
         }
 

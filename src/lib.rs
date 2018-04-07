@@ -1,6 +1,10 @@
 #![cfg(target_os="windows")]
 #![windows_subsystem = "windows"]
 
+#![cfg_attr(feature = "cargo-clippy", allow(cast_lossless))]
+#![cfg_attr(feature = "cargo-clippy", allow(too_many_arguments))]
+#![cfg_attr(feature = "cargo-clippy", allow(type_complexity))]
+
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]

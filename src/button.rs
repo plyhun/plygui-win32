@@ -53,7 +53,7 @@ impl Button {
 }
 
 impl UiHasLabel for Button {
-    fn label<'a>(&'a self) -> Cow<'a, str> {
+    fn label(&self) -> Cow<str> {
         Cow::Borrowed(self.label.as_ref())
     }
     fn set_label(&mut self, label: &str) {

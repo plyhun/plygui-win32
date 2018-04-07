@@ -54,7 +54,7 @@ impl WindowsControlBase {
             measured_size: (0, 0),
             coords: None,
 
-            invalidate: invalidate,
+            invalidate,
         }
     }
 
@@ -213,7 +213,7 @@ pub unsafe fn cast_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T
     where T: Sized
 {
     let hwnd_ptr = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
-    mem::transmute(hwnd_ptr as *mut c_void)
+    &mut *(hwnd_ptr as *mut T)
 }
 
 pub unsafe fn log_error() {
