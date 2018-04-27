@@ -14,7 +14,9 @@ lazy_static = "~0.2"
 derive_builder = "~0.5"
 
 [build-dependencies]
-embed-resource = "~1.1"
+embed-resource = { vesion = "~1.1", optional = true }
 
 [features]
 markup = ["plygui-api/markup"]
+manifest = ["embed-resource"]
+default = ["manifest"]

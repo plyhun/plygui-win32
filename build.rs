@@ -1,5 +1,7 @@
+#[cfg(feature = "manifest")]
 extern crate embed_resource;
 
 fn main() {
-    embed_resource::compile("plygui.rc");
+    #[cfg(feature = "manifest")]
+	embed_resource::compile("plygui.rc");
 }

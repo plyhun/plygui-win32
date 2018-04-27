@@ -292,7 +292,7 @@ impl development::Drawable for WindowsButton {
         )
     }
     fn invalidate(&mut self) {
-    	let parent_hwnd = self.base.parent_hwnd();	
+    	/*let parent_hwnd = self.base.parent_hwnd();	
 		if let Some(parent_hwnd) = parent_hwnd {
 			let mparent = common::cast_hwnd::<plygui_api::development::UiMemberCommon>(parent_hwnd);
 			let (pw, ph) = mparent.size();
@@ -310,13 +310,13 @@ impl development::Drawable for WindowsButton {
 			if parent_hwnd != 0 as ::winapi::shared::windef::HWND {
 	    		::winapi::um::winuser::InvalidateRect(parent_hwnd, ptr::null_mut(), ::winapi::shared::minwindef::TRUE);
 	    	}
-	    }
+	    }*/
     }
 }
 
 #[allow(dead_code)]
 pub(crate) fn spawn() -> types::Dbox<traits::UiControl> {
-    Button::with_label("")
+    Button::with_label("").into_control()
 }
 
 unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
@@ -327,7 +327,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
     }
     match msg {
         winuser::WM_LBUTTONDOWN => {
-            if let Some(ref mut cb) = button.h_left_clicked {
+            if let Some(ref mut cb) = button.as_inner_mut().h_left_clicked {
                 let mut button2: &mut Button = mem::transmute(param);
                 (cb.as_mut())(button2);
             }
@@ -336,7 +336,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             let width = lparam as u16;
             let height = (lparam >> 16) as u16;
 
-            if let Some(ref mut cb) = button.base.h_resize {
+            if let Some(ref mut cb) = button.as_inner_mut().base.h_resize {
                 let mut button2: &mut Button = mem::transmute(param);
                 (cb.as_mut())(button2, width, height);
             }

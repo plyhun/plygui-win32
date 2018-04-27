@@ -254,7 +254,7 @@ impl Drop for WindowsWindow {
 }
 
 unsafe fn register_window_class() -> Vec<u16> {
-    let class_name = OsStr::new("PlyguiWin32Button")
+    let class_name = OsStr::new("PlyguiWin32Window")
         .encode_wide()
         .chain(Some(0).into_iter())
         .collect::<Vec<_>>();
