@@ -501,7 +501,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
 		        let hp = lm + rm + lp + rp;
 		    	let vp = tm + bm + tp + bp;
 		    	child.measure(max(0, width as i32 - hp) as u16, max(0, height as i32 - vp) as u16);
-                child.draw(Some((lp + lm, tp + tm))); 
+                child.draw(Some((lp + lm, tp + tm + frame.label_padding))); 
             }
 
             if let Some(ref mut cb) = frame.base.h_resize {
