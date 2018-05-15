@@ -44,11 +44,7 @@ impl development::NativeId for Hwnd {}
 
 #[repr(C)]
 pub struct WindowsControlBase {
-	pub id: ids::Id,
-	pub visibility: types::Visibility,
-    pub layout: layout::Attributes,
-	
-    pub hwnd: windef::HWND,
+	pub hwnd: windef::HWND,
     pub subclass_id: usize,
     pub coords: Option<(i32, i32)>,
     pub measured_size: (u16, u16),
@@ -59,14 +55,6 @@ pub struct WindowsControlBase {
 impl WindowsControlBase {
     pub fn new() -> WindowsControlBase {
         WindowsControlBase {
-            id: ids::Id::next(),
-            layout: layout::Attributes {
-                width: layout::Size::MatchParent,
-                height: layout::Size::WrapContent,
-                gravity: layout::gravity::CENTER_HORIZONTAL | layout::gravity::TOP,
-                ..Default::default()
-            },
-            visibility: types::Visibility::Visible,
             hwnd: 0 as windef::HWND,
             h_resize: None,
             subclass_id: 0,
@@ -229,9 +217,8 @@ pub unsafe fn window_rect(hwnd: windef::HWND) -> windef::RECT {
     rect
 }
 
-pub unsafe fn cast_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut Box<T>
-where
-    T: ?Sized + development::Final,
+pub unsafe fn cast_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T
+where T: Sized + UiMember,
 {
     let hwnd_ptr = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     mem::transmute(hwnd_ptr as *mut c_void)

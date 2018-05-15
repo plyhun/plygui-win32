@@ -20,15 +20,15 @@ pub struct WindowsApplication {
 pub type Application = development::Application<WindowsApplication>;
 
 impl development::ApplicationInner for WindowsApplication {
-	fn with_name(name: &str) -> types::Dbox<traits::UiApplication> {
+	fn with_name(name: &str) -> Box<traits::UiApplication> {
         init_comctl();
-        let a: Box<traits::UiApplication> = Box::new(development::Application::with_inner(WindowsApplication {
+        let a: Box<traits::UiApplication> = Box::new(development::Application::new(WindowsApplication {
 	            name: name.into(),
 	            windows: Vec::with_capacity(1),
-	        }));
-        Box::new(a)
+	        }, ()));
+        a
     }
-    fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::WindowMenu) -> types::Dbox<traits::UiWindow> {
+    fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::WindowMenu) -> Box<traits::UiWindow> {
     	use plygui_api::development::{MemberInner, HasInner, WindowInner};
     	
         let mut w = window::WindowsWindow::with_params(title, size, menu);
@@ -50,8 +50,10 @@ impl development::ApplicationInner for WindowsApplication {
         }
     }
     fn find_member_by_id_mut(&mut self, id: Id) -> Option<&mut traits::UiMember> {
+    	use plygui_api::traits::{UiWindow, UiMember, UiContainer};
+    	
         for window in self.windows.as_mut_slice() {
-            let window: &mut Box<traits::UiWindow> = unsafe { common::cast_hwnd(*window) };
+            let window: &mut window::Window = unsafe { common::cast_hwnd(*window) };
             if window.id() == id {
                 return Some(window.as_single_container_mut().as_container_mut().as_member_mut());
             } else {
@@ -63,8 +65,10 @@ impl development::ApplicationInner for WindowsApplication {
         None
     }
     fn find_member_by_id(&self, id: Id) -> Option<&traits::UiMember> {
-        for window in self.windows.as_slice() {
-            let window: &mut Box<traits::UiWindow> = unsafe { common::cast_hwnd(*window) };
+        use plygui_api::traits::{UiWindow, UiMember, UiContainer};
+    	
+    	for window in self.windows.as_slice() {
+            let window: &mut window::Window = unsafe { common::cast_hwnd(*window) };
             if window.id() == id {
                 return Some(window.as_single_container().as_container().as_member());
             } else {
@@ -79,8 +83,8 @@ impl development::ApplicationInner for WindowsApplication {
 }
 
 fn start_window(hwnd: windef::HWND) {
-	let w: &mut Box<traits::UiWindow> = unsafe { common::cast_hwnd(hwnd) };
-    w.as_single_container_mut().as_container_mut().as_member_mut().as_any_mut().downcast_mut::<window::Window>().unwrap().as_inner_mut().start();
+	let w: &mut window::Window = unsafe { common::cast_hwnd(hwnd) };
+    w.as_inner_mut().start();
 }
 
 fn init_comctl() {
