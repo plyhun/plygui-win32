@@ -53,7 +53,7 @@ impl development::ApplicationInner for WindowsApplication {
     	use plygui_api::traits::{UiWindow, UiMember, UiContainer};
     	
         for window in self.windows.as_mut_slice() {
-            let window: &mut window::Window = unsafe { common::cast_hwnd(*window) };
+            let window: &mut window::Window = common::member_from_hwnd::<window::Window>(*window);
             if window.id() == id {
                 return Some(window.as_single_container_mut().as_container_mut().as_member_mut());
             } else {
@@ -68,7 +68,7 @@ impl development::ApplicationInner for WindowsApplication {
         use plygui_api::traits::{UiWindow, UiMember, UiContainer};
     	
     	for window in self.windows.as_slice() {
-            let window: &mut window::Window = unsafe { common::cast_hwnd(*window) };
+            let window: &mut window::Window = common::member_from_hwnd::<window::Window>(*window);
             if window.id() == id {
                 return Some(window.as_single_container().as_container().as_member());
             } else {
@@ -83,7 +83,7 @@ impl development::ApplicationInner for WindowsApplication {
 }
 
 fn start_window(hwnd: windef::HWND) {
-	let w: &mut window::Window = unsafe { common::cast_hwnd(hwnd) };
+	let w: &mut window::Window = common::member_from_hwnd::<window::Window>(hwnd);
     w.as_inner_mut().start();
 }
 

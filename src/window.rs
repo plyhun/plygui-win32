@@ -123,7 +123,7 @@ impl WindowInner for WindowsWindow {
                 .chain(Some(0).into_iter())
                 .collect::<Vec<_>>();
                 
-            let mut w: Box<traits::UiWindow> = Box::new(Window::new(
+            let mut w: Box<Window> = Box::new(Window::new(
             		WindowsWindow {
 		                hwnd: 0 as windef::HWND,
 		                child: None,
@@ -147,7 +147,7 @@ impl WindowInner for WindowsWindow {
                 w.as_mut() as *mut _ as *mut c_void,
             );
 
-            w.as_single_container_mut().as_container_mut().as_member_mut().as_any_mut().downcast_mut::<Window>().unwrap().as_inner_mut().hwnd = hwnd;
+            w.as_inner_mut().hwnd = hwnd;
             w
         }
     }
@@ -178,12 +178,12 @@ impl SingleContainerInner for WindowsWindow {
     	
         let mut old = self.child.take();
         if let Some(old) = old.as_mut() {
-        	let outer_self: &mut window::Window = unsafe { common::cast_hwnd(self.hwnd) };
+        	let outer_self: &mut window::Window = common::member_from_hwnd::<Window>(self.hwnd);
         	let outer_self = outer_self.as_single_container_mut().as_container_mut();
             old.on_removed_from_container(outer_self);
         }
         if let Some(new) = child.as_mut() {
-            let outer_self: &mut window::Window = unsafe { common::cast_hwnd(self.hwnd) }; 
+            let outer_self: &mut window::Window = common::member_from_hwnd::<Window>(self.hwnd); 
         	let outer_self = outer_self.as_single_container_mut().as_container_mut();
             new.on_added_to_container(outer_self, 0, 0); 
         }

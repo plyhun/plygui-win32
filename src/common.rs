@@ -3,7 +3,7 @@ use std::os::raw::c_void;
 use std::os::windows::ffi::OsStrExt;
 use std::ffi::OsStr;
 
-use plygui_api::{layout, development, ids, types, callbacks};
+use plygui_api::{development, callbacks};
 use plygui_api::traits::{UiMember, UiContainer};
 
 use winapi::shared::windef;
@@ -182,9 +182,7 @@ pub unsafe fn create_control_hwnd(
         hinstance(),
         param,
     );
-    log_error();
     commctrl::SetWindowSubclass(hwnd, handler, subclass_id as usize, param as usize);
-    log_error();
     (hwnd, subclass_id as usize)
 }
 
@@ -205,8 +203,8 @@ pub fn destroy_hwnd(
         if subclass_id != 0 {
             commctrl::RemoveWindowSubclass(hwnd, handler, subclass_id);
         }
-        if winuser::DestroyWindow(hwnd) == 0 {
-            //panic!("Cannot destroy window!");
+        if winuser::DestroyWindow(hwnd) == 0 && winuser::IsWindow(hwnd) > 0 {
+	        log_error();
         }
     }
 }
@@ -217,13 +215,23 @@ pub unsafe fn window_rect(hwnd: windef::HWND) -> windef::RECT {
     rect
 }
 
-pub unsafe fn cast_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T
-where T: Sized + UiMember,
+unsafe fn cast_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T
+where T: Sized// + UiMember,
 {
     let hwnd_ptr = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     mem::transmute(hwnd_ptr as *mut c_void)
 }
+pub fn member_from_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T where T: Sized + UiMember {
+    unsafe { cast_hwnd(hwnd) }
+}
+pub fn member_base_from_hwnd<'a>(hwnd: windef::HWND) -> &'a mut development::MemberBase {
+    unsafe { cast_hwnd(hwnd) }
+}
 
+#[cfg(not(debug_assertions))]
+pub unsafe fn log_error() {}
+
+#[cfg(debug_assertions)]
 pub unsafe fn log_error() {
     let error = errhandlingapi::GetLastError();
     if error == 0 {
@@ -254,68 +262,7 @@ macro_rules! impl_invalidate {
 		unsafe fn invalidate_impl(this: &mut common::WindowsControlBase) {
 			use plygui_api::development::UiDrawable;
 			
-			let parent_hwnd = this.parent_hwnd();	
-			if let Some(parent_hwnd) = parent_hwnd {
-				let mparent = common::cast_hwnd::<plygui_api::development::UiMemberCommon>(parent_hwnd);
-				let (pw, ph) = mparent.size();
-				let this: &mut $typ = mem::transmute(this);
-				//let (_,_,changed) = 
-				this.measure(pw, ph);
-				this.draw(None);		
-						
-				if mparent.is_control().is_some() {
-					let wparent = common::cast_hwnd::<common::WindowsControlBase>(parent_hwnd);
-					//if changed {
-						wparent.invalidate();
-					//} 
-				}
-				if parent_hwnd != 0 as ::winapi::shared::windef::HWND {
-		    		::winapi::um::winuser::InvalidateRect(parent_hwnd, ptr::null_mut(), ::winapi::shared::minwindef::TRUE);
-		    	}
-		    }
-		}
-	}
-}
-#[macro_export]
-macro_rules! impl_is_control {
-	($typ: ty) => {
-		unsafe fn is_control(this: &::plygui_api::development::UiMemberCommon) -> Option<&::plygui_api::development::UiControlCommon> {
-			Some(&::plygui_api::utils::base_to_impl::<$typ>(this).base.control_base)
-		}
-		unsafe fn is_control_mut(this: &mut ::plygui_api::development::UiMemberCommon) -> Option<&mut ::plygui_api::development::UiControlCommon> {
-			Some(&mut ::plygui_api::utils::base_to_impl_mut::<$typ>(this).base.control_base)
-		}
-	}
-}
-#[macro_export]
-macro_rules! impl_size {
-	($typ: ty) => {
-		unsafe fn size(this: &::plygui_api::development::UiMemberCommon) -> (u16, u16) {
-			::plygui_api::utils::base_to_impl::<$typ>(this).size()
-		}
-	}
-}
-#[macro_export]
-macro_rules! impl_member_id {
-	($mem: expr) => {
-		unsafe fn member_id(_: &::plygui_api::development::UiMemberCommon) -> &'static str {
-			$mem
-		}
-	}
-}
-#[macro_export]
-macro_rules! impl_measure {
-	($typ: ty) => {
-		unsafe fn measure(&mut UiMemberCommon, w: u16, h: u16) -> (u16, u16, bool) {
-			::plygui_api::utils::base_to_impl::<$typ>(this).measure(w, h)
-		}
-	}
-}
-#[macro_export]
-macro_rules! impl_draw {
-	($typ: ty) => {
-		unsafe fn draw(&mut UiMemberCommon, coords: Option<(i32, i32)>) {
-			::plygui_api::utils::base_to_impl::<$typ>(this).draw(coords)
+			
 		}
 	}
 }*/
