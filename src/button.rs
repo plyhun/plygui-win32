@@ -1,7 +1,7 @@
 use super::*;
 
-use plygui_api::development::{MemberFunctions, MemberBase, HasInner, Drawable};
 use plygui_api::{traits, layout, types, development, callbacks, utils};
+use plygui_api::development::HasInner;
 
 use winapi::shared::windef;
 use winapi::shared::minwindef;
@@ -43,6 +43,8 @@ impl development::HasLabelInner for WindowsButton {
         self.label = label.into();
         let hwnd = self.base.hwnd;
         if !hwnd.is_null() {
+        	use plygui_api::development::Drawable;
+        	
             let control_name = OsStr::new(&self.label)
                 .encode_wide()
                 .chain(Some(0).into_iter())
@@ -71,7 +73,7 @@ impl development::ButtonInner for WindowsButton {
 		            h_left_clicked: None,
 		            label: label.to_owned(),
 		        },
-        		MemberFunctions::new(_as_any, _as_any_mut),
+        		development::MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
         b.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
         b
@@ -80,6 +82,8 @@ impl development::ButtonInner for WindowsButton {
 
 impl development::ControlInner for WindowsButton {
     fn on_added_to_container(&mut self, base: &mut development::MemberControlBase, parent: &traits::UiContainer, x: i32, y: i32) {
+    	use plygui_api::development::Drawable;
+    	
         let selfptr = base as *mut _ as *mut c_void;
         let (pw, ph) = parent.size();
         //let (lp,tp,rp,bp) = self.base.layout.padding.into();
@@ -104,12 +108,24 @@ impl development::ControlInner for WindowsButton {
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
     }
-    fn on_removed_from_container(&mut self, base: &mut development::MemberControlBase, _: &traits::UiContainer) {
+    fn on_removed_from_container(&mut self, _: &mut development::MemberControlBase, _: &traits::UiContainer) {
         common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, Some(handler));
         self.base.hwnd = 0 as windef::HWND;
         self.base.subclass_id = 0;
     }
-
+	fn parent(&self) -> Option<&traits::UiMember> {
+		self.base.parent().map(|p| p.as_member())
+	}
+    fn parent_mut(&mut self) -> Option<&mut traits::UiMember> {
+    	self.base.parent_mut().map(|p| p.as_member_mut())
+    }
+    fn root(&self) -> Option<&traits::UiMember> {
+    	self.base.root().map(|p| p.as_member())
+    }
+    fn root_mut(&mut self) -> Option<&mut traits::UiMember> {
+    	self.base.root_mut().map(|p| p.as_member_mut())
+    }
+    
     #[cfg(feature = "markup")]
     fn fill_from_markup(&mut self, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
         use plygui_api::markup::MEMBER_TYPE_BUTTON;
@@ -132,9 +148,11 @@ impl development::ControlInner for WindowsButton {
 }
 
 impl development::HasLayoutInner for WindowsButton {
-	fn on_layout_changed(&mut self, base: &mut layout::Attributes) {
+	fn on_layout_changed(&mut self, _: &mut layout::Attributes) {
 		let hwnd = self.base.hwnd;
         if !hwnd.is_null() {
+        	use plygui_api::development::Drawable;
+        	
 			self.invalidate(utils::member_control_base_mut(common::member_from_hwnd::<Button>(hwnd)));
 		}
 	}
@@ -143,7 +161,7 @@ impl development::HasLayoutInner for WindowsButton {
 impl development::MemberInner for WindowsButton {
     type Id = common::Hwnd;
 	
-	fn size(&self, _: &MemberBase) -> (u16, u16) {
+	fn size(&self, _: &development::MemberBase) -> (u16, u16) {
         let rect = unsafe { common::window_rect(self.base.hwnd) };
         (
             (rect.right - rect.left) as u16,
@@ -151,13 +169,11 @@ impl development::MemberInner for WindowsButton {
         )
     }
 
-    fn on_resize(&mut self, base: &mut MemberBase, handler: Option<callbacks::Resize>) {
-        self.base.h_resize = handler;
-    }
-
-    fn on_set_visibility(&mut self, base: &mut MemberBase) {
+    fn on_set_visibility(&mut self, base: &mut development::MemberBase) {
 	    let hwnd = self.base.hwnd;
         if !hwnd.is_null() {
+        	use plygui_api::development::Drawable;
+        	
 		    unsafe {
 	            winuser::ShowWindow(
 	                self.base.hwnd,
@@ -252,25 +268,24 @@ impl development::Drawable for WindowsButton {
         };
         (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
     }
-    fn invalidate(&mut self, base: &mut development::MemberControlBase) {
-    	/*let parent_hwnd = self.base.parent_hwnd();	
+    fn invalidate(&mut self, _: &mut development::MemberControlBase) {
+    	let parent_hwnd = self.base.parent_hwnd();	
 		if let Some(parent_hwnd) = parent_hwnd {
 			let mparent = common::member_base_from_hwnd(parent_hwnd);
-			let (pw, ph) = mparent.size();
+			let (pw, ph) = mparent.as_member().size();
 			let this = common::member_from_hwnd::<Button>(self.base.hwnd);
 			let (_,_,changed) = self.measure(utils::member_control_base_mut(this), pw, ph);
 			self.draw(utils::member_control_base_mut(this), None);		
 					
-			if mparent.is_control().is_some() {
-				let wparent = common::cast_hwnd::<common::WindowsControlBase>(parent_hwnd);
+			if let Some(cparent) = mparent.as_member_mut().is_control_mut() {
 				if changed {
-					wparent.invalidate();
+					cparent.invalidate();
 				} 
 			}
 			if parent_hwnd != 0 as ::winapi::shared::windef::HWND {
-	    		::winapi::um::winuser::InvalidateRect(parent_hwnd, ptr::null_mut(), ::winapi::shared::minwindef::TRUE);
+	    		unsafe { ::winapi::um::winuser::InvalidateRect(parent_hwnd, ptr::null_mut(), ::winapi::shared::minwindef::TRUE); }
 	    	}
-	    }*/
+	    }
     }
 }
 
@@ -296,7 +311,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             let width = lparam as u16;
             let height = (lparam >> 16) as u16;
 
-            if let Some(ref mut cb) = button.as_inner_mut().base.h_resize {
+            if let Some(ref mut cb) = button.base_mut().handler_resize {
                 let mut button2: &mut Button = mem::transmute(param);
                 (cb.as_mut())(button2, width, height);
             }
@@ -307,4 +322,4 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
     commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
 }
 
-impl_as_any!(Button);
+impl_all_defaults!(Button);

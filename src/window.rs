@@ -2,7 +2,7 @@ use super::*;
 use super::common::*;
 
 use plygui_api::development::{MemberBase, SingleContainerInner, MemberFunctions, MemberInner, Member, SingleContainer, HasLabelInner, WindowInner, ContainerInner, HasInner};
-use plygui_api::{ids, types, callbacks, traits};
+use plygui_api::{ids, types, traits};
 
 use winapi::shared::windef;
 use winapi::shared::minwindef;
@@ -24,8 +24,6 @@ lazy_static! {
 pub struct WindowsWindow {
     hwnd: windef::HWND,
     child: Option<Box<traits::UiControl>>,
-
-    h_resize: Option<callbacks::Resize>,
 }
 
 pub type Window = Member<SingleContainer<WindowsWindow>>;
@@ -127,9 +125,8 @@ impl WindowInner for WindowsWindow {
             		WindowsWindow {
 		                hwnd: 0 as windef::HWND,
 		                child: None,
-		                h_resize: None,
 		            },
-            		MemberFunctions::new(_as_any, _as_any_mut),
+            		MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
             ));    
  
             let hwnd = winuser::CreateWindowExW(
@@ -215,10 +212,6 @@ impl MemberInner for WindowsWindow {
         )
     }
 
-    fn on_resize(&mut self, base: &mut MemberBase, handler: Option<callbacks::Resize>) {
-        self.h_resize = handler;
-    }
-    
     fn on_set_visibility(&mut self, base: &mut MemberBase) {
 	    unsafe {
             winuser::ShowWindow(
@@ -287,12 +280,13 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             let height = (lparam >> 16) as u16;
             let mut w: &mut window::Window = mem::transmute(ww);
 
-            if let Some(ref mut child) = w.as_single_container_mut().as_container_mut().as_member_mut().as_any_mut().downcast_mut::<window::Window>().unwrap().as_inner_mut().child {
+            if let Some(ref mut child) = w.as_inner_mut().child {
             	child.measure(width, height);
-                child.draw(Some((0, 0))); //TODO padding
+                child.draw(Some((0, 0)));
             }
+            ::winapi::um::winuser::InvalidateRect(w.as_inner().hwnd, ptr::null_mut(), ::winapi::shared::minwindef::TRUE);
 
-            if let Some(ref mut cb) = w.as_single_container_mut().as_container_mut().as_member_mut().as_any_mut().downcast_mut::<window::Window>().unwrap().as_inner_mut().h_resize {
+            if let Some(ref mut cb) = w.base_mut().handler_resize {
                 let mut w2: &mut window::Window = mem::transmute(ww);
                 (cb.as_mut())(w2.as_single_container_mut().as_container_mut().as_member_mut(), width, height);
             }
@@ -301,10 +295,6 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             winuser::PostQuitMessage(0);
             return 0;
         }
-        /*winuser::WM_PRINTCLIENT => {
-        	winuser::SendMessageW(hwnd, winuser::WM_ERASEBKGND, wparam, lparam);
-	        return 0;
-        },*/
         /*winuser::WM_NOTIFY => {
         	let hdr: winuser::LPNMHDR = mem::transmute(lparam);
         	println!("notify for {:?}", hdr);
@@ -320,4 +310,4 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
     winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
-impl_as_any!(Window);
+impl_all_defaults!(Window);

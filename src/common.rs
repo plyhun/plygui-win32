@@ -3,7 +3,7 @@ use std::os::raw::c_void;
 use std::os::windows::ffi::OsStrExt;
 use std::ffi::OsStr;
 
-use plygui_api::{development, callbacks};
+use plygui_api::development;
 use plygui_api::traits::{UiMember, UiContainer};
 
 use winapi::shared::windef;
@@ -48,15 +48,12 @@ pub struct WindowsControlBase {
     pub subclass_id: usize,
     pub coords: Option<(i32, i32)>,
     pub measured_size: (u16, u16),
-
-    pub h_resize: Option<callbacks::Resize>,
 }
 
 impl WindowsControlBase {
     pub fn new() -> WindowsControlBase {
         WindowsControlBase {
             hwnd: 0 as windef::HWND,
-            h_resize: None,
             subclass_id: 0,
             measured_size: (0, 0),
             coords: None,
@@ -73,7 +70,7 @@ impl WindowsControlBase {
             }
         }
     }
-    /*pub fn parent(&self) -> Option<&types::UiMemberBase> {
+    pub fn parent(&self) -> Option<&development::MemberBase> {
         unsafe {
             let parent_hwnd = winuser::GetParent(self.hwnd);
             if parent_hwnd == self.hwnd {
@@ -84,7 +81,7 @@ impl WindowsControlBase {
             mem::transmute(parent_ptr as *mut c_void)
         }
     }
-    pub fn parent_mut(&mut self) -> Option<&mut types::UiMemberBase> {
+    pub fn parent_mut(&mut self) -> Option<&mut development::MemberBase> {
         unsafe {
             let parent_hwnd = winuser::GetParent(self.hwnd);
             if parent_hwnd == self.hwnd {
@@ -95,7 +92,7 @@ impl WindowsControlBase {
             mem::transmute(parent_ptr as *mut c_void)
         }
     }
-    pub fn root(&self) -> Option<&types::UiMemberBase> {
+    pub fn root(&self) -> Option<&development::MemberBase> {
         unsafe {
             let parent_hwnd = winuser::GetAncestor(self.hwnd, 2); //GA_ROOT
             if parent_hwnd == self.hwnd {
@@ -106,7 +103,7 @@ impl WindowsControlBase {
             mem::transmute(parent_ptr as *mut c_void)
         }
     }
-    pub fn root_mut(&mut self) -> Option<&mut types::UiMemberBase> {
+    pub fn root_mut(&mut self) -> Option<&mut development::MemberBase> {
         unsafe {
             let parent_hwnd = winuser::GetAncestor(self.hwnd, 2); //GA_ROOT
             if parent_hwnd == self.hwnd {
@@ -116,7 +113,7 @@ impl WindowsControlBase {
             let parent_ptr = winuser::GetWindowLongPtrW(parent_hwnd, winuser::GWLP_USERDATA);
             mem::transmute(parent_ptr as *mut c_void)
         }
-    }*/
+    }
 }
 
 pub unsafe trait WindowsContainer: UiContainer + UiMember {
@@ -164,14 +161,14 @@ pub unsafe fn create_control_hwnd(
         hasher.write_usize(class_name as usize);
         hasher.finish()
     };
-    let control_name = OsStr::new(control_name)
+    let os_control_name = OsStr::new(control_name)
         .encode_wide()
         .chain(Some(0).into_iter())
         .collect::<Vec<_>>();
     let hwnd = winuser::CreateWindowExW(
         ex_style,
         class_name,
-        control_name.as_ptr(),
+        os_control_name.as_ptr(),
         style | winuser::WS_CHILD | winuser::WS_VISIBLE,
         x,
         y,
@@ -182,6 +179,10 @@ pub unsafe fn create_control_hwnd(
         hinstance(),
         param,
     );
+    if hwnd.is_null() {
+    	log_error();
+    	panic!("Cannot create window {}", control_name);
+    }
     commctrl::SetWindowSubclass(hwnd, handler, subclass_id as usize, param as usize);
     (hwnd, subclass_id as usize)
 }
