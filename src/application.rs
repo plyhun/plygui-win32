@@ -50,7 +50,7 @@ impl development::ApplicationInner for WindowsApplication {
         }
     }
     fn find_member_by_id_mut(&mut self, id: Id) -> Option<&mut traits::UiMember> {
-    	use plygui_api::traits::{UiWindow, UiMember, UiContainer};
+    	use plygui_api::traits::{UiSingleContainer, UiMember, UiContainer};
     	
         for window in self.windows.as_mut_slice() {
             let window: &mut window::Window = common::member_from_hwnd::<window::Window>(*window);
@@ -65,7 +65,7 @@ impl development::ApplicationInner for WindowsApplication {
         None
     }
     fn find_member_by_id(&self, id: Id) -> Option<&traits::UiMember> {
-        use plygui_api::traits::{UiWindow, UiMember, UiContainer};
+        use plygui_api::traits::{UiSingleContainer, UiMember, UiContainer};
     	
     	for window in self.windows.as_slice() {
             let window: &mut window::Window = common::member_from_hwnd::<window::Window>(*window);

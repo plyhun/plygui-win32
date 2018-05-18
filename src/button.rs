@@ -85,7 +85,7 @@ impl development::ControlInner for WindowsButton {
     	use plygui_api::development::Drawable;
     	
         let selfptr = base as *mut _ as *mut c_void;
-        let (pw, ph) = parent.size();
+        let (pw, ph) = parent.draw_area_size();
         //let (lp,tp,rp,bp) = self.base.layout.padding.into();
         let (lm, tm, rm, bm) = base.control.layout.margin.into();
         let (hwnd, id) = unsafe {

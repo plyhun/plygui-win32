@@ -13,7 +13,8 @@ use winapi::ctypes::c_void;
 use std::{ptr, mem};
 use std::os::windows::ffi::OsStrExt;
 use std::ffi::OsStr;
-//use std::cmp::max;
+
+const DEFAULT_PADDING: i32 = 6;
 
 lazy_static! {
 	pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
@@ -25,20 +26,28 @@ pub type LinearLayout = development::Member<development::Control<development::Mu
 #[repr(C)]
 pub struct WindowsLinearLayout {
     base: WindowsControlBase,
+    gravity_horizontal: layout::Gravity,
+    gravity_vertical: layout::Gravity,
     orientation: layout::Orientation,
     children: Vec<Box<traits::UiControl>>,
 }
 
 impl development::LinearLayoutInner for WindowsLinearLayout {
 	fn with_orientation(orientation: layout::Orientation) -> Box<traits::UiLinearLayout> {
-		Box::new(LinearLayout::new(
+		use plygui_api::traits::UiHasLayout;
+		
+		let mut b = Box::new(LinearLayout::new(
 			WindowsLinearLayout {
 				base: WindowsControlBase::new(),
-				orientation: orientation,
+				gravity_horizontal: Default::default(),
+			    gravity_vertical: Default::default(),
+			    orientation: orientation,
 				children: Vec::new(),
 			},
 			development::MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
-		))
+		));
+		b.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
+		b
 	}
 }
 
@@ -100,7 +109,7 @@ impl development::ControlInner for WindowsLinearLayout {
     }
     fn on_added_to_container(&mut self, base: &mut development::MemberControlBase, parent: &traits::UiContainer, px: i32, py: i32) {
         let selfptr = base as *mut _ as *mut c_void;
-        let (pw, ph) = parent.size();
+        let (pw, ph) = parent.draw_area_size();
         let (width, height, _) = self.measure(base, pw, ph);
         let (lp, tp, _, _) = base.control.layout.padding.into();
         let (lm, tm, rm, bm) = base.control.layout.margin.into();
@@ -109,8 +118,8 @@ impl development::ControlInner for WindowsLinearLayout {
             common::create_control_hwnd(
                 px as i32 + lm,
                 py as i32 + tm,
-                width as i32 - rm,
-                height as i32 - bm,
+                width as i32 - rm - lm,
+                height as i32 - bm - tm,
                 parent.native_id() as windef::HWND,
                 winuser::WS_EX_CONTROLPARENT,
                 WINDOW_CLASS.as_ptr(),
@@ -123,8 +132,8 @@ impl development::ControlInner for WindowsLinearLayout {
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
         self.base.coords = Some((px as i32, py as i32));
-        let mut x = lp;
-        let mut y = tp;
+        let mut x = lp + lm;
+        let mut y = tp + tm;
         for ref mut child in self.children.as_mut_slice() {
             let self2: &mut LinearLayout = unsafe { mem::transmute(selfptr) };
             child.on_added_to_container(self2, x, y);
@@ -227,6 +236,16 @@ impl development::ContainerInner for WindowsLinearLayout {
             }
         }
         None
+    }
+    fn gravity(&self) -> (layout::Gravity, layout::Gravity) {
+    	(self.gravity_horizontal, self.gravity_vertical)
+    }
+    fn set_gravity(&mut self, base: &mut development::MemberBase, w: layout::Gravity, h: layout::Gravity) {
+    	if self.gravity_horizontal != w || self.gravity_vertical != h {
+    		self.gravity_horizontal = w;
+    		self.gravity_vertical = h;
+    		self.invalidate(unsafe { mem::transmute(base) });
+    	}
     }
 }
 
