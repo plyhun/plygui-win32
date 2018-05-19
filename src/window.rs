@@ -1,9 +1,8 @@
 use super::*;
 use super::common::*;
 
-use plygui_api::{development, ids, types, callbacks};
-use plygui_api::traits::{UiControl, UiWindow, UiSingleContainer, UiMember, UiContainer, UiHasLabel};
-use plygui_api::members::MEMBER_ID_WINDOW;
+use plygui_api::development::{MemberBase, SingleContainerInner, MemberFunctions, MemberInner, Member, SingleContainer, HasLabelInner, WindowInner, ContainerInner, HasInner};
+use plygui_api::{ids, types, traits, layout};
 
 use winapi::shared::windef;
 use winapi::shared::minwindef;
@@ -22,26 +21,82 @@ lazy_static! {
 }
 
 #[repr(C)]
-pub struct Window {
-    base: development::UiMemberCommon,
+pub struct WindowsWindow {
     hwnd: windef::HWND,
-    child: Option<Box<UiControl>>,
-
-    h_resize: Option<callbacks::Resize>,
+    gravity_horizontal: layout::Gravity,
+    gravity_vertical: layout::Gravity,
+    child: Option<Box<traits::UiControl>>,
 }
 
-impl Window {
-    pub(crate) fn new(title: &str, window_size: types::WindowStartSize, menu: types::WindowMenu) -> Box<Window> {
+pub type Window = Member<SingleContainer<WindowsWindow>>;
+
+impl WindowsWindow {
+    pub(crate) fn start(&mut self) {
+        loop {
+            unsafe {
+                let mut msg: winuser::MSG = mem::zeroed();
+                if winuser::GetMessageW(&mut msg, ptr::null_mut(), 0, 0) <= 0 {
+                    break;
+                } else {
+                    winuser::TranslateMessage(&mut msg);
+                    winuser::DispatchMessageW(&mut msg);
+                }
+            }
+        }
+    }
+    fn size_inner(&self) -> (u16, u16) {
+    	let rect = unsafe { window_rect(self.hwnd) };
+        (
+            (rect.right - rect.left) as u16,
+            (rect.bottom - rect.top) as u16,
+        )
+    }
+    fn redraw(&mut self) {
+    	let size = self.size_inner();
+    	if let Some(ref mut child) = self.child {
+        	child.measure(size.0, size.1);
+            child.draw(Some((0, 0)));
+        }            
+    }
+}
+
+impl HasLabelInner for WindowsWindow {
+    fn label<'a>(&'a self) -> ::std::borrow::Cow<'a, str> {
+        if self.hwnd != 0 as windef::HWND {
+            let mut wbuffer = vec![0u16; 4096];
+            let len = unsafe { winuser::GetWindowTextW(self.hwnd, wbuffer.as_mut_slice().as_mut_ptr(), 4096) };
+            Cow::Owned(String::from_utf16_lossy(
+                &wbuffer.as_slice()[..len as usize],
+            ))
+        } else {
+            panic!("Unattached window!");
+        }
+    }
+    fn set_label(&mut self, label: &str) {
+        if self.hwnd != 0 as windef::HWND {
+            let control_name = OsStr::new(label)
+                .encode_wide()
+                .chain(Some(0).into_iter())
+                .collect::<Vec<_>>();
+            unsafe {
+                winuser::SetWindowTextW(self.hwnd, control_name.as_ptr());
+            }
+        }
+    }
+}
+
+impl WindowInner for WindowsWindow {
+	fn with_params(title: &str, window_size: types::WindowStartSize, menu: types::WindowMenu) -> Box<traits::UiWindow> {
+    	use plygui_api::development::HasInner;
+    	
         unsafe {
             let mut rect = match window_size {
-                types::WindowStartSize::Exact(width, height) => {
-                    windef::RECT {
-                        left: 0,
-                        top: 0,
-                        right: width as i32,
-                        bottom: height as i32,
-                    }
-                }
+                types::WindowStartSize::Exact(width, height) => windef::RECT {
+                    left: 0,
+                    top: 0,
+                    right: width as i32,
+                    bottom: height as i32,
+                },
                 types::WindowStartSize::Fullscreen => {
                     let mut rect = windef::RECT {
                         left: 0,
@@ -49,10 +104,13 @@ impl Window {
                         top: 0,
                         bottom: 0,
                     };
-                    if winuser::SystemParametersInfoW(winuser::SPI_GETWORKAREA,
-                                                      0,
-                                                      &mut rect as *mut _ as *mut c_void,
-                                                      0) == 0 {
+                    if winuser::SystemParametersInfoW(
+                        winuser::SPI_GETWORKAREA,
+                        0,
+                        &mut rect as *mut _ as *mut c_void,
+                        0,
+                    ) == 0
+                    {
                         log_error();
                         windef::RECT {
                             left: 0,
@@ -78,87 +136,40 @@ impl Window {
                 .encode_wide()
                 .chain(Some(0).into_iter())
                 .collect::<Vec<_>>();
+                
+            let mut w: Box<Window> = Box::new(Window::new(
+            		WindowsWindow {
+		                hwnd: 0 as windef::HWND,
+		                child: None,
+		                gravity_horizontal: Default::default(),
+					    gravity_vertical: Default::default(),    
+		            },
+            		MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
+            ));    
+ 
+            let hwnd = winuser::CreateWindowExW(
+                exstyle,
+                WINDOW_CLASS.as_ptr(),
+                window_name.as_ptr() as ntdef::LPCWSTR,
+                style | winuser::WS_VISIBLE,
+                winuser::CW_USEDEFAULT,
+                winuser::CW_USEDEFAULT,
+                rect.right - rect.left,
+                rect.bottom - rect.top,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                hinstance(),
+                w.as_mut() as *mut _ as *mut c_void,
+            );
 
-            let mut w = Box::new(Window {
-                                     base: development::UiMemberCommon::with_params(types::Visibility::Visible,
-                                                                                    development::UiMemberFunctions {
-                                                                                        fn_member_id: member_id,
-                                                                                        fn_is_control: is_control,
-                                                                                        fn_is_control_mut: is_control_mut,
-                                                                                        fn_size: size,
-                                                                                    }),
-
-                                     hwnd: 0 as windef::HWND,
-                                     child: None,
-                                     h_resize: None,
-                                 });
-
-            let hwnd = winuser::CreateWindowExW(exstyle,
-                                                WINDOW_CLASS.as_ptr(),
-                                                window_name.as_ptr() as ntdef::LPCWSTR,
-                                                style | winuser::WS_VISIBLE,
-                                                winuser::CW_USEDEFAULT,
-                                                winuser::CW_USEDEFAULT,
-                                                rect.right - rect.left,
-                                                rect.bottom - rect.top,
-                                                ptr::null_mut(),
-                                                ptr::null_mut(),
-                                                hinstance(),
-                                                w.as_mut() as *mut _ as *mut c_void);
-
-            w.hwnd = hwnd;
+            w.as_inner_mut().hwnd = hwnd;
             w
         }
     }
-    pub(crate) fn start(&mut self) {
-        loop {
-            unsafe {
-                let mut msg: winuser::MSG = mem::zeroed();
-                if winuser::GetMessageW(&mut msg, ptr::null_mut(), 0, 0) <= 0 {
-                    break;
-                } else {
-                    winuser::TranslateMessage(&msg);
-                    winuser::DispatchMessageW(&msg);
-                }
-            }
-        }
-    }
 }
 
-impl UiHasLabel for Window {
-    fn label(&self) -> ::std::borrow::Cow<str> {
-        if self.hwnd != 0 as windef::HWND {
-            let mut wbuffer = vec![0u16; 4096];
-            let len = unsafe { winuser::GetWindowTextW(self.hwnd, wbuffer.as_mut_slice().as_mut_ptr(), 4096) };
-            Cow::Owned(String::from_utf16_lossy(&wbuffer.as_slice()[..len as usize]))
-        } else {
-            panic!("Unattached window!");
-        }
-    }
-    fn set_label(&mut self, label: &str) {
-        if self.hwnd != 0 as windef::HWND {
-            let control_name = OsStr::new(label)
-                .encode_wide()
-                .chain(Some(0).into_iter())
-                .collect::<Vec<_>>();
-            unsafe {
-                winuser::SetWindowTextW(self.hwnd, control_name.as_ptr());
-            }
-        }
-    }
-}
-
-impl UiWindow for Window {
-    fn as_single_container(&self) -> &UiSingleContainer {
-        self
-    }
-    fn as_single_container_mut(&mut self) -> &mut UiSingleContainer {
-        self
-    }
-}
-
-impl UiContainer for Window {
-    fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut UiControl> {
+impl ContainerInner for WindowsWindow {
+    fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut traits::UiControl> {
         if let Some(child) = self.child.as_mut() {
             if let Some(c) = child.is_container_mut() {
                 return c.find_control_by_id_mut(id_);
@@ -166,7 +177,7 @@ impl UiContainer for Window {
         }
         None
     }
-    fn find_control_by_id(&self, id_: ids::Id) -> Option<&UiControl> {
+    fn find_control_by_id(&self, id_: ids::Id) -> Option<&traits::UiControl> {
         if let Some(child) = self.child.as_ref() {
             if let Some(c) = child.is_container() {
                 return c.find_control_by_id(id_);
@@ -174,110 +185,85 @@ impl UiContainer for Window {
         }
         None
     }
-    fn is_single_mut(&mut self) -> Option<&mut UiSingleContainer> {
-        Some(self)
+    fn gravity(&self) -> (layout::Gravity, layout::Gravity) {
+    	(self.gravity_horizontal, self.gravity_vertical)
     }
-    fn is_single(&self) -> Option<&UiSingleContainer> {
-        Some(self)
-    }
-    fn as_member(&self) -> &UiMember {
-        self
-    }
-    fn as_member_mut(&mut self) -> &mut UiMember {
-        self
+    fn set_gravity(&mut self, _: &mut MemberBase, w: layout::Gravity, h: layout::Gravity) {
+    	if self.gravity_horizontal != w || self.gravity_vertical != h {
+    		self.gravity_horizontal = w;
+    		self.gravity_vertical = h;
+    		self.redraw();
+    	}
     }
 }
 
-impl UiSingleContainer for Window {
-    fn set_child(&mut self, mut child: Option<Box<UiControl>>) -> Option<Box<UiControl>> {
-        let mut old = self.child.take();
+impl SingleContainerInner for WindowsWindow {
+    fn set_child(&mut self, mut child: Option<Box<traits::UiControl>>) -> Option<Box<traits::UiControl>> {
+    	use plygui_api::traits::UiSingleContainer;
+    	
+    	let mut old = self.child.take();
         if let Some(old) = old.as_mut() {
-            old.on_removed_from_container(self);
+        	let outer_self: &mut window::Window = common::member_from_hwnd::<Window>(self.hwnd);
+        	let outer_self = outer_self.as_single_container_mut().as_container_mut();
+            old.on_removed_from_container(outer_self);
         }
         if let Some(new) = child.as_mut() {
-            new.on_added_to_container(self, 0, 0);
+            let outer_self: &mut window::Window = common::member_from_hwnd::<Window>(self.hwnd); 
+        	let outer_self = outer_self.as_single_container_mut().as_container_mut();
+            new.on_added_to_container(outer_self, 0, 0); 
         }
         self.child = child;
 
         old
     }
-    fn child(&self) -> Option<&UiControl> {
+    fn child(&self) -> Option<&traits::UiControl> {
         self.child.as_ref().map(|c| c.as_ref())
     }
-    fn child_mut(&mut self) -> Option<&mut UiControl> {
-        //self.child.as_mut().map(|c| c.as_mut()) // WTF ??
+    fn child_mut(&mut self) -> Option<&mut traits::UiControl> {
+        //self.child.as_mut().map(|c|c.as_mut()) // WTF ??
         if let Some(child) = self.child.as_mut() {
             Some(child.as_mut())
         } else {
             None
         }
     }
-    fn as_container(&self) -> &UiContainer {
-        self
-    }
-    fn as_container_mut(&mut self) -> &mut UiContainer {
-        self
-    }
 }
 
-impl UiMember for Window {
-    fn size(&self) -> (u16, u16) {
-        let rect = unsafe { window_rect(self.hwnd) };
-        ((rect.right - rect.left) as u16, (rect.bottom - rect.top) as u16)
+impl MemberInner for WindowsWindow {
+	type Id = common::Hwnd;
+	
+    fn size(&self, _: &MemberBase) -> (u16, u16) {
+        self.size_inner()
     }
 
-    fn on_resize(&mut self, handler: Option<callbacks::Resize>) {
-        self.h_resize = handler;
-    }
-
-    fn set_visibility(&mut self, visibility: types::Visibility) {
-        self.base.visibility = visibility;
-        unsafe {
-            winuser::ShowWindow(self.hwnd,
-                                if self.base.visibility == types::Visibility::Visible {
-                                    winuser::SW_SHOW
-                                } else {
-                                    winuser::SW_HIDE
-                                });
+    fn on_set_visibility(&mut self, base: &mut MemberBase) {
+	    unsafe {
+            winuser::ShowWindow(
+                self.hwnd,
+                if base.visibility == types::Visibility::Visible {
+                    winuser::SW_SHOW
+                } else {
+                    winuser::SW_HIDE
+                },
+            );
         }
     }
-    fn visibility(&self) -> types::Visibility {
-        self.base.visibility
-    }
-    fn is_control(&self) -> Option<&UiControl> {
-        None
-    }
-    fn is_control_mut(&mut self) -> Option<&mut UiControl> {
-        None
-    }
 
-    fn as_base(&self) -> &types::UiMemberBase {
-        self.base.as_ref()
-    }
-    fn as_base_mut(&mut self) -> &mut types::UiMemberBase {
-        self.base.as_mut()
-    }
-    unsafe fn native_id(&self) -> usize {
-        self.hwnd as usize
+    unsafe fn native_id(&self) -> Self::Id {
+        self.hwnd.into()
     }
 }
 
-impl Drop for Window {
+impl Drop for WindowsWindow {
     fn drop(&mut self) {
-        self.set_child(None);
-        self.set_visibility(types::Visibility::Gone);
+    	self.set_child(None);
+    	//unsafe { common::cast_hwnd::<Window>(self.hwnd).set_visibility(types::Visibility::Gone) };
         destroy_hwnd(self.hwnd, 0, None);
     }
 }
 
-unsafe impl WindowsContainer for Window {
-    unsafe fn hwnd(&self) -> windef::HWND {
-        self.hwnd
-    }
-}
-
 unsafe fn register_window_class() -> Vec<u16> {
-    let class_name = OsStr::new(MEMBER_ID_WINDOW)
+    let class_name = OsStr::new("PlyguiWin32Window")
         .encode_wide()
         .chain(Some(0).into_iter())
         .collect::<Vec<_>>();
@@ -312,19 +298,19 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
 
     match msg {
         winuser::WM_SIZE => {
-            let width = lparam as u16;
+        	let width = lparam as u16;
             let height = (lparam >> 16) as u16;
             let mut w: &mut window::Window = mem::transmute(ww);
 
-            if let Some(ref mut child) = w.child {
-                child.measure(width, height);
-                child.draw(Some((0, 0))); 
-            }
-            ::winapi::um::winuser::InvalidateRect(w.hwnd, ptr::null_mut(), ::winapi::shared::minwindef::TRUE);
+            w.as_inner_mut().redraw();
+            
+            ::winapi::um::winuser::InvalidateRect(w.as_inner().hwnd, ptr::null_mut(), ::winapi::shared::minwindef::TRUE);
 
-            if let Some(ref mut cb) = w.h_resize {
-                let w2: &mut Window = mem::transmute(winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA));
-                (cb.as_mut())(w2, width, height);
+            if let Some(ref mut cb) = w.base_mut().handler_resize {
+                use plygui_api::traits::UiSingleContainer;
+                
+                let mut w2: &mut window::Window = mem::transmute(ww);
+                (cb.as_mut())(w2.as_single_container_mut().as_container_mut().as_member_mut(), width, height);
             }
         }
         winuser::WM_DESTROY => {
@@ -346,11 +332,4 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
     winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
-unsafe fn is_control(_: &development::UiMemberCommon) -> Option<&development::UiControlCommon> {
-    None
-}
-unsafe fn is_control_mut(_: &mut development::UiMemberCommon) -> Option<&mut development::UiControlCommon> {
-    None
-}
-impl_size!(Window);
-impl_member_id!(MEMBER_ID_WINDOW);
+impl_all_defaults!(Window);
