@@ -38,13 +38,11 @@ pub struct WindowsFrame {
     child: Option<Box<traits::UiControl>>,
 }
 
-//pub trait FrameInner: ControlInner + SingleContainerInner + HasLabelInner
-
 impl development::FrameInner for WindowsFrame {
 	fn with_label(label: &str) -> Box<traits::UiFrame> {
 		use plygui_api::traits::UiHasLayout;
 		
-		let mut b = Box::new(Frame::new(
+		let mut b = Box::new(development::Member::new(development::Control::new(development::SingleContainer::new(
 			WindowsFrame {
 				base: common::WindowsControlBase::new(),
 				child: None,
@@ -53,7 +51,7 @@ impl development::FrameInner for WindowsFrame {
 			    gravity_vertical: Default::default(),
 			    label: label.to_owned(),
                 label_padding: 0,
-			},
+			}, ()), ()),
         	development::MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
 		));
 		b.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
@@ -417,13 +415,13 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
 	    	let mut width = lparam as u16;
             let mut height = (lparam >> 16) as u16;
             let mut frame: &mut Frame = mem::transmute(ww);
-            let label_padding = frame.as_inner().label_padding;
+            let label_padding = frame.as_inner().as_inner().as_inner().label_padding;
             let (lp, tp, rp, bp) = frame.is_control().unwrap().layout_padding().into();
 	        let (lm, tm, rm, bm) = frame.is_control().unwrap().layout_margin().into();
 	        let hp = lm + rm + lp + rp;
 	    	let vp = tm + bm + tp + bp;
 		    	
-            if let Some(ref mut child) = frame.as_inner_mut().child {
+            if let Some(ref mut child) = frame.as_inner_mut().as_inner_mut().as_inner_mut().child {
                 child.measure(max(0, width as i32 - hp) as u16, max(0, height as i32 - vp) as u16);
                 child.draw(Some((lp + lm, tp + tm + label_padding))); 
             }

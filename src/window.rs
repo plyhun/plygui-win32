@@ -1,8 +1,7 @@
 use super::*;
 use super::common::*;
 
-use plygui_api::development::{MemberBase, SingleContainerInner, MemberFunctions, MemberInner, Member, SingleContainer, HasLabelInner, WindowInner, ContainerInner, HasInner};
-use plygui_api::{ids, types, traits, layout};
+use plygui_api::{ids, types, traits, layout, development};
 
 use winapi::shared::windef;
 use winapi::shared::minwindef;
@@ -28,7 +27,7 @@ pub struct WindowsWindow {
     child: Option<Box<traits::UiControl>>,
 }
 
-pub type Window = Member<SingleContainer<WindowsWindow>>;
+pub type Window = development::Member<development::SingleContainer<WindowsWindow>>;
 
 impl WindowsWindow {
     pub(crate) fn start(&mut self) {
@@ -60,7 +59,7 @@ impl WindowsWindow {
     }
 }
 
-impl HasLabelInner for WindowsWindow {
+impl development::HasLabelInner for WindowsWindow {
     fn label<'a>(&'a self) -> ::std::borrow::Cow<'a, str> {
         if self.hwnd != 0 as windef::HWND {
             let mut wbuffer = vec![0u16; 4096];
@@ -85,7 +84,7 @@ impl HasLabelInner for WindowsWindow {
     }
 }
 
-impl WindowInner for WindowsWindow {
+impl development::WindowInner for WindowsWindow {
 	fn with_params(title: &str, window_size: types::WindowStartSize, menu: types::WindowMenu) -> Box<traits::UiWindow> {
     	use plygui_api::development::HasInner;
     	
@@ -137,14 +136,14 @@ impl WindowInner for WindowsWindow {
                 .chain(Some(0).into_iter())
                 .collect::<Vec<_>>();
                 
-            let mut w: Box<Window> = Box::new(Window::new(
+            let mut w: Box<Window> = Box::new(development::Member::new(development::SingleContainer::new(
             		WindowsWindow {
 		                hwnd: 0 as windef::HWND,
 		                child: None,
 		                gravity_horizontal: Default::default(),
 					    gravity_vertical: Default::default(),    
-		            },
-            		MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
+		            }, ()),
+            		development::MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
             ));    
  
             let hwnd = winuser::CreateWindowExW(
@@ -162,13 +161,13 @@ impl WindowInner for WindowsWindow {
                 w.as_mut() as *mut _ as *mut c_void,
             );
 
-            w.as_inner_mut().hwnd = hwnd;
+            w.as_inner_mut().as_inner_mut().hwnd = hwnd;
             w
         }
     }
 }
 
-impl ContainerInner for WindowsWindow {
+impl development::ContainerInner for WindowsWindow {
     fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut traits::UiControl> {
         if let Some(child) = self.child.as_mut() {
             if let Some(c) = child.is_container_mut() {
@@ -188,7 +187,7 @@ impl ContainerInner for WindowsWindow {
     fn gravity(&self) -> (layout::Gravity, layout::Gravity) {
     	(self.gravity_horizontal, self.gravity_vertical)
     }
-    fn set_gravity(&mut self, _: &mut MemberBase, w: layout::Gravity, h: layout::Gravity) {
+    fn set_gravity(&mut self, _: &mut development::MemberBase, w: layout::Gravity, h: layout::Gravity) {
     	if self.gravity_horizontal != w || self.gravity_vertical != h {
     		self.gravity_horizontal = w;
     		self.gravity_vertical = h;
@@ -197,7 +196,7 @@ impl ContainerInner for WindowsWindow {
     }
 }
 
-impl SingleContainerInner for WindowsWindow {
+impl development::SingleContainerInner for WindowsWindow {
     fn set_child(&mut self, mut child: Option<Box<traits::UiControl>>) -> Option<Box<traits::UiControl>> {
     	use plygui_api::traits::UiSingleContainer;
     	
@@ -229,14 +228,14 @@ impl SingleContainerInner for WindowsWindow {
     }
 }
 
-impl MemberInner for WindowsWindow {
+impl development::MemberInner for WindowsWindow {
 	type Id = common::Hwnd;
 	
-    fn size(&self, _: &MemberBase) -> (u16, u16) {
+    fn size(&self, _: &development::MemberBase) -> (u16, u16) {
         self.size_inner()
     }
 
-    fn on_set_visibility(&mut self, base: &mut MemberBase) {
+    fn on_set_visibility(&mut self, base: &mut development::MemberBase) {
 	    unsafe {
             winuser::ShowWindow(
                 self.hwnd,
@@ -256,6 +255,8 @@ impl MemberInner for WindowsWindow {
 
 impl Drop for WindowsWindow {
     fn drop(&mut self) {
+    	use plygui_api::development::SingleContainerInner;
+    	
     	self.set_child(None);
     	//unsafe { common::cast_hwnd::<Window>(self.hwnd).set_visibility(types::Visibility::Gone) };
         destroy_hwnd(self.hwnd, 0, None);
@@ -298,13 +299,15 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
 
     match msg {
         winuser::WM_SIZE => {
+        	use plygui_api::development::HasInner;
+        	
         	let width = lparam as u16;
             let height = (lparam >> 16) as u16;
             let mut w: &mut window::Window = mem::transmute(ww);
 
-            w.as_inner_mut().redraw();
+            w.as_inner_mut().as_inner_mut().redraw();
             
-            ::winapi::um::winuser::InvalidateRect(w.as_inner().hwnd, ptr::null_mut(), ::winapi::shared::minwindef::TRUE);
+            ::winapi::um::winuser::InvalidateRect(w.as_inner().as_inner().hwnd, ptr::null_mut(), ::winapi::shared::minwindef::TRUE);
 
             if let Some(ref mut cb) = w.base_mut().handler_resize {
                 use plygui_api::traits::UiSingleContainer;

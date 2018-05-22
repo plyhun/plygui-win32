@@ -84,7 +84,7 @@ impl development::ApplicationInner for WindowsApplication {
 
 fn start_window(hwnd: windef::HWND) {
 	let w: &mut window::Window = common::member_from_hwnd::<window::Window>(hwnd);
-    w.as_inner_mut().start();
+    w.as_inner_mut().as_inner_mut().start();
 }
 
 fn init_comctl() {

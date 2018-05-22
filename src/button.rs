@@ -67,12 +67,12 @@ impl development::ButtonInner for WindowsButton {
     fn with_label(label: &str) -> Box<traits::UiButton> {
     	use plygui_api::traits::UiHasLayout;
     	
-        let mut b: Box<Button> = Box::new(Button::new(
+        let mut b: Box<Button> = Box::new(development::Member::new(development::Control::new(
         		WindowsButton {
 		            base: common::WindowsControlBase::new(),
 		            h_left_clicked: None,
 		            label: label.to_owned(),
-		        },
+		        }, ()),
         		development::MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
         b.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
@@ -302,7 +302,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
     }
     match msg {
         winuser::WM_LBUTTONDOWN => {
-            if let Some(ref mut cb) = button.as_inner_mut().h_left_clicked {
+            if let Some(ref mut cb) = button.as_inner_mut().as_inner_mut().h_left_clicked {
                 let mut button2: &mut Button = mem::transmute(param);
                 (cb.as_mut())(button2);
             }

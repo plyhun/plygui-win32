@@ -36,14 +36,14 @@ impl development::LinearLayoutInner for WindowsLinearLayout {
 	fn with_orientation(orientation: layout::Orientation) -> Box<traits::UiLinearLayout> {
 		use plygui_api::traits::UiHasLayout;
 		
-		let mut b = Box::new(LinearLayout::new(
+		let mut b = Box::new(development::Member::new(development::Control::new(development::MultiContainer::new(
 			WindowsLinearLayout {
 				base: WindowsControlBase::new(),
 				gravity_horizontal: Default::default(),
 			    gravity_vertical: Default::default(),
 			    orientation: orientation,
 				children: Vec::new(),
-			},
+			},()), ()),
 			development::MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
 		));
 		b.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
@@ -419,7 +419,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
 	    	let mut width = lparam as u16;
             let mut height = (lparam >> 16) as u16;
             let mut ll: &mut LinearLayout = mem::transmute(ww);
-            let o = ll.as_inner().orientation;
+            let o = ll.as_inner().as_inner().as_inner().orientation;
 			let (lp, tp, rp, bp) = ll.is_control().unwrap().layout_padding().into();
 	        let (lm, tm, rm, bm) = ll.is_control().unwrap().layout_margin().into();
 	        let hp = lm + rm + lp + rp;
@@ -427,7 +427,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
 	    	
             let mut x = 0;
             let mut y = 0;
-            for child in ll.as_inner_mut().children.as_mut_slice() {
+            for child in ll.as_inner_mut().as_inner_mut().as_inner_mut().children.as_mut_slice() {
             	let (cw, ch, _) = child.measure(max(0, width as i32 - hp) as u16, max(0, height as i32 - vp) as u16);
                 child.draw(Some((x + lp + lm, y + tp + tm))); 
                 match o {
