@@ -172,6 +172,7 @@ impl development::ControlInner for WindowsFrame {
                                         ptr::null_mut(),
                                         common::hinstance(),
                                         ptr::null_mut());
+	        common::set_default_font(hwnd_gbox);
 	        (hwnd, hwnd_gbox, id)
         };
         self.base.hwnd = hwnd;
@@ -216,7 +217,7 @@ impl development::ControlInner for WindowsFrame {
                                Frame,
                                [MEMBER_TYPE_FRAME]);
         fill_from_markup_label!(self, markup);
-        fill_from_markup_child!(self, markup, registry);
+        fill_from_markup_child!(self, markup, registry);	
     }
 }
 

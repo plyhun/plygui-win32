@@ -10,11 +10,34 @@ use winapi::shared::windef;
 use winapi::shared::minwindef;
 use winapi::shared::ntdef;
 use winapi::um::winuser;
+use winapi::um::wingdi;
 use winapi::um::winbase;
 use winapi::um::commctrl;
 use winapi::um::errhandlingapi;
 use winapi::um::libloaderapi;
 
+#[inline]
+fn hfont() -> windef::HFONT { 
+	*HFONT as *mut c_void as windef::HFONT 
+}
+lazy_static! {
+	static ref HFONT: usize = unsafe { 
+		let mut ncm: winuser::NONCLIENTMETRICSW = mem::zeroed();
+		let size = mem::size_of::<winuser::NONCLIENTMETRICSW>() as u32;
+		ncm.cbSize = size;
+		if winuser::SystemParametersInfoW(winuser::SPI_GETNONCLIENTMETRICS, size, &mut ncm as *mut _ as *mut ::winapi::ctypes::c_void, size) == 0 {
+			return 0;
+		}
+		let hfont = wingdi::CreateFontIndirectW(&mut ncm.lfMessageFont);
+		if hfont.is_null() {
+			log_error();
+		}
+		hfont as usize 
+		// TODO cleanup!
+	};
+}
+
+#[inline]
 pub fn hinstance() -> minwindef::HINSTANCE {
     *INSTANCE as *mut c_void as minwindef::HINSTANCE
 }
@@ -184,7 +207,13 @@ pub unsafe fn create_control_hwnd(
     	panic!("Cannot create window {}", control_name);
     }
     commctrl::SetWindowSubclass(hwnd, handler, subclass_id as usize, param as usize);
+    set_default_font(hwnd);
     (hwnd, subclass_id as usize)
+}
+
+#[inline]
+pub unsafe fn set_default_font(hwnd: windef::HWND) {
+	winuser::SendMessageW(hwnd, winuser::WM_SETFONT, hfont() as usize, minwindef::TRUE as isize);
 }
 
 pub fn destroy_hwnd(
@@ -210,21 +239,25 @@ pub fn destroy_hwnd(
     }
 }
 
+#[inline]
 pub unsafe fn window_rect(hwnd: windef::HWND) -> windef::RECT {
     let mut rect: windef::RECT = mem::zeroed();
     winuser::GetClientRect(hwnd, &mut rect);
     rect
 }
 
+#[inline]
 unsafe fn cast_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T
-where T: Sized// + UiMember,
+where T: Sized
 {
     let hwnd_ptr = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     mem::transmute(hwnd_ptr as *mut c_void)
 }
+#[inline]
 pub fn member_from_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T where T: Sized + UiMember {
     unsafe { cast_hwnd(hwnd) }
 }
+#[inline]
 pub fn member_base_from_hwnd<'a>(hwnd: windef::HWND) -> &'a mut development::MemberBase {
     unsafe { cast_hwnd(hwnd) }
 }
@@ -256,14 +289,3 @@ pub unsafe fn log_error() {
         String::from_utf16_lossy(&string)
     );
 }
-
-/*#[macro_export]
-macro_rules! impl_invalidate {
-	($typ: ty) => {
-		unsafe fn invalidate_impl(this: &mut common::WindowsControlBase) {
-			use plygui_api::development::UiDrawable;
-			
-			
-		}
-	}
-}*/

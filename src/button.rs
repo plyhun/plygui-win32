@@ -140,12 +140,7 @@ impl development::ControlInner for WindowsButton {
             [MEMBER_TYPE_BUTTON]
         );
         fill_from_markup_label!(self, markup);
-        //fill_from_markup_callbacks!(self, markup, registry, ["on_left_click" => FnMut(&mut UiButton)]);
-
-        if let Some(on_left_click) = markup.attributes.get("on_click") {
-            let callback: callbacks::Click = registry.pop_callback(on_left_click.as_attribute()).unwrap();
-            self.on_click(Some(callback));
-        }
+        fill_from_markup_callbacks!(self, markup, registry, [on_click => plygui_api::callbacks::Click]);
     }
 }
 

@@ -37,4 +37,8 @@ pub fn register_members(registry: &mut plygui_api::markup::MarkupRegistry) {
         .register_member(plygui_api::markup::MEMBER_TYPE_LINEAR_LAYOUT.into(),
                          layout_linear::spawn)
         .unwrap();
+    registry
+        .register_member(plygui_api::markup::MEMBER_TYPE_FRAME.into(),
+                         frame::spawn)
+        .unwrap();    
 }
