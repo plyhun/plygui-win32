@@ -22,7 +22,7 @@ pub type Application = development::Application<WindowsApplication>;
 impl development::ApplicationInner for WindowsApplication {
 	fn with_name(name: &str) -> Box<traits::UiApplication> {
         init_comctl();
-        let a: Box<traits::UiApplication> = Box::new(development::Application::new(WindowsApplication {
+        let a: Box<traits::UiApplication> = Box::new(development::Application::with_inner(WindowsApplication {
 	            name: name.into(),
 	            windows: Vec::with_capacity(1),
 	        }, ()));

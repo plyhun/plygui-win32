@@ -36,7 +36,7 @@ impl development::LinearLayoutInner for WindowsLinearLayout {
 	fn with_orientation(orientation: layout::Orientation) -> Box<traits::UiLinearLayout> {
 		use plygui_api::traits::UiHasLayout;
 		
-		let mut b = Box::new(development::Member::new(development::Control::new(development::MultiContainer::new(
+		let mut b = Box::new(development::Member::with_inner(development::Control::with_inner(development::MultiContainer::with_inner(
 			WindowsLinearLayout {
 				base: WindowsControlBase::new(),
 				gravity_horizontal: Default::default(),

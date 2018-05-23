@@ -136,7 +136,7 @@ impl development::WindowInner for WindowsWindow {
                 .chain(Some(0).into_iter())
                 .collect::<Vec<_>>();
                 
-            let mut w: Box<Window> = Box::new(development::Member::new(development::SingleContainer::new(
+            let mut w: Box<Window> = Box::new(development::Member::with_inner(development::SingleContainer::with_inner(
             		WindowsWindow {
 		                hwnd: 0 as windef::HWND,
 		                child: None,

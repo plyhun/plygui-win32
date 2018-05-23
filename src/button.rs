@@ -67,7 +67,7 @@ impl development::ButtonInner for WindowsButton {
     fn with_label(label: &str) -> Box<traits::UiButton> {
     	use plygui_api::traits::UiHasLayout;
     	
-        let mut b: Box<Button> = Box::new(development::Member::new(development::Control::new(
+        let mut b: Box<Button> = Box::new(development::Member::with_inner(development::Control::with_inner(
         		WindowsButton {
 		            base: common::WindowsControlBase::new(),
 		            h_left_clicked: None,

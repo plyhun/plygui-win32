@@ -42,7 +42,7 @@ impl development::FrameInner for WindowsFrame {
 	fn with_label(label: &str) -> Box<traits::UiFrame> {
 		use plygui_api::traits::UiHasLayout;
 		
-		let mut b = Box::new(development::Member::new(development::Control::new(development::SingleContainer::new(
+		let mut b = Box::new(development::Member::with_inner(development::Control::with_inner(development::SingleContainer::with_inner(
 			WindowsFrame {
 				base: common::WindowsControlBase::new(),
 				child: None,
