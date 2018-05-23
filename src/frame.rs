@@ -206,15 +206,17 @@ impl development::ControlInner for WindowsFrame {
     }
     
     #[cfg(feature = "markup")]
-    fn fill_from_markup(&mut self, base: &mut MemberControlBase, markup: &super::markup::Markup, registry: &mut super::markup::MarkupRegistry) {
+    fn fill_from_markup(&mut self, base: &mut development::MemberControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
     	use plygui_api::markup::MEMBER_TYPE_FRAME;
 
         fill_from_markup_base!(self,
+					           base,
                                markup,
                                registry,
                                Frame,
-                               [MEMBER_ID_FRAME, MEMBER_TYPE_FRAME]);
+                               [MEMBER_TYPE_FRAME]);
         fill_from_markup_label!(self, markup);
+        fill_from_markup_child!(self, markup, registry);
     }
 }
 

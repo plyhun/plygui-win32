@@ -156,15 +156,16 @@ impl development::ControlInner for WindowsLinearLayout {
     }
     
     #[cfg(feature = "markup")]
-    fn fill_from_markup(&mut self, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
+    fn fill_from_markup(&mut self, base: &mut development::MemberControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
         use plygui_api::markup::MEMBER_TYPE_LINEAR_LAYOUT;
 
         fill_from_markup_base!(
             self,
+            base,
             markup,
             registry,
             LinearLayout,
-            [MEMBER_ID_LAYOUT_LINEAR, MEMBER_TYPE_LINEAR_LAYOUT]
+            [MEMBER_TYPE_LINEAR_LAYOUT]
         );
         fill_from_markup_children!(self, markup, registry);
     }
