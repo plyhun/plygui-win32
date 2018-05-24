@@ -1,7 +1,7 @@
 use super::*;
 
-use plygui_api::{layout, types, development, ids, traits, utils};
-use plygui_api::development::{Drawable, HasInner};
+use plygui_api::{layout, types, ids, traits, utils};
+use plygui_api::development::*;
 
 use winapi::shared::windef;
 use winapi::shared::minwindef;
@@ -25,11 +25,11 @@ lazy_static! {
     pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };    
 }
 
-pub type Frame = development::Member<development::Control<development::SingleContainer<WindowsFrame>>>;
+pub type Frame = Member<Control<SingleContainer<WindowsFrame>>>;
 
 #[repr(C)]
 pub struct WindowsFrame {
-    base: common::WindowsControlBase,
+    base: common::WindowsControlBase<Frame>,
     hwnd_gbox: windef::HWND,
     label: String,
     label_padding: i32,
@@ -38,11 +38,11 @@ pub struct WindowsFrame {
     child: Option<Box<traits::UiControl>>,
 }
 
-impl development::FrameInner for WindowsFrame {
+impl FrameInner for WindowsFrame {
 	fn with_label(label: &str) -> Box<traits::UiFrame> {
 		use plygui_api::traits::UiHasLayout;
 		
-		let mut b = Box::new(development::Member::with_inner(development::Control::with_inner(development::SingleContainer::with_inner(
+		let mut b = Box::new(Member::with_inner(Control::with_inner(SingleContainer::with_inner(
 			WindowsFrame {
 				base: common::WindowsControlBase::new(),
 				child: None,
@@ -52,27 +52,28 @@ impl development::FrameInner for WindowsFrame {
 			    label: label.to_owned(),
                 label_padding: 0,
 			}, ()), ()),
-        	development::MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
+        	MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
 		));
 		b.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
         b
 	}
 }
 
-impl development::HasLayoutInner for WindowsFrame {
-	fn on_layout_changed(&mut self, _: &mut layout::Attributes) {
+impl HasLayoutInner for WindowsFrame {
+	fn on_layout_changed(&mut self, base: &mut MemberBase) {
 		let hwnd = self.base.hwnd;
         if !hwnd.is_null() {
-			self.invalidate(utils::member_control_base_mut(common::member_from_hwnd::<LinearLayout>(hwnd)));
+        	let base = self.cast_base_mut(base);
+			self.invalidate(base);
 		}
 	}
 }
 
-impl development::HasLabelInner for WindowsFrame {
+impl HasLabelInner for WindowsFrame {
 	fn label<'a>(&'a self) -> ::std::borrow::Cow<'a, str> {
 		Cow::Borrowed(self.label.as_ref())
 	}
-    fn set_label(&mut self, label: &str) {
+    fn set_label(&mut self, base: &mut MemberBase, label: &str) {
     	self.label = label.into();
         let hwnd = self.base.hwnd;
         if !hwnd.is_null() {
@@ -83,16 +84,37 @@ impl development::HasLabelInner for WindowsFrame {
             unsafe {
                 winuser::SetWindowTextW(self.base.hwnd, control_name.as_ptr());
             }
-            self.invalidate(utils::member_control_base_mut(common::member_from_hwnd::<Button>(hwnd)));
+            let base = self.cast_base_mut(base);
+			self.invalidate(base);
         }
     }
 }
 
-impl development::SingleContainerInner for WindowsFrame {
-	fn set_child(&mut self, child: Option<Box<traits::UiControl>>) -> Option<Box<traits::UiControl>> {
-		let old = self.child.take();
+impl SingleContainerInner for WindowsFrame {
+	fn set_child(&mut self, base: &mut MemberBase, child: Option<Box<traits::UiControl>>) -> Option<Box<traits::UiControl>> {
+		let mut old = self.child.take();
+		if let Some(old) = old.as_mut() {
+			if !self.base.hwnd.is_null() {
+	        	old.on_removed_from_container(common::member_from_hwnd::<Frame>(self.base.hwnd));
+		    }
+		}
+		
         self.child = child;
-
+        
+        if self.child.is_some() {
+        	if !self.base.hwnd.is_null() {
+	        	let (w, h) = self.size();
+	        	let base = self.cast_base_mut(base);
+	        	let (_, _, rp, bp) = base.control.layout.padding.into();
+		        let (_, _, rm, bm) = base.control.layout.margin.into();
+		        if let Some(new) = self.child.as_mut() {
+		        	new.as_mut().on_added_to_container(common::member_from_hwnd::<Frame>(self.base.hwnd), w as i32 - rp - rm, h as i32 - bp - bm);
+		        }
+		    }
+        }
+        let base = self.cast_base_mut(base);
+		self.invalidate(base);
+		
         old
 	}
     fn child(&self) -> Option<&traits::UiControl> {
@@ -108,7 +130,7 @@ impl development::SingleContainerInner for WindowsFrame {
     }
 }
 
-impl development::ContainerInner for WindowsFrame {
+impl ContainerInner for WindowsFrame {
 	fn find_control_by_id_mut(&mut self, id: ids::Id) -> Option<&mut traits::UiControl> {
 		if let Some(child) = self.child.as_mut() {
             if let Some(c) = child.is_container_mut() {
@@ -129,7 +151,7 @@ impl development::ContainerInner for WindowsFrame {
     fn gravity(&self) -> (layout::Gravity, layout::Gravity) {
     	(self.gravity_horizontal, self.gravity_vertical)
     }
-    fn set_gravity(&mut self, base: &mut development::MemberBase, w: layout::Gravity, h: layout::Gravity) {
+    fn set_gravity(&mut self, base: &mut MemberBase, w: layout::Gravity, h: layout::Gravity) {
     	if self.gravity_horizontal != w || self.gravity_vertical != h {
     		self.gravity_horizontal = w;
     		self.gravity_vertical = h;
@@ -138,8 +160,8 @@ impl development::ContainerInner for WindowsFrame {
     }
 }
 
-impl development::ControlInner for WindowsFrame {
-	fn on_added_to_container(&mut self, base: &mut development::MemberControlBase, parent: &traits::UiContainer, px: i32, py: i32) {
+impl ControlInner for WindowsFrame {
+	fn on_added_to_container(&mut self, base: &mut MemberControlBase, parent: &traits::UiContainer, px: i32, py: i32) {
 		let selfptr = base as *mut _ as *mut c_void;
         let (pw, ph) = parent.draw_area_size();
         let (lm, tm, rm, bm) = base.control.layout.margin.into();
@@ -181,11 +203,15 @@ impl development::ControlInner for WindowsFrame {
         self.base.coords = Some((px, py));
         if let Some(ref mut child) = self.child {
         	let (lp, tp, _, _) = base.control.layout.padding.into();
-	        let self2: &mut Frame = unsafe { &mut *(selfptr as *mut Frame) };
+	        let self2: &mut Frame = unsafe { utils::base_to_impl_mut(&mut base.member) };
         	child.on_added_to_container(self2, lm + lp, tm + tp + self.label_padding);
         }
 	}
-    fn on_removed_from_container(&mut self, _: &mut development::MemberControlBase, _: &traits::UiContainer) {
+    fn on_removed_from_container(&mut self, base: &mut MemberControlBase, _: &traits::UiContainer) {
+    	if let Some(ref mut child) = self.child {
+        	let self2: &mut Frame = unsafe { utils::base_to_impl_mut(&mut base.member) };
+        	child.on_removed_from_container(self2);
+        }
     	common::destroy_hwnd(self.hwnd_gbox, 0, None);
         common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, None);
         self.base.hwnd = 0 as windef::HWND;
@@ -207,7 +233,7 @@ impl development::ControlInner for WindowsFrame {
     }
     
     #[cfg(feature = "markup")]
-    fn fill_from_markup(&mut self, base: &mut development::MemberControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
+    fn fill_from_markup(&mut self, base: &mut MemberControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
     	use plygui_api::markup::MEMBER_TYPE_FRAME;
 
         fill_from_markup_base!(self,
@@ -216,15 +242,15 @@ impl development::ControlInner for WindowsFrame {
                                registry,
                                Frame,
                                [MEMBER_TYPE_FRAME]);
-        fill_from_markup_label!(self, markup);
-        fill_from_markup_child!(self, markup, registry);	
+        fill_from_markup_label!(self, &mut base.member, markup);
+        fill_from_markup_child!(self, &mut base.member, markup, registry);	
     }
 }
 
-impl development::MemberInner for WindowsFrame {
+impl MemberInner for WindowsFrame {
 	type Id = common::Hwnd;
 	
-	fn size(&self, _: &development::MemberBase) -> (u16, u16) {
+	fn size(&self) -> (u16, u16) {
         let rect = unsafe { common::window_rect(self.base.hwnd) };
         (
             (rect.right - rect.left) as u16,
@@ -232,7 +258,7 @@ impl development::MemberInner for WindowsFrame {
         )
     }
 
-    fn on_set_visibility(&mut self, base: &mut development::MemberBase) {
+    fn on_set_visibility(&mut self, base: &mut MemberBase) {
 	    let hwnd = self.base.hwnd;
         if !hwnd.is_null() {
 		    unsafe {
@@ -253,8 +279,8 @@ impl development::MemberInner for WindowsFrame {
     }
 }
 
-impl development::Drawable for WindowsFrame {
-	fn draw(&mut self, base: &mut development::MemberControlBase, coords: Option<(i32, i32)>) {
+impl Drawable for WindowsFrame {
+	fn draw(&mut self, base: &mut MemberControlBase, coords: Option<(i32, i32)>) {
 		if coords.is_some() {
             self.base.coords = coords;
         }
@@ -283,7 +309,7 @@ impl development::Drawable for WindowsFrame {
             }
         }
 	}
-    fn measure(&mut self, base: &mut development::MemberControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+    fn measure(&mut self, base: &mut MemberControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
     	use std::cmp::max;
     	
     	let old_size = self.base.measured_size;
@@ -351,24 +377,8 @@ impl development::Drawable for WindowsFrame {
             self.base.measured_size != old_size,
         )
     }
-    fn invalidate(&mut self, _: &mut development::MemberControlBase) {
-    	let parent_hwnd = self.base.parent_hwnd();	
-		if let Some(parent_hwnd) = parent_hwnd {
-			let mparent = common::member_base_from_hwnd(parent_hwnd);
-			let (pw, ph) = mparent.as_member().size();
-			let this = common::member_from_hwnd::<Button>(self.base.hwnd);
-			let (_,_,changed) = self.measure(utils::member_control_base_mut(this), pw, ph);
-			self.draw(utils::member_control_base_mut(this), None);		
-					
-			if let Some(cparent) = mparent.as_member_mut().is_control_mut() {
-				if changed {
-					cparent.invalidate();
-				} 
-			}
-			if parent_hwnd != 0 as ::winapi::shared::windef::HWND {
-	    		unsafe { ::winapi::um::winuser::InvalidateRect(parent_hwnd, ptr::null_mut(), ::winapi::shared::minwindef::TRUE); }
-	    	}
-	    }
+    fn invalidate(&mut self, base: &mut MemberControlBase) {
+    	self.base.invalidate(base)
     }
 }
 

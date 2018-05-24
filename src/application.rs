@@ -3,11 +3,10 @@ use super::*;
 use std::{mem, thread};
 use std::borrow::Cow;
 
-use plygui_api::development::HasInner;
 use plygui_api::traits;
 use plygui_api::types;
 use plygui_api::ids::Id;
-use plygui_api::development;
+use plygui_api::development::*;
 
 use winapi::shared::windef;
 use winapi::um::commctrl;
@@ -17,21 +16,19 @@ pub struct WindowsApplication {
     windows: Vec<windef::HWND>,
 }
 
-pub type Application = development::Application<WindowsApplication>;
+pub type Application = ::plygui_api::development::Application<WindowsApplication>;
 
-impl development::ApplicationInner for WindowsApplication {
+impl ApplicationInner for WindowsApplication {
 	fn with_name(name: &str) -> Box<traits::UiApplication> {
         init_comctl();
-        let a: Box<traits::UiApplication> = Box::new(development::Application::with_inner(WindowsApplication {
+        let a: Box<traits::UiApplication> = Box::new(Application::with_inner(WindowsApplication {
 	            name: name.into(),
 	            windows: Vec::with_capacity(1),
 	        }, ()));
         a
     }
     fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::WindowMenu) -> Box<traits::UiWindow> {
-    	use plygui_api::development::{MemberInner, HasInner, WindowInner};
-    	
-        let mut w = window::WindowsWindow::with_params(title, size, menu);
+    	let mut w = window::WindowsWindow::with_params(title, size, menu);
         unsafe {
             self.windows.push(w.as_single_container_mut().as_container_mut().as_member_mut().as_any_mut().downcast_mut::<window::Window>().unwrap().as_inner_mut().native_id().into());
         }

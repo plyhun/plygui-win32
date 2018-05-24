@@ -1,7 +1,8 @@
 use super::*;
 use super::common::*;
 
-use plygui_api::{ids, types, traits, layout, development};
+use plygui_api::{ids, types, traits, layout};
+use plygui_api::development::*;
 
 use winapi::shared::windef;
 use winapi::shared::minwindef;
@@ -27,14 +28,16 @@ pub struct WindowsWindow {
     child: Option<Box<traits::UiControl>>,
 }
 
-pub type Window = development::Member<development::SingleContainer<WindowsWindow>>;
+pub type Window = Member<SingleContainer<WindowsWindow>>;
 
 impl WindowsWindow {
     pub(crate) fn start(&mut self) {
         loop {
             unsafe {
                 let mut msg: winuser::MSG = mem::zeroed();
-                if winuser::GetMessageW(&mut msg, ptr::null_mut(), 0, 0) <= 0 {
+                let status = winuser::GetMessageW(&mut msg, self.hwnd, 0, 0);
+                if status <= 0 {
+                	//println!("break caused by {:?}", status);
                     break;
                 } else {
                     winuser::TranslateMessage(&mut msg);
@@ -59,7 +62,7 @@ impl WindowsWindow {
     }
 }
 
-impl development::HasLabelInner for WindowsWindow {
+impl HasLabelInner for WindowsWindow {
     fn label<'a>(&'a self) -> ::std::borrow::Cow<'a, str> {
         if self.hwnd != 0 as windef::HWND {
             let mut wbuffer = vec![0u16; 4096];
@@ -71,7 +74,7 @@ impl development::HasLabelInner for WindowsWindow {
             panic!("Unattached window!");
         }
     }
-    fn set_label(&mut self, label: &str) {
+    fn set_label(&mut self, _: &mut MemberBase, label: &str) {
         if self.hwnd != 0 as windef::HWND {
             let control_name = OsStr::new(label)
                 .encode_wide()
@@ -84,11 +87,9 @@ impl development::HasLabelInner for WindowsWindow {
     }
 }
 
-impl development::WindowInner for WindowsWindow {
+impl WindowInner for WindowsWindow {
 	fn with_params(title: &str, window_size: types::WindowStartSize, menu: types::WindowMenu) -> Box<traits::UiWindow> {
-    	use plygui_api::development::HasInner;
-    	
-        unsafe {
+    	unsafe {
             let mut rect = match window_size {
                 types::WindowStartSize::Exact(width, height) => windef::RECT {
                     left: 0,
@@ -136,14 +137,14 @@ impl development::WindowInner for WindowsWindow {
                 .chain(Some(0).into_iter())
                 .collect::<Vec<_>>();
                 
-            let mut w: Box<Window> = Box::new(development::Member::with_inner(development::SingleContainer::with_inner(
+            let mut w: Box<Window> = Box::new(Member::with_inner(SingleContainer::with_inner(
             		WindowsWindow {
 		                hwnd: 0 as windef::HWND,
 		                child: None,
 		                gravity_horizontal: Default::default(),
 					    gravity_vertical: Default::default(),    
 		            }, ()),
-            		development::MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
+            		MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
             ));    
  
             let hwnd = winuser::CreateWindowExW(
@@ -167,7 +168,7 @@ impl development::WindowInner for WindowsWindow {
     }
 }
 
-impl development::ContainerInner for WindowsWindow {
+impl ContainerInner for WindowsWindow {
     fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut traits::UiControl> {
         if let Some(child) = self.child.as_mut() {
             if let Some(c) = child.is_container_mut() {
@@ -187,7 +188,7 @@ impl development::ContainerInner for WindowsWindow {
     fn gravity(&self) -> (layout::Gravity, layout::Gravity) {
     	(self.gravity_horizontal, self.gravity_vertical)
     }
-    fn set_gravity(&mut self, _: &mut development::MemberBase, w: layout::Gravity, h: layout::Gravity) {
+    fn set_gravity(&mut self, _: &mut MemberBase, w: layout::Gravity, h: layout::Gravity) {
     	if self.gravity_horizontal != w || self.gravity_vertical != h {
     		self.gravity_horizontal = w;
     		self.gravity_vertical = h;
@@ -196,8 +197,8 @@ impl development::ContainerInner for WindowsWindow {
     }
 }
 
-impl development::SingleContainerInner for WindowsWindow {
-    fn set_child(&mut self, mut child: Option<Box<traits::UiControl>>) -> Option<Box<traits::UiControl>> {
+impl SingleContainerInner for WindowsWindow {
+    fn set_child(&mut self, _: &mut MemberBase, mut child: Option<Box<traits::UiControl>>) -> Option<Box<traits::UiControl>> {
     	use plygui_api::traits::UiSingleContainer;
     	
     	let mut old = self.child.take();
@@ -228,14 +229,14 @@ impl development::SingleContainerInner for WindowsWindow {
     }
 }
 
-impl development::MemberInner for WindowsWindow {
+impl MemberInner for WindowsWindow {
 	type Id = common::Hwnd;
 	
-    fn size(&self, _: &development::MemberBase) -> (u16, u16) {
+    fn size(&self) -> (u16, u16) {
         self.size_inner()
     }
 
-    fn on_set_visibility(&mut self, base: &mut development::MemberBase) {
+    fn on_set_visibility(&mut self, base: &mut MemberBase) {
 	    unsafe {
             winuser::ShowWindow(
                 self.hwnd,
@@ -255,11 +256,9 @@ impl development::MemberInner for WindowsWindow {
 
 impl Drop for WindowsWindow {
     fn drop(&mut self) {
-    	use plygui_api::development::SingleContainerInner;
-    	
-    	self.set_child(None);
-    	//unsafe { common::cast_hwnd::<Window>(self.hwnd).set_visibility(types::Visibility::Gone) };
-        destroy_hwnd(self.hwnd, 0, None);
+    	let self2 = common::member_from_hwnd::<Window>(self.hwnd);
+    	self.set_child(self2.base_mut(), None);
+    	destroy_hwnd(self.hwnd, 0, None);
     }
 }
 
@@ -299,8 +298,6 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
 
     match msg {
         winuser::WM_SIZE => {
-        	use plygui_api::development::HasInner;
-        	
         	let width = lparam as u16;
             let height = (lparam >> 16) as u16;
             let mut w: &mut window::Window = mem::transmute(ww);

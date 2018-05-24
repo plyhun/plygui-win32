@@ -2,9 +2,9 @@ use std::{ptr, mem, str};
 use std::os::raw::c_void;
 use std::os::windows::ffi::OsStrExt;
 use std::ffi::OsStr;
+use std::marker::PhantomData;
 
-use plygui_api::development;
-use plygui_api::traits::{UiMember, UiContainer};
+use plygui_api::{traits, development};
 
 use winapi::shared::windef;
 use winapi::shared::minwindef;
@@ -66,20 +66,22 @@ impl From<Hwnd> for usize {
 impl development::NativeId for Hwnd {}
 
 #[repr(C)]
-pub struct WindowsControlBase {
+pub struct WindowsControlBase<T: traits::UiControl + Sized> {
 	pub hwnd: windef::HWND,
     pub subclass_id: usize,
     pub coords: Option<(i32, i32)>,
     pub measured_size: (u16, u16),
+    _marker: PhantomData<T>
 }
 
-impl WindowsControlBase {
-    pub fn new() -> WindowsControlBase {
+impl <T: traits::UiControl + Sized> WindowsControlBase<T> {
+    pub fn new() -> WindowsControlBase<T> {
         WindowsControlBase {
             hwnd: 0 as windef::HWND,
             subclass_id: 0,
             measured_size: (0, 0),
             coords: None,
+            _marker: PhantomData
         }
     }
 
@@ -137,10 +139,25 @@ impl WindowsControlBase {
             mem::transmute(parent_ptr as *mut c_void)
         }
     }
-}
-
-pub unsafe trait WindowsContainer: UiContainer + UiMember {
-    unsafe fn hwnd(&self) -> windef::HWND;
+    pub fn invalidate(&mut self, _: &mut development::MemberControlBase) {
+    	let parent_hwnd = self.parent_hwnd();	
+		if let Some(parent_hwnd) = parent_hwnd {
+			let mparent = member_base_from_hwnd(parent_hwnd);
+			let (pw, ph) = mparent.as_member().size();
+			let this = member_from_hwnd::<T>(self.hwnd);
+			let (_,_,changed) = this.measure(pw, ph);
+			this.draw(None);		
+					
+			if let Some(cparent) = mparent.as_member_mut().is_control_mut() {
+				if changed {
+					cparent.invalidate();
+				} 
+			}
+			if parent_hwnd != 0 as ::winapi::shared::windef::HWND {
+	    		unsafe { ::winapi::um::winuser::InvalidateRect(parent_hwnd, ptr::null_mut(), ::winapi::shared::minwindef::TRUE); }
+	    	}
+	    }
+    }
 }
 
 pub unsafe fn get_class_name_by_hwnd(hwnd: windef::HWND) -> Vec<u16> {
@@ -254,7 +271,7 @@ where T: Sized
     mem::transmute(hwnd_ptr as *mut c_void)
 }
 #[inline]
-pub fn member_from_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T where T: Sized + UiMember {
+pub fn member_from_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T where T: Sized + traits::UiMember {
     unsafe { cast_hwnd(hwnd) }
 }
 #[inline]
