@@ -3,7 +3,7 @@ use super::*;
 use std::{mem, thread};
 use std::borrow::Cow;
 
-use plygui_api::traits;
+use plygui_api::controls;
 use plygui_api::types;
 use plygui_api::ids::Id;
 use plygui_api::development::*;
@@ -19,15 +19,15 @@ pub struct WindowsApplication {
 pub type Application = ::plygui_api::development::Application<WindowsApplication>;
 
 impl ApplicationInner for WindowsApplication {
-	fn with_name(name: &str) -> Box<traits::UiApplication> {
+	fn with_name(name: &str) -> Box<controls::Application> {
         init_comctl();
-        let a: Box<traits::UiApplication> = Box::new(Application::with_inner(WindowsApplication {
+        let a: Box<controls::Application> = Box::new(Application::with_inner(WindowsApplication {
 	            name: name.into(),
 	            windows: Vec::with_capacity(1),
 	        }, ()));
         a
     }
-    fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::WindowMenu) -> Box<traits::UiWindow> {
+    fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::WindowMenu) -> Box<controls::Window> {
     	let mut w = window::WindowsWindow::with_params(title, size, menu);
         unsafe {
             self.windows.push(w.as_single_container_mut().as_container_mut().as_member_mut().as_any_mut().downcast_mut::<window::Window>().unwrap().as_inner_mut().native_id().into());
@@ -46,8 +46,8 @@ impl ApplicationInner for WindowsApplication {
             }
         }
     }
-    fn find_member_by_id_mut(&mut self, id: Id) -> Option<&mut traits::UiMember> {
-    	use plygui_api::traits::{UiSingleContainer, UiMember, UiContainer};
+    fn find_member_by_id_mut(&mut self, id: Id) -> Option<&mut controls::Member> {
+    	use plygui_api::controls::{SingleContainer, Member, Container};
     	
         for window in self.windows.as_mut_slice() {
             let window: &mut window::Window = common::member_from_hwnd::<window::Window>(*window);
@@ -61,8 +61,8 @@ impl ApplicationInner for WindowsApplication {
         }
         None
     }
-    fn find_member_by_id(&self, id: Id) -> Option<&traits::UiMember> {
-        use plygui_api::traits::{UiSingleContainer, UiMember, UiContainer};
+    fn find_member_by_id(&self, id: Id) -> Option<&controls::Member> {
+        use plygui_api::controls::{SingleContainer, Member, Container};
     	
     	for window in self.windows.as_slice() {
             let window: &mut window::Window = common::member_from_hwnd::<window::Window>(*window);

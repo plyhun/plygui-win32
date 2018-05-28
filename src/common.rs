@@ -4,7 +4,7 @@ use std::os::windows::ffi::OsStrExt;
 use std::ffi::OsStr;
 use std::marker::PhantomData;
 
-use plygui_api::{traits, development};
+use plygui_api::{controls, development};
 
 use winapi::shared::windef;
 use winapi::shared::minwindef;
@@ -66,7 +66,7 @@ impl From<Hwnd> for usize {
 impl development::NativeId for Hwnd {}
 
 #[repr(C)]
-pub struct WindowsControlBase<T: traits::UiControl + Sized> {
+pub struct WindowsControlBase<T: controls::Control + Sized> {
 	pub hwnd: windef::HWND,
     pub subclass_id: usize,
     pub coords: Option<(i32, i32)>,
@@ -74,7 +74,7 @@ pub struct WindowsControlBase<T: traits::UiControl + Sized> {
     _marker: PhantomData<T>
 }
 
-impl <T: traits::UiControl + Sized> WindowsControlBase<T> {
+impl <T: controls::Control + Sized> WindowsControlBase<T> {
     pub fn new() -> WindowsControlBase<T> {
         WindowsControlBase {
             hwnd: 0 as windef::HWND,
@@ -271,7 +271,7 @@ where T: Sized
     mem::transmute(hwnd_ptr as *mut c_void)
 }
 #[inline]
-pub fn member_from_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T where T: Sized + traits::UiMember {
+pub fn member_from_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T where T: Sized + controls::Member {
     unsafe { cast_hwnd(hwnd) }
 }
 #[inline]

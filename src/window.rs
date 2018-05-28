@@ -1,7 +1,7 @@
 use super::*;
 use super::common::*;
 
-use plygui_api::{ids, types, traits, layout};
+use plygui_api::{ids, types, controls, layout};
 use plygui_api::development::*;
 
 use winapi::shared::windef;
@@ -25,7 +25,7 @@ pub struct WindowsWindow {
     hwnd: windef::HWND,
     gravity_horizontal: layout::Gravity,
     gravity_vertical: layout::Gravity,
-    child: Option<Box<traits::UiControl>>,
+    child: Option<Box<controls::Control>>,
 }
 
 pub type Window = Member<SingleContainer<WindowsWindow>>;
@@ -88,7 +88,7 @@ impl HasLabelInner for WindowsWindow {
 }
 
 impl WindowInner for WindowsWindow {
-	fn with_params(title: &str, window_size: types::WindowStartSize, menu: types::WindowMenu) -> Box<traits::UiWindow> {
+	fn with_params(title: &str, window_size: types::WindowStartSize, menu: types::WindowMenu) -> Box<controls::Window> {
     	unsafe {
             let mut rect = match window_size {
                 types::WindowStartSize::Exact(width, height) => windef::RECT {
@@ -169,7 +169,7 @@ impl WindowInner for WindowsWindow {
 }
 
 impl ContainerInner for WindowsWindow {
-    fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut traits::UiControl> {
+    fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut controls::Control> {
         if let Some(child) = self.child.as_mut() {
             if let Some(c) = child.is_container_mut() {
                 return c.find_control_by_id_mut(id_);
@@ -177,7 +177,7 @@ impl ContainerInner for WindowsWindow {
         }
         None
     }
-    fn find_control_by_id(&self, id_: ids::Id) -> Option<&traits::UiControl> {
+    fn find_control_by_id(&self, id_: ids::Id) -> Option<&controls::Control> {
         if let Some(child) = self.child.as_ref() {
             if let Some(c) = child.is_container() {
                 return c.find_control_by_id(id_);
@@ -198,8 +198,8 @@ impl ContainerInner for WindowsWindow {
 }
 
 impl SingleContainerInner for WindowsWindow {
-    fn set_child(&mut self, _: &mut MemberBase, mut child: Option<Box<traits::UiControl>>) -> Option<Box<traits::UiControl>> {
-    	use plygui_api::traits::UiSingleContainer;
+    fn set_child(&mut self, _: &mut MemberBase, mut child: Option<Box<controls::Control>>) -> Option<Box<controls::Control>> {
+    	use plygui_api::controls::SingleContainer;
     	
     	let mut old = self.child.take();
         if let Some(old) = old.as_mut() {
@@ -216,10 +216,10 @@ impl SingleContainerInner for WindowsWindow {
 
         old
     }
-    fn child(&self) -> Option<&traits::UiControl> {
+    fn child(&self) -> Option<&controls::Control> {
         self.child.as_ref().map(|c| c.as_ref())
     }
-    fn child_mut(&mut self) -> Option<&mut traits::UiControl> {
+    fn child_mut(&mut self) -> Option<&mut controls::Control> {
         //self.child.as_mut().map(|c|c.as_mut()) // WTF ??
         if let Some(child) = self.child.as_mut() {
             Some(child.as_mut())
@@ -307,7 +307,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             ::winapi::um::winuser::InvalidateRect(w.as_inner().as_inner().hwnd, ptr::null_mut(), ::winapi::shared::minwindef::TRUE);
 
             if let Some(ref mut cb) = w.base_mut().handler_resize {
-                use plygui_api::traits::UiSingleContainer;
+                use plygui_api::controls::SingleContainer;
                 
                 let mut w2: &mut window::Window = mem::transmute(ww);
                 (cb.as_mut())(w2.as_single_container_mut().as_container_mut().as_member_mut(), width, height);

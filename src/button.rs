@@ -1,6 +1,6 @@
 use super::*;
 
-use plygui_api::{traits, layout, types, callbacks, utils};
+use plygui_api::{controls, layout, types, callbacks, utils};
 use plygui_api::development::*;
 
 use winapi::shared::windef;
@@ -63,8 +63,8 @@ impl ClickableInner for WindowsButton {
 }
 
 impl ButtonInner for WindowsButton {
-    fn with_label(label: &str) -> Box<traits::UiButton> {
-    	use plygui_api::traits::UiHasLayout;
+    fn with_label(label: &str) -> Box<controls::Button> {
+    	use plygui_api::controls::HasLayout;
     	
         let mut b: Box<Button> = Box::new(Member::with_inner(Control::with_inner(
         		WindowsButton {
@@ -80,7 +80,7 @@ impl ButtonInner for WindowsButton {
 }
 
 impl ControlInner for WindowsButton {
-    fn on_added_to_container(&mut self, base: &mut MemberControlBase, parent: &traits::UiContainer, x: i32, y: i32) {
+    fn on_added_to_container(&mut self, base: &mut MemberControlBase, parent: &controls::Container, x: i32, y: i32) {
     	let selfptr = base as *mut _ as *mut c_void;
         let (pw, ph) = parent.draw_area_size();
         //let (lp,tp,rp,bp) = self.base.layout.padding.into();
@@ -105,21 +105,21 @@ impl ControlInner for WindowsButton {
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
     }
-    fn on_removed_from_container(&mut self, _: &mut MemberControlBase, _: &traits::UiContainer) {
+    fn on_removed_from_container(&mut self, _: &mut MemberControlBase, _: &controls::Container) {
         common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, Some(handler));
         self.base.hwnd = 0 as windef::HWND;
         self.base.subclass_id = 0;
     }
-	fn parent(&self) -> Option<&traits::UiMember> {
+	fn parent(&self) -> Option<&controls::Member> {
 		self.base.parent().map(|p| p.as_member())
 	}
-    fn parent_mut(&mut self) -> Option<&mut traits::UiMember> {
+    fn parent_mut(&mut self) -> Option<&mut controls::Member> {
     	self.base.parent_mut().map(|p| p.as_member_mut())
     }
-    fn root(&self) -> Option<&traits::UiMember> {
+    fn root(&self) -> Option<&controls::Member> {
     	self.base.root().map(|p| p.as_member())
     }
-    fn root_mut(&mut self) -> Option<&mut traits::UiMember> {
+    fn root_mut(&mut self) -> Option<&mut controls::Member> {
     	self.base.root_mut().map(|p| p.as_member_mut())
     }
     
@@ -263,7 +263,7 @@ impl Drawable for WindowsButton {
 }
 
 #[allow(dead_code)]
-pub(crate) fn spawn() -> Box<traits::UiControl> {
+pub(crate) fn spawn() -> Box<controls::Control> {
     Button::with_label("").into_control()
 }
 

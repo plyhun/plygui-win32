@@ -1,6 +1,6 @@
 use super::*;
 
-use plygui_api::{layout, types, ids, traits, utils};
+use plygui_api::{layout, types, ids, controls, utils};
 use plygui_api::development::*;
 
 use winapi::shared::windef;
@@ -35,12 +35,12 @@ pub struct WindowsFrame {
     label_padding: i32,
     gravity_horizontal: layout::Gravity,
     gravity_vertical: layout::Gravity,
-    child: Option<Box<traits::UiControl>>,
+    child: Option<Box<controls::Control>>,
 }
 
 impl FrameInner for WindowsFrame {
-	fn with_label(label: &str) -> Box<traits::UiFrame> {
-		use plygui_api::traits::UiHasLayout;
+	fn with_label(label: &str) -> Box<controls::Frame> {
+		use plygui_api::controls::HasLayout;
 		
 		let mut b = Box::new(Member::with_inner(Control::with_inner(SingleContainer::with_inner(
 			WindowsFrame {
@@ -91,7 +91,7 @@ impl HasLabelInner for WindowsFrame {
 }
 
 impl SingleContainerInner for WindowsFrame {
-	fn set_child(&mut self, base: &mut MemberBase, child: Option<Box<traits::UiControl>>) -> Option<Box<traits::UiControl>> {
+	fn set_child(&mut self, base: &mut MemberBase, child: Option<Box<controls::Control>>) -> Option<Box<controls::Control>> {
 		let mut old = self.child.take();
 		if let Some(old) = old.as_mut() {
 			if !self.base.hwnd.is_null() {
@@ -117,10 +117,10 @@ impl SingleContainerInner for WindowsFrame {
 		
         old
 	}
-    fn child(&self) -> Option<&traits::UiControl> {
+    fn child(&self) -> Option<&controls::Control> {
     	self.child.as_ref().map(|c| c.as_ref())
     }
-    fn child_mut(&mut self) -> Option<&mut traits::UiControl> {
+    fn child_mut(&mut self) -> Option<&mut controls::Control> {
     	//self.child.as_mut().map(|c|c.as_mut()) // WTF ??
         if let Some(child) = self.child.as_mut() {
             Some(child.as_mut())
@@ -131,7 +131,7 @@ impl SingleContainerInner for WindowsFrame {
 }
 
 impl ContainerInner for WindowsFrame {
-	fn find_control_by_id_mut(&mut self, id: ids::Id) -> Option<&mut traits::UiControl> {
+	fn find_control_by_id_mut(&mut self, id: ids::Id) -> Option<&mut controls::Control> {
 		if let Some(child) = self.child.as_mut() {
             if let Some(c) = child.is_container_mut() {
                 return c.find_control_by_id_mut(id);
@@ -139,7 +139,7 @@ impl ContainerInner for WindowsFrame {
         }
         None
 	}
-    fn find_control_by_id(&self, id: ids::Id) -> Option<&traits::UiControl> {
+    fn find_control_by_id(&self, id: ids::Id) -> Option<&controls::Control> {
     	if let Some(child) = self.child.as_ref() {
             if let Some(c) = child.is_container() {
                 return c.find_control_by_id(id);
@@ -161,7 +161,7 @@ impl ContainerInner for WindowsFrame {
 }
 
 impl ControlInner for WindowsFrame {
-	fn on_added_to_container(&mut self, base: &mut MemberControlBase, parent: &traits::UiContainer, px: i32, py: i32) {
+	fn on_added_to_container(&mut self, base: &mut MemberControlBase, parent: &controls::Container, px: i32, py: i32) {
 		let selfptr = base as *mut _ as *mut c_void;
         let (pw, ph) = parent.draw_area_size();
         let (lm, tm, rm, bm) = base.control.layout.margin.into();
@@ -207,7 +207,7 @@ impl ControlInner for WindowsFrame {
         	child.on_added_to_container(self2, lm + lp, tm + tp + self.label_padding);
         }
 	}
-    fn on_removed_from_container(&mut self, base: &mut MemberControlBase, _: &traits::UiContainer) {
+    fn on_removed_from_container(&mut self, base: &mut MemberControlBase, _: &controls::Container) {
     	if let Some(ref mut child) = self.child {
         	let self2: &mut Frame = unsafe { utils::base_to_impl_mut(&mut base.member) };
         	child.on_removed_from_container(self2);
@@ -219,16 +219,16 @@ impl ControlInner for WindowsFrame {
         self.base.subclass_id = 0;
     }
     
-    fn parent(&self) -> Option<&traits::UiMember> {
+    fn parent(&self) -> Option<&controls::Member> {
 		self.base.parent().map(|p| p.as_member())
 	}
-    fn parent_mut(&mut self) -> Option<&mut traits::UiMember> {
+    fn parent_mut(&mut self) -> Option<&mut controls::Member> {
     	self.base.parent_mut().map(|p| p.as_member_mut())
     }
-    fn root(&self) -> Option<&traits::UiMember> {
+    fn root(&self) -> Option<&controls::Member> {
     	self.base.root().map(|p| p.as_member())
     }
-    fn root_mut(&mut self) -> Option<&mut traits::UiMember> {
+    fn root_mut(&mut self) -> Option<&mut controls::Member> {
     	self.base.root_mut().map(|p| p.as_member_mut())
     }
     
@@ -383,7 +383,7 @@ impl Drawable for WindowsFrame {
 }
 
 #[allow(dead_code)]
-pub(crate) fn spawn() -> Box<traits::UiControl> {
+pub(crate) fn spawn() -> Box<controls::Control> {
     Frame::with_label("").into_control()
 }
 
@@ -423,7 +423,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
     match msg {
         winuser::WM_SIZE => {
             use std::cmp::max;
-	    	use plygui_api::traits::UiMember;
+	    	use plygui_api::controls::Member;
 	    	
 	    	let mut width = lparam as u16;
             let mut height = (lparam >> 16) as u16;
