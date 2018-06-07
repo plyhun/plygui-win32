@@ -312,6 +312,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
                 let mut w2: &mut window::Window = mem::transmute(ww);
                 (cb.as_mut())(w2.as_single_container_mut().as_container_mut().as_member_mut(), width, height);
             }
+            return 0;
         }
         winuser::WM_DESTROY => {
             winuser::PostQuitMessage(0);

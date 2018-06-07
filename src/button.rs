@@ -279,6 +279,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
                 let mut button2: &mut Button = mem::transmute(param);
                 (cb.as_mut())(button2);
             }
+		    return 0;
         }
         winuser::WM_SIZE => {
             let width = lparam as u16;
@@ -289,6 +290,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
                 let mut button2: &mut Button = mem::transmute(param);
                 (cb.as_mut())(button2, width, height);
             }
+		    return 0;
         }
         _ => {}
     }

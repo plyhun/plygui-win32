@@ -21,12 +21,14 @@ mod window;
 mod button;
 mod layout_linear;
 mod frame;
+mod splitted;
 
 pub use self::application::Application;
 pub use self::window::Window;
 pub use self::button::Button;
 pub use self::layout_linear::LinearLayout;
 pub use self::frame::Frame;
+pub use self::splitted::Splitted;
 
 #[cfg(feature = "markup")]
 pub fn register_members(registry: &mut plygui_api::markup::MarkupRegistry) {
@@ -40,5 +42,9 @@ pub fn register_members(registry: &mut plygui_api::markup::MarkupRegistry) {
     registry
         .register_member(plygui_api::markup::MEMBER_TYPE_FRAME.into(),
                          frame::spawn)
-        .unwrap();    
+        .unwrap(); 
+    registry
+        .register_member(plygui_api::markup::MEMBER_TYPE_SPLITTED.into(),
+                         splitted::spawn)
+        .unwrap();       
 }

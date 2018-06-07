@@ -146,8 +146,8 @@ impl <T: controls::Control + Sized> WindowsControlBase<T> {
 			let (pw, ph) = mparent.as_member().size();
 			let this = member_from_hwnd::<T>(self.hwnd);
 			let (_,_,changed) = this.measure(pw, ph);
-			this.draw(None);		
-					
+			this.draw(None);
+			
 			if let Some(cparent) = mparent.as_member_mut().is_control_mut() {
 				if changed {
 					cparent.invalidate();

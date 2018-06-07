@@ -420,7 +420,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
         return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }
 
-    match msg {
+    match msg { 
         winuser::WM_SIZE => {
             use std::cmp::max;
 	    	use plygui_api::controls::Member;
@@ -443,12 +443,8 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
                 let mut frame2: &mut Frame = mem::transmute(ww);
                 (cb.as_mut())(frame2, width, height);
             }
-        }
-        winuser::WM_DESTROY => {
-            winuser::PostQuitMessage(0);
             return 0;
         }
-
         _ => {}
     }
 

@@ -147,7 +147,7 @@ impl ControlInner for WindowsLinearLayout {
         let mut x = lp + lm;
         let mut y = tp + tm;
         for ref mut child in self.children.as_mut_slice() {
-            let self2: &mut LinearLayout = unsafe { mem::transmute(selfptr) };
+            let self2: &mut LinearLayout = unsafe { utils::base_to_impl_mut(&mut base.member) };
             child.on_added_to_container(self2, x, y);
             let (xx, yy) = child.size();
             match self.orientation {
@@ -156,10 +156,9 @@ impl ControlInner for WindowsLinearLayout {
             }
         }
     }
-    fn on_removed_from_container(&mut self, _: &mut MemberControlBase, _: &controls::Container) {
-        let selfptr = self as *mut _ as *mut c_void;
+    fn on_removed_from_container(&mut self, base: &mut MemberControlBase, _: &controls::Container) {
         for ref mut child in self.children.as_mut_slice() {
-            let self2: &mut LinearLayout = unsafe { mem::transmute(selfptr) };
+            let self2: &mut LinearLayout = unsafe { utils::base_to_impl_mut(&mut base.member) };
             child.on_removed_from_container(self2);
         }
         common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, None);
@@ -445,20 +444,8 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
                 let mut ll2: &mut LinearLayout = mem::transmute(ww);
                 (cb.as_mut())(ll2, width, height);
             }
-        }
-        winuser::WM_DESTROY => {
-            winuser::PostQuitMessage(0);
             return 0;
         }
-        /*winuser::WM_NOTIFY => {
-        	let hdr: winuser::LPNMHDR = mem::transmute(lparam);
-        	println!("notify for {:?}", hdr);
-        },
-        winuser::WM_COMMAND => {
-        	let hdr: winuser::LPNMHDR = mem::transmute(lparam);
-        	
-        	println!("command for {:?}", hdr);
-        }*/
         _ => {}
     }
 
