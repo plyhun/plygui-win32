@@ -16,6 +16,8 @@ use winapi::um::commctrl;
 use winapi::um::errhandlingapi;
 use winapi::um::libloaderapi;
 
+pub const WM_UPDATE_INNER: u32 = winuser::WM_APP + 1;
+
 #[inline]
 fn hfont() -> windef::HFONT { 
 	*HFONT as *mut c_void as windef::HFONT 
@@ -149,7 +151,7 @@ impl <T: controls::Control + Sized> WindowsControlBase<T> {
 			this.draw(None);
 			
 			if let Some(cparent) = mparent.as_member_mut().is_control_mut() {
-				if changed {
+				if changed && !cparent.is_skip_draw()  {
 					cparent.invalidate();
 				} 
 			}

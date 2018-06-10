@@ -566,7 +566,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
     }
 
     match msg {
-        winuser::WM_SIZE => {
+        winuser::WM_SIZE | common::WM_UPDATE_INNER => {
 	    	let mut width = lparam as u16;
             let mut height = (lparam >> 16) as u16;
             let mut ll: &mut Splitted = mem::transmute(ww);
@@ -582,34 +582,38 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             	use plygui_api::development::OuterDrawable;
             	
             	ll.set_skip_draw(true);
-            	ll.as_inner_mut().as_inner_mut().as_inner_mut().update_children_layout();
-            	ll.set_skip_draw(false);
+            	{
+	            	let ll = ll.as_inner_mut().as_inner_mut().as_inner_mut();
+	    			ll.update_children_layout();
             	
-            	let ll = ll.as_inner_mut().as_inner_mut().as_inner_mut();
-    			for child in [ll.first.as_mut(), ll.second.as_mut()].iter_mut() {
-	            	let (cw, ch, _) = child.measure(cmp::max(0, width as i32 - hp) as u16, cmp::max(0, height as i32 - vp) as u16);
-	                child.draw(Some((x + lp + lm, y + tp + tm))); 
-	                match o {
-	                    layout::Orientation::Horizontal if width >= cw => {
-	                        x += cw as i32;
-	                        x += DEFAULT_BOUND;
-	                        width -= cw;
-	                        width -= cmp::min(width as i32, DEFAULT_BOUND) as u16;
-	                    }
-	                    layout::Orientation::Vertical if height >= ch => {
-	                        y += ch as i32;
-	                        y += DEFAULT_BOUND;
-	                        height -= ch;
-	                        height -= cmp::min(height as i32, DEFAULT_BOUND) as u16;
-	                    }
-	                    _ => {}
-	                }
-	            }
+	            	for child in [ll.first.as_mut(), ll.second.as_mut()].iter_mut() {
+		            	let (cw, ch, _) = child.measure(cmp::max(0, width as i32 - hp) as u16, cmp::max(0, height as i32 - vp) as u16);
+		                child.draw(Some((x + lp + lm, y + tp + tm))); 
+		                match o {
+		                    layout::Orientation::Horizontal if width >= cw => {
+		                        x += cw as i32;
+		                        x += DEFAULT_BOUND;
+		                        width -= cw;
+		                        width -= cmp::min(width as i32, DEFAULT_BOUND) as u16;
+		                    }
+		                    layout::Orientation::Vertical if height >= ch => {
+		                        y += ch as i32;
+		                        y += DEFAULT_BOUND;
+		                        height -= ch;
+		                        height -= cmp::min(height as i32, DEFAULT_BOUND) as u16;
+		                    }
+		                    _ => {}
+		                }
+		            }
+            	}
+    			ll.set_skip_draw(false);            	
             }
 
-            if let Some(ref mut cb) = ll.base_mut().handler_resize {
-                let mut ll2: &mut Splitted = mem::transmute(ww);
-                (cb.as_mut())(ll2, width, height);
+            if msg != common::WM_UPDATE_INNER {
+            	if let Some(ref mut cb) = ll.base_mut().handler_resize {
+	                let mut ll2: &mut Splitted = mem::transmute(ww);
+	                (cb.as_mut())(ll2, width, height);
+	            }
             }
             return 0;
         }
@@ -646,7 +650,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             
             if updated {
             	let packed = ((height as i32) << 16) + width as i32;
-    			winuser::SendMessageW(hwnd, winuser::WM_SIZE, 0, packed as isize);
+    			winuser::SendMessageW(hwnd, common::WM_UPDATE_INNER, 0, packed as isize);
             }
             return 0;
         },
