@@ -57,6 +57,9 @@ impl FrameInner for WindowsFrame {
 		b.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
         b
 	}
+	fn offsets(&self) -> layout::BoundarySize {
+		(0, self.label_padding, 0, 0).into()
+	}
 }
 
 impl HasLayoutInner for WindowsFrame {
@@ -121,8 +124,7 @@ impl SingleContainerInner for WindowsFrame {
     	self.child.as_ref().map(|c| c.as_ref())
     }
     fn child_mut(&mut self) -> Option<&mut controls::Control> {
-    	//self.child.as_mut().map(|c|c.as_mut()) // WTF ??
-        if let Some(child) = self.child.as_mut() {
+    	if let Some(child) = self.child.as_mut() {
             Some(child.as_mut())
         } else {
             None
@@ -169,9 +171,9 @@ impl ControlInner for WindowsFrame {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
             let (width, height, _) = self.measure(base, pw, ph);
             let (hwnd, id) = common::create_control_hwnd(px + lm,
-                                        py + tm,
+                                        py + tm + self.label_padding,
                                         width as i32 - rm - lm,
-                                        height as i32 - bm - tm,
+                                        height as i32 - bm - tm - self.label_padding,
                                         self.base.hwnd,
                                         winuser::WS_EX_CONTROLPARENT,
                                         WINDOW_CLASS.as_ptr(),
@@ -204,7 +206,7 @@ impl ControlInner for WindowsFrame {
         if let Some(ref mut child) = self.child {
         	let (lp, tp, _, _) = base.control.layout.padding.into();
 	        let self2: &mut Frame = unsafe { utils::base_to_impl_mut(&mut base.member) };
-        	child.on_added_to_container(self2, lm + lp, tm + tp + self.label_padding);
+        	child.on_added_to_container(self2, lm + lp, tm + tp);
         }
 	}
     fn on_removed_from_container(&mut self, base: &mut MemberControlBase, _: &controls::Container) {
@@ -291,9 +293,9 @@ impl Drawable for WindowsFrame {
                 winuser::SetWindowPos(self.base.hwnd,
                                       ptr::null_mut(),
                                       x + lm,
-                                      y + tm,
+                                      y + tm + self.label_padding,
                                       self.base.measured_size.0 as i32 - rm - lm,
-                                      self.base.measured_size.1 as i32 - bm - tm,
+                                      self.base.measured_size.1 as i32 - bm - tm - self.label_padding,
                                       0);
                 winuser::SetWindowPos(self.hwnd_gbox,
                                       ptr::null_mut(),
@@ -304,8 +306,8 @@ impl Drawable for WindowsFrame {
                                       0);
             }
             if let Some(ref mut child) = self.child {
-                child.draw(Some((lp + lm, tp + tm + self.label_padding)));
-                child.size();
+                child.draw(Some((lp + lm, tp + tm)));
+                //child.size();
             }
         }
 	}
@@ -362,7 +364,7 @@ impl Drawable for WindowsFrame {
 	                                                        label.as_ptr(),
 	                                                        self.label.len() as i32,
 	                                                        &mut label_size); }
-	                        self.label_padding = label_size.cy as i32;
+	                        self.label_padding = label_size.cy as i32 / 2;
 	                        h += self.label_padding;
 		                }
 	        			max(0, h as i32 + vp) as u16
@@ -432,11 +434,11 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             let (lp, tp, rp, bp) = frame.is_control().unwrap().layout_padding().into();
 	        let (lm, tm, rm, bm) = frame.is_control().unwrap().layout_margin().into();
 	        let hp = lm + rm + lp + rp;
-	    	let vp = tm + bm + tp + bp;
+	    	let vp = tm + bm + tp + bp + label_padding;
 		    	
             if let Some(ref mut child) = frame.as_inner_mut().as_inner_mut().as_inner_mut().child {
                 child.measure(max(0, width as i32 - hp) as u16, max(0, height as i32 - vp) as u16);
-                child.draw(Some((lp + lm, tp + tm + label_padding))); 
+                child.draw(Some((lp + lm, tp + tm))); 
             }
 
             if let Some(ref mut cb) = frame.base_mut().handler_resize {

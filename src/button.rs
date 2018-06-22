@@ -93,7 +93,7 @@ impl ControlInner for WindowsButton {
                 y as i32 + tm,
                 w as i32 - rm - lm,
                 h as i32 - bm - tm,
-                parent.native_id() as windef::HWND,
+                self.base.hwnd,
                 0,
                 WINDOW_CLASS.as_ptr(),
                 self.label.as_str(),
