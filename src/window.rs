@@ -32,10 +32,10 @@ pub type Window = Member<SingleContainer<WindowsWindow>>;
 
 impl WindowsWindow {
     pub(crate) fn start(&mut self) {
-        loop {
-            unsafe {
-                let mut msg: winuser::MSG = mem::zeroed();
-                let status = winuser::GetMessageW(&mut msg, self.hwnd, 0, 0);
+        unsafe {
+        	let mut msg: winuser::MSG = mem::zeroed();
+	        loop {
+                let status = winuser::GetMessageW(&mut msg, ptr::null_mut(), 0, 0);
                 if status <= 0 {
                 	//println!("break caused by {:?}", status);
                     break;
@@ -43,7 +43,7 @@ impl WindowsWindow {
                     winuser::TranslateMessage(&mut msg);
                     winuser::DispatchMessageW(&mut msg);
                 }
-            }
+	        }
         }
     }
     fn size_inner(&self) -> (u16, u16) {
@@ -151,7 +151,7 @@ impl WindowInner for WindowsWindow {
                 exstyle,
                 WINDOW_CLASS.as_ptr(),
                 window_name.as_ptr() as ntdef::LPCWSTR,
-                style | winuser::WS_VISIBLE,
+                style | winuser::WS_VISIBLE | winuser::CS_HREDRAW | winuser::CS_VREDRAW,
                 winuser::CW_USEDEFAULT,
                 winuser::CW_USEDEFAULT,
                 rect.right - rect.left,
