@@ -88,7 +88,7 @@ impl HasLabelInner for WindowsWindow {
 }
 
 impl WindowInner for WindowsWindow {
-	fn with_params(title: &str, window_size: types::WindowStartSize, menu: types::WindowMenu) -> Box<controls::Window> {
+	fn with_params(title: &str, window_size: types::WindowStartSize, menu: types::WindowMenu) -> Box<Window> {
     	unsafe {
             let mut rect = match window_size {
                 types::WindowStartSize::Exact(width, height) => windef::RECT {

@@ -63,7 +63,7 @@ impl ClickableInner for WindowsButton {
 }
 
 impl ButtonInner for WindowsButton {
-    fn with_label(label: &str) -> Box<controls::Button> {
+    fn with_label(label: &str) -> Box<Button> {
     	use plygui_api::controls::HasLayout;
     	
         let mut b: Box<Button> = Box::new(Member::with_inner(Control::with_inner(

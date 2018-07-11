@@ -19,9 +19,9 @@ pub struct WindowsApplication {
 pub type Application = ::plygui_api::development::Application<WindowsApplication>;
 
 impl ApplicationInner for WindowsApplication {
-	fn with_name(name: &str) -> Box<controls::Application> {
+	fn with_name(name: &str) -> Box<Application> {
         init_comctl();
-        let a: Box<controls::Application> = Box::new(Application::with_inner(WindowsApplication {
+        let a = Box::new(Application::with_inner(WindowsApplication {
 	            name: name.into(),
 	            windows: Vec::with_capacity(1),
 	        }, ()));
@@ -30,6 +30,8 @@ impl ApplicationInner for WindowsApplication {
     fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::WindowMenu) -> Box<controls::Window> {
     	let mut w = window::WindowsWindow::with_params(title, size, menu);
         unsafe {
+        	use plygui_api::controls::SingleContainer;
+        	
             self.windows.push(w.as_single_container_mut().as_container_mut().as_member_mut().as_any_mut().downcast_mut::<window::Window>().unwrap().as_inner_mut().native_id().into());
         }
         w

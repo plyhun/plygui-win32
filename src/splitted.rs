@@ -87,7 +87,7 @@ impl WindowsSplitted {
 }
 
 impl development::SplittedInner for WindowsSplitted {
-	fn with_content(first: Box<controls::Control>, second: Box<controls::Control>, orientation: layout::Orientation) -> Box<controls::Splitted> {
+	fn with_content(first: Box<controls::Control>, second: Box<controls::Control>, orientation: layout::Orientation) -> Box<Splitted> {
 		use plygui_api::controls::{HasLayout};
 		
 		let mut b = Box::new(development::Member::with_inner(development::Control::with_inner(development::MultiContainer::with_inner(

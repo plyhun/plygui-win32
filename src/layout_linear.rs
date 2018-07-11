@@ -33,7 +33,7 @@ pub struct WindowsLinearLayout {
 }
 
 impl LinearLayoutInner for WindowsLinearLayout {
-	fn with_orientation(orientation: layout::Orientation) -> Box<controls::LinearLayout> {
+	fn with_orientation(orientation: layout::Orientation) -> Box<LinearLayout> {
 		use plygui_api::controls::HasLayout;
 		
 		let mut b = Box::new(Member::with_inner(Control::with_inner(MultiContainer::with_inner(

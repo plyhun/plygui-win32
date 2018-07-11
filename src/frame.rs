@@ -39,7 +39,7 @@ pub struct WindowsFrame {
 }
 
 impl FrameInner for WindowsFrame {
-	fn with_label(label: &str) -> Box<controls::Frame> {
+	fn with_label(label: &str) -> Box<Frame> {
 		use plygui_api::controls::HasLayout;
 		
 		let mut b = Box::new(Member::with_inner(Control::with_inner(SingleContainer::with_inner(
@@ -57,9 +57,9 @@ impl FrameInner for WindowsFrame {
 		b.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
         b
 	}
-	fn offsets(&self) -> layout::BoundarySize {
+	/*fn offsets(&self) -> layout::BoundarySize {
 		(0, self.label_padding, 0, 0).into()
-	}
+	}*/
 }
 
 impl HasLayoutInner for WindowsFrame {
