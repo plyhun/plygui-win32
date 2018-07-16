@@ -151,6 +151,7 @@ impl HasLayoutInner for WindowsButton {
 
 impl MemberInner for WindowsButton {
     type Id = common::Hwnd;
+    type Outer = Button;
 	
 	fn size(&self) -> (u16, u16) {
         let rect = unsafe { common::window_rect(self.base.hwnd) };
@@ -298,4 +299,5 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
     commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
 }
 
+impl_from_native!(Button);
 impl_all_defaults!(Button);

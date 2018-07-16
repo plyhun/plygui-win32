@@ -308,3 +308,19 @@ pub unsafe fn log_error() {
         String::from_utf16_lossy(&string)
     );
 }
+
+#[macro_export]
+macro_rules! impl_from_native {
+    ($t: ty) => {
+        impl From<common::Hwnd> for &'static $t {
+            fn from(hwnd: common::Hwnd) -> Self {
+                common::member_from_hwnd(hwnd.into())
+            }
+        }
+        impl From<common::Hwnd> for &'static mut $t {
+            fn from(hwnd: common::Hwnd) -> Self {
+                common::member_from_hwnd(hwnd.into())
+            }
+        }
+    }
+}

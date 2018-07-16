@@ -126,6 +126,7 @@ impl development::SplittedInner for WindowsSplitted {
 
 impl development::MemberInner for WindowsSplitted {
 	type Id = common::Hwnd;
+	type Outer = Splitted;
 	
 	fn size(&self) -> (u16, u16) {
         let rect = unsafe { common::window_rect(self.base.hwnd) };
@@ -675,4 +676,5 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
     winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
+impl_from_native!(Splitted);
 impl_all_defaults!(Splitted);

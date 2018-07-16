@@ -231,6 +231,7 @@ impl SingleContainerInner for WindowsWindow {
 
 impl MemberInner for WindowsWindow {
 	type Id = common::Hwnd;
+	type Outer = Window;
 	
     fn size(&self) -> (u16, u16) {
         self.size_inner()
@@ -333,4 +334,5 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
     winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
+impl_from_native!(Window);
 impl_all_defaults!(Window);

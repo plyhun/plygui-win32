@@ -251,6 +251,7 @@ impl ControlInner for WindowsFrame {
 
 impl MemberInner for WindowsFrame {
 	type Id = common::Hwnd;
+	type Outer = Frame;
 	
 	fn size(&self) -> (u16, u16) {
         let rect = unsafe { common::window_rect(self.base.hwnd) };
@@ -453,4 +454,5 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
     winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
+impl_from_native!(Frame);
 impl_all_defaults!(Frame);
