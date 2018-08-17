@@ -1,20 +1,20 @@
-use std::{ptr, mem, str};
-use std::os::raw::c_void;
-use std::os::windows::ffi::OsStrExt;
-use std::ffi::OsStr;
-use std::marker::PhantomData;
+pub use std::{ptr, mem, str};
+pub use std::os::windows::ffi::OsStrExt;
+pub use std::ffi::OsStr;
+pub use std::marker::PhantomData;
 
-use plygui_api::{controls, development};
+pub use plygui_api::{controls, development};
 
-use winapi::shared::windef;
-use winapi::shared::minwindef;
-use winapi::shared::ntdef;
-use winapi::um::winuser;
-use winapi::um::wingdi;
-use winapi::um::winbase;
-use winapi::um::commctrl;
-use winapi::um::errhandlingapi;
-use winapi::um::libloaderapi;
+pub use winapi::shared::windef;
+pub use winapi::shared::minwindef;
+pub use winapi::shared::ntdef;
+pub use winapi::um::winuser;
+pub use winapi::um::wingdi;
+pub use winapi::um::winbase;
+pub use winapi::um::commctrl;
+pub use winapi::um::errhandlingapi;
+pub use winapi::um::libloaderapi;
+pub use winapi::ctypes::c_void;
 
 pub const WM_UPDATE_INNER: u32 = winuser::WM_APP + 1;
 
@@ -141,7 +141,7 @@ impl <T: controls::Control + Sized> WindowsControlBase<T> {
             mem::transmute(parent_ptr as *mut c_void)
         }
     }
-    pub fn invalidate(&mut self, _: &mut development::MemberControlBase) {
+    pub fn invalidate(&mut self) {
     	let parent_hwnd = self.parent_hwnd();	
 		if let Some(parent_hwnd) = parent_hwnd {
 			let mparent = member_base_from_hwnd(parent_hwnd);

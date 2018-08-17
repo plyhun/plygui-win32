@@ -1,7 +1,7 @@
 use super::*;
 use super::common::*;
 
-use plygui_api::{ids, types, controls, layout};
+use plygui_api::{ids, types, controls};
 use plygui_api::development::*;
 
 use winapi::shared::windef;
@@ -23,9 +23,7 @@ lazy_static! {
 #[repr(C)]
 pub struct WindowsWindow {
     hwnd: windef::HWND,
-    gravity_horizontal: layout::Gravity,
-    gravity_vertical: layout::Gravity,
-    child: Option<Box<controls::Control>>,
+    child: Option<Box<dyn controls::Control>>,
 }
 
 pub type Window = Member<SingleContainer<WindowsWindow>>;
@@ -141,8 +139,6 @@ impl WindowInner for WindowsWindow {
             		WindowsWindow {
 		                hwnd: 0 as windef::HWND,
 		                child: None,
-		                gravity_horizontal: Default::default(),
-					    gravity_vertical: Default::default(),    
 		            }, ()),
             		MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
             ));    
@@ -169,7 +165,7 @@ impl WindowInner for WindowsWindow {
 }
 
 impl ContainerInner for WindowsWindow {
-    fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut controls::Control> {
+    fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut dyn controls::Control> {
         if let Some(child) = self.child.as_mut() {
             if let Some(c) = child.is_container_mut() {
                 return c.find_control_by_id_mut(id_);
@@ -177,7 +173,7 @@ impl ContainerInner for WindowsWindow {
         }
         None
     }
-    fn find_control_by_id(&self, id_: ids::Id) -> Option<&controls::Control> {
+    fn find_control_by_id(&self, id_: ids::Id) -> Option<&dyn controls::Control> {
         if let Some(child) = self.child.as_ref() {
             if let Some(c) = child.is_container() {
                 return c.find_control_by_id(id_);
@@ -185,20 +181,10 @@ impl ContainerInner for WindowsWindow {
         }
         None
     }
-    fn gravity(&self) -> (layout::Gravity, layout::Gravity) {
-    	(self.gravity_horizontal, self.gravity_vertical)
-    }
-    fn set_gravity(&mut self, _: &mut MemberBase, w: layout::Gravity, h: layout::Gravity) {
-    	if self.gravity_horizontal != w || self.gravity_vertical != h {
-    		self.gravity_horizontal = w;
-    		self.gravity_vertical = h;
-    		self.redraw();
-    	}
-    }
 }
 
 impl SingleContainerInner for WindowsWindow {
-    fn set_child(&mut self, _: &mut MemberBase, mut child: Option<Box<controls::Control>>) -> Option<Box<controls::Control>> {
+    fn set_child(&mut self, _: &mut MemberBase, mut child: Option<Box<dyn controls::Control>>) -> Option<Box<dyn controls::Control>> {
     	use plygui_api::controls::SingleContainer;
     	
     	let mut old = self.child.take();
@@ -216,11 +202,10 @@ impl SingleContainerInner for WindowsWindow {
 
         old
     }
-    fn child(&self) -> Option<&controls::Control> {
+    fn child(&self) -> Option<&dyn controls::Control> {
         self.child.as_ref().map(|c| c.as_ref())
     }
-    fn child_mut(&mut self) -> Option<&mut controls::Control> {
-        //self.child.as_mut().map(|c|c.as_mut()) // WTF ??
+    fn child_mut(&mut self) -> Option<&mut dyn controls::Control> {
         if let Some(child) = self.child.as_mut() {
             Some(child.as_mut())
         } else {

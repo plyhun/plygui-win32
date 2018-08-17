@@ -1,18 +1,9 @@
 use super::*;
+use super::common::*;
 
 use plygui_api::{layout, types, ids, controls, utils};
 use plygui_api::development::*;
 
-use winapi::shared::windef;
-use winapi::shared::minwindef;
-use winapi::um::winuser;
-use winapi::um::wingdi;
-use winapi::um::libloaderapi;
-use winapi::ctypes::c_void;
-
-use std::{ptr, mem, str};
-use std::os::windows::ffi::OsStrExt;
-use std::ffi::OsStr;
 use std::borrow::Cow;
 
 const DEFAULT_PADDING: i32 = 6;
@@ -35,7 +26,7 @@ pub struct WindowsFrame {
     label_padding: i32,
     gravity_horizontal: layout::Gravity,
     gravity_vertical: layout::Gravity,
-    child: Option<Box<controls::Control>>,
+    child: Option<Box<dyn controls::Control>>,
 }
 
 impl FrameInner for WindowsFrame {
@@ -66,8 +57,7 @@ impl HasLayoutInner for WindowsFrame {
 	fn on_layout_changed(&mut self, base: &mut MemberBase) {
 		let hwnd = self.base.hwnd;
         if !hwnd.is_null() {
-        	let base = self.cast_base_mut(base);
-			self.invalidate(base);
+        	self.base.invalidate();
 		}
 	}
 }
@@ -87,14 +77,13 @@ impl HasLabelInner for WindowsFrame {
             unsafe {
                 winuser::SetWindowTextW(self.base.hwnd, control_name.as_ptr());
             }
-            let base = self.cast_base_mut(base);
-			self.invalidate(base);
+            self.base.invalidate();
         }
     }
 }
 
 impl SingleContainerInner for WindowsFrame {
-	fn set_child(&mut self, base: &mut MemberBase, child: Option<Box<controls::Control>>) -> Option<Box<controls::Control>> {
+	fn set_child(&mut self, base: &mut MemberBase, child: Option<Box<dyn controls::Control>>) -> Option<Box<dyn controls::Control>> {
 		let mut old = self.child.take();
 		if let Some(old) = old.as_mut() {
 			if !self.base.hwnd.is_null() {
@@ -107,23 +96,22 @@ impl SingleContainerInner for WindowsFrame {
         if self.child.is_some() {
         	if !self.base.hwnd.is_null() {
 	        	let (w, h) = self.size();
-	        	let base = self.cast_base_mut(base);
-	        	let (_, _, rp, bp) = base.control.layout.padding.into();
-		        let (_, _, rm, bm) = base.control.layout.margin.into();
+	        	let this = unsafe { utils::base_to_impl_mut::<Frame>(base) };
+	        	let (_, _, rp, bp) = this.as_inner_mut().base_mut().layout.padding.into();
+		        let (_, _, rm, bm) = this.as_inner_mut().base_mut().layout.margin.into();
 		        if let Some(new) = self.child.as_mut() {
 		        	new.as_mut().on_added_to_container(common::member_from_hwnd::<Frame>(self.base.hwnd), w as i32 - rp - rm, h as i32 - bp - bm);
 		        }
 		    }
         }
-        let base = self.cast_base_mut(base);
-		self.invalidate(base);
+        self.base.invalidate();
 		
         old
 	}
-    fn child(&self) -> Option<&controls::Control> {
+    fn child(&self) -> Option<&dyn controls::Control> {
     	self.child.as_ref().map(|c| c.as_ref())
     }
-    fn child_mut(&mut self) -> Option<&mut controls::Control> {
+    fn child_mut(&mut self) -> Option<&mut dyn controls::Control> {
     	if let Some(child) = self.child.as_mut() {
             Some(child.as_mut())
         } else {
@@ -133,7 +121,7 @@ impl SingleContainerInner for WindowsFrame {
 }
 
 impl ContainerInner for WindowsFrame {
-	fn find_control_by_id_mut(&mut self, id: ids::Id) -> Option<&mut controls::Control> {
+	fn find_control_by_id_mut(&mut self, id: ids::Id) -> Option<&mut dyn controls::Control> {
 		if let Some(child) = self.child.as_mut() {
             if let Some(c) = child.is_container_mut() {
                 return c.find_control_by_id_mut(id);
@@ -141,7 +129,7 @@ impl ContainerInner for WindowsFrame {
         }
         None
 	}
-    fn find_control_by_id(&self, id: ids::Id) -> Option<&controls::Control> {
+    fn find_control_by_id(&self, id: ids::Id) -> Option<&dyn controls::Control> {
     	if let Some(child) = self.child.as_ref() {
             if let Some(c) = child.is_container() {
                 return c.find_control_by_id(id);
@@ -149,27 +137,16 @@ impl ContainerInner for WindowsFrame {
         }
         None
     }
-    
-    fn gravity(&self) -> (layout::Gravity, layout::Gravity) {
-    	(self.gravity_horizontal, self.gravity_vertical)
-    }
-    fn set_gravity(&mut self, base: &mut MemberBase, w: layout::Gravity, h: layout::Gravity) {
-    	if self.gravity_horizontal != w || self.gravity_vertical != h {
-    		self.gravity_horizontal = w;
-    		self.gravity_vertical = h;
-    		self.invalidate(unsafe { mem::transmute(base) });
-    	}
-    }
 }
 
 impl ControlInner for WindowsFrame {
-	fn on_added_to_container(&mut self, base: &mut MemberControlBase, parent: &controls::Container, px: i32, py: i32) {
-		let selfptr = base as *mut _ as *mut c_void;
+	fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &dyn controls::Container, px: i32, py: i32) {
+		let selfptr = member as *mut _ as *mut c_void;
         let (pw, ph) = parent.draw_area_size();
-        let (lm, tm, rm, bm) = base.control.layout.margin.into();
+        let (lm, tm, rm, bm) = control.layout.margin.into();
         let (hwnd, hwnd_gbox, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
-            let (width, height, _) = self.measure(base, pw, ph);
+            let (width, height, _) = self.measure(member, control, pw, ph);
             let (hwnd, id) = common::create_control_hwnd(px + lm,
                                         py + tm + self.label_padding,
                                         width as i32 - rm - lm,
@@ -204,14 +181,14 @@ impl ControlInner for WindowsFrame {
         self.base.subclass_id = id;
         self.base.coords = Some((px, py));
         if let Some(ref mut child) = self.child {
-        	let (lp, tp, _, _) = base.control.layout.padding.into();
-	        let self2: &mut Frame = unsafe { utils::base_to_impl_mut(&mut base.member) };
+        	let (lp, tp, _, _) = control.layout.padding.into();
+	        let self2: &mut Frame = unsafe { utils::base_to_impl_mut(member) };
         	child.on_added_to_container(self2, lm + lp, tm + tp);
         }
 	}
-    fn on_removed_from_container(&mut self, base: &mut MemberControlBase, _: &controls::Container) {
+    fn on_removed_from_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, _: &dyn controls::Container) {
     	if let Some(ref mut child) = self.child {
-        	let self2: &mut Frame = unsafe { utils::base_to_impl_mut(&mut base.member) };
+        	let self2: &mut Frame = unsafe { utils::base_to_impl_mut(member) };
         	child.on_removed_from_container(self2);
         }
     	common::destroy_hwnd(self.hwnd_gbox, 0, None);
@@ -221,21 +198,21 @@ impl ControlInner for WindowsFrame {
         self.base.subclass_id = 0;
     }
     
-    fn parent(&self) -> Option<&controls::Member> {
+    fn parent(&self) -> Option<&dyn controls::Member> {
 		self.base.parent().map(|p| p.as_member())
 	}
-    fn parent_mut(&mut self) -> Option<&mut controls::Member> {
+    fn parent_mut(&mut self) -> Option<&mut dyn controls::Member> {
     	self.base.parent_mut().map(|p| p.as_member_mut())
     }
-    fn root(&self) -> Option<&controls::Member> {
+    fn root(&self) -> Option<&dyn controls::Member> {
     	self.base.root().map(|p| p.as_member())
     }
-    fn root_mut(&mut self) -> Option<&mut controls::Member> {
+    fn root_mut(&mut self) -> Option<&mut dyn controls::Member> {
     	self.base.root_mut().map(|p| p.as_member_mut())
     }
     
     #[cfg(feature = "markup")]
-    fn fill_from_markup(&mut self, base: &mut MemberControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
+    fn fill_from_markup(&mut self, member: &mut MemberBase, control: &mut ControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
     	use plygui_api::markup::MEMBER_TYPE_FRAME;
 
         fill_from_markup_base!(self,
@@ -273,7 +250,7 @@ impl MemberInner for WindowsFrame {
 	                },
 	            );
 	        }
-			self.invalidate(utils::member_control_base_mut(common::member_from_hwnd::<Button>(hwnd)));
+			self.base.invalidate();
 	    }
     }
     unsafe fn native_id(&self) -> Self::Id {
@@ -282,12 +259,12 @@ impl MemberInner for WindowsFrame {
 }
 
 impl Drawable for WindowsFrame {
-	fn draw(&mut self, base: &mut MemberControlBase, coords: Option<(i32, i32)>) {
+	fn draw(&mut self, member: &mut MemberBase, control: &mut ControlBase, coords: Option<(i32, i32)>) {
 		if coords.is_some() {
             self.base.coords = coords;
         }
-        let (lp, tp, _, _) = base.control.layout.padding.into();
-        let (lm, tm, rm, bm) = base.control.layout.margin.into();
+        let (lp, tp, _, _) = control.layout.padding.into();
+        let (lm, tm, rm, bm) = control.layout.margin.into();
         if let Some((x, y)) = self.base.coords {
             unsafe {
                 winuser::SetWindowPos(self.base.hwnd,
@@ -311,19 +288,19 @@ impl Drawable for WindowsFrame {
             }
         }
 	}
-    fn measure(&mut self, base: &mut MemberControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+    fn measure(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
     	use std::cmp::max;
     	
     	let old_size = self.base.measured_size;
-    	let (lp,tp,rp,bp) = base.control.layout.padding.into();
-    	let (lm,tm,rm,bm) = base.control.layout.margin.into();
+    	let (lp,tp,rp,bp) = control.layout.padding.into();
+    	let (lm,tm,rm,bm) = control.layout.margin.into();
     	let hp = lm + rm + lp + rp;
     	let vp = tm + bm + tp + bp;
-    	self.base.measured_size = match base.member.visibility {
+    	self.base.measured_size = match member.visibility {
         	types::Visibility::Gone => (0,0),
         	_ => {
         		let mut measured = false;
-		        let w = match base.control.layout.width {
+		        let w = match control.layout.width {
         			layout::Size::Exact(w) => w,
         			layout::Size::MatchParent => parent_width,
         			layout::Size::WrapContent => {
@@ -339,7 +316,7 @@ impl Drawable for WindowsFrame {
 	        			max(0, w as i32 + hp) as u16
         			}
         		};
-        		let h = match base.control.layout.height {
+        		let h = match control.layout.height {
         			layout::Size::Exact(h) => h,
         			layout::Size::MatchParent => parent_height,
         			layout::Size::WrapContent => {
@@ -379,13 +356,13 @@ impl Drawable for WindowsFrame {
             self.base.measured_size != old_size,
         )
     }
-    fn invalidate(&mut self, base: &mut MemberControlBase) {
-    	self.base.invalidate(base)
+    fn invalidate(&mut self, member: &mut MemberBase, control: &mut ControlBase) {
+    	self.base.invalidate()
     }
 }
 
 #[allow(dead_code)]
-pub(crate) fn spawn() -> Box<controls::Control> {
+pub(crate) fn spawn() -> Box<dyn controls::Control> {
     Frame::with_label("").into_control()
 }
 
