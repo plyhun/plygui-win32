@@ -27,7 +27,7 @@ impl ApplicationInner for WindowsApplication {
 	        }, ()));
         a
     }
-    fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::WindowMenu) -> Box<dyn controls::Window> {
+    fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::WindowMenu) -> Box<controls::Window> {
     	let mut w = window::WindowsWindow::with_params(title, size, menu);
         unsafe {
         	use plygui_api::controls::SingleContainer;
@@ -48,7 +48,7 @@ impl ApplicationInner for WindowsApplication {
             }
         }
     }
-    fn find_member_by_id_mut(&mut self, id: Id) -> Option<&mut dyn controls::Member> {
+    fn find_member_by_id_mut(&mut self, id: Id) -> Option<&mut controls::Member> {
     	use plygui_api::controls::{SingleContainer, Member, Container};
     	
         for window in self.windows.as_mut_slice() {
@@ -63,7 +63,7 @@ impl ApplicationInner for WindowsApplication {
         }
         None
     }
-    fn find_member_by_id(&self, id: Id) -> Option<&dyn controls::Member> {
+    fn find_member_by_id(&self, id: Id) -> Option<&controls::Member> {
         use plygui_api::controls::{SingleContainer, Member, Container};
     	
     	for window in self.windows.as_slice() {
