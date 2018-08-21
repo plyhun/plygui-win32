@@ -1,23 +1,7 @@
 use super::*;
+use super::common::*;
 
-use plygui_api::{controls, layout, types, callbacks, utils};
-use plygui_api::development::*;
-
-use winapi::shared::windef;
-use winapi::shared::minwindef;
-use winapi::um::winuser;
-use winapi::um::wingdi;
-use winapi::um::commctrl;
-use winapi::ctypes::c_void;
-
-use std::{ptr, mem, str};
-use std::os::windows::ffi::OsStrExt;
-use std::ffi::OsStr;
-use std::borrow::Cow;
-use std::cmp::max;
-
-pub const CLASS_ID: &str = "Button";
-const DEFAULT_PADDING: i32 = 6;
+const CLASS_ID: &str = "Button";
 
 lazy_static! {
 	pub static ref WINDOW_CLASS: Vec<u16> = OsStr::new(CLASS_ID)
@@ -39,7 +23,7 @@ impl HasLabelInner for WindowsButton {
     fn label<'a>(&'a self) -> Cow<'a, str> {
         Cow::Borrowed(self.label.as_ref())
     }
-    fn set_label(&mut self, base: &mut MemberBase, label: &str) {
+    fn set_label(&mut self, _base: &mut MemberBase, label: &str) {
         self.label = label.into();
         let hwnd = self.base.hwnd;
         if !hwnd.is_null() {
@@ -50,8 +34,7 @@ impl HasLabelInner for WindowsButton {
             unsafe {
                 winuser::SetWindowTextW(self.base.hwnd, control_name.as_ptr());
             }
-            let base = self.cast_base_mut(base);
-			self.invalidate(base);
+            self.base.invalidate();
         }
     }
 }
@@ -64,9 +47,7 @@ impl ClickableInner for WindowsButton {
 
 impl ButtonInner for WindowsButton {
     fn with_label(label: &str) -> Box<Button> {
-    	use plygui_api::controls::HasLayout;
-    	
-        let mut b: Box<Button> = Box::new(Member::with_inner(Control::with_inner(
+    	let b: Box<Button> = Box::new(Member::with_inner(Control::with_inner(
         		WindowsButton {
 		            base: common::WindowsControlBase::new(),
 		            h_left_clicked: None,
@@ -74,25 +55,22 @@ impl ButtonInner for WindowsButton {
 		        }, ()),
         		MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
-        b.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
         b
     }
 }
 
 impl ControlInner for WindowsButton {
-    fn on_added_to_container(&mut self, base: &mut MemberControlBase, parent: &controls::Container, x: i32, y: i32) {
-    	let selfptr = base as *mut _ as *mut c_void;
+    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &controls::Container, x: i32, y: i32) {
+    	let selfptr = member as *mut _ as *mut c_void;
         let (pw, ph) = parent.draw_area_size();
-        //let (lp,tp,rp,bp) = self.base.layout.padding.into();
-        let (lm, tm, rm, bm) = base.control.layout.margin.into();
         let (hwnd, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
-            let (w, h, _) = self.measure(base, pw, ph);
+            let (w, h, _) = self.measure(member, control, pw, ph);
             common::create_control_hwnd(
-                x as i32 + lm,
-                y as i32 + tm,
-                w as i32 - rm - lm,
-                h as i32 - bm - tm,
+                x as i32,
+                y as i32,
+                w as i32,
+                h as i32,
                 self.base.hwnd,
                 0,
                 WINDOW_CLASS.as_ptr(),
@@ -105,7 +83,7 @@ impl ControlInner for WindowsButton {
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
     }
-    fn on_removed_from_container(&mut self, _: &mut MemberControlBase, _: &controls::Container) {
+    fn on_removed_from_container(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, _: &controls::Container) {
         common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, Some(handler));
         self.base.hwnd = 0 as windef::HWND;
         self.base.subclass_id = 0;
@@ -124,7 +102,7 @@ impl ControlInner for WindowsButton {
     }
     
     #[cfg(feature = "markup")]
-    fn fill_from_markup(&mut self, base: &mut MemberControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
+    fn fill_from_markup(&mut self, member: &mut MemberBase, control: &mut ControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
         use plygui_api::markup::MEMBER_TYPE_BUTTON;
 		fill_from_markup_base!(
             self,
@@ -140,11 +118,10 @@ impl ControlInner for WindowsButton {
 }
 
 impl HasLayoutInner for WindowsButton {
-	fn on_layout_changed(&mut self, base: &mut MemberBase) {
+	fn on_layout_changed(&mut self, _base: &mut MemberBase) {
 		let hwnd = self.base.hwnd;
         if !hwnd.is_null() {
-        	let base = self.cast_base_mut(base);
-			self.invalidate(base);
+        	self.base.invalidate();
 		}
 	}
 }
@@ -173,7 +150,7 @@ impl MemberInner for WindowsButton {
 	                },
 	            );
 	        }
-			self.invalidate(utils::member_control_base_mut(common::member_from_hwnd::<Button>(hwnd)));
+			self.base.invalidate();
 	    }
     }
     unsafe fn native_id(&self) -> Self::Id {
@@ -182,37 +159,32 @@ impl MemberInner for WindowsButton {
 }
 
 impl Drawable for WindowsButton {
-    fn draw(&mut self, base: &mut MemberControlBase, coords: Option<(i32, i32)>) {
+    fn draw(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, coords: Option<(i32, i32)>) {
         if coords.is_some() {
             self.base.coords = coords;
         }
-        //let (lp,tp,rp,bp) = base.control.layout.padding.into();
-        let (lm, tm, rm, bm) = base.control.layout.margin.into();
         if let Some((x, y)) = self.base.coords {
             unsafe {
                 winuser::SetWindowPos(
                     self.base.hwnd,
                     ptr::null_mut(),
-                    x + lm,
-                    y + tm,
-                    self.base.measured_size.0 as i32 - rm - lm,
-                    self.base.measured_size.1 as i32 - bm - tm,
+                    x,
+                    y,
+                    self.base.measured_size.0 as i32,
+                    self.base.measured_size.1 as i32,
                     0,
                 );
             }
         }
     }
-    fn measure(&mut self, base: &mut MemberControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+    fn measure(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
         let old_size = self.base.measured_size;
         
-        let (lp, tp, rp, bp) = base.control.layout.padding.into();
-        let (lm, tm, rm, bm) = base.control.layout.margin.into();
-
-        self.base.measured_size = match base.member.visibility {
+        self.base.measured_size = match member.visibility {
             types::Visibility::Gone => (0, 0),
             _ => {
                 let mut label_size: windef::SIZE = unsafe { mem::zeroed() };
-                let w = match base.control.layout.width {
+                let w = match control.layout.width {
                     layout::Size::MatchParent => parent_width as i32,
                     layout::Size::Exact(w) => w as i32,
                     layout::Size::WrapContent => {
@@ -228,10 +200,10 @@ impl Drawable for WindowsButton {
                                 &mut label_size,
                             ); }
                         }
-                        label_size.cx as i32 + lm + rm + lp + rp
+                        label_size.cx as i32 + DEFAULT_PADDING + DEFAULT_PADDING
                     } 
                 };
-                let h = match base.control.layout.height {
+                let h = match control.layout.height {
                     layout::Size::MatchParent => parent_height as i32,
                     layout::Size::Exact(h) => h as i32,
                     layout::Size::WrapContent => {
@@ -249,16 +221,16 @@ impl Drawable for WindowsButton {
 	                            );
                             }
                         }
-                        label_size.cy as i32 + tm + bm + tp + bp
+                        label_size.cy as i32 + DEFAULT_PADDING + DEFAULT_PADDING
                     } 
                 };
-                (max(0, w) as u16, max(0, h) as u16)
+                (cmp::max(0, w) as u16, cmp::max(0, h) as u16)
             },
         };
         (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
     }
-    fn invalidate(&mut self, base: &mut MemberControlBase) {
-    	self.base.invalidate(base)
+    fn invalidate(&mut self, _member: &mut MemberBase, _control: &mut ControlBase) {
+    	self.base.invalidate()
     }
 }
 

@@ -1,21 +1,6 @@
 use super::*;
 use super::common::*;
 
-use plygui_api::{ids, types, controls, layout};
-use plygui_api::development::*;
-
-use winapi::shared::windef;
-use winapi::shared::minwindef;
-use winapi::shared::ntdef;
-use winapi::um::winuser;
-use winapi::um::libloaderapi;
-use winapi::ctypes::c_void;
-
-use std::{ptr, mem, str};
-use std::os::windows::ffi::OsStrExt;
-use std::ffi::OsStr;
-use std::borrow::Cow;
-
 lazy_static! {
 	pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
 }
@@ -23,8 +8,6 @@ lazy_static! {
 #[repr(C)]
 pub struct WindowsWindow {
     hwnd: windef::HWND,
-    gravity_horizontal: layout::Gravity,
-    gravity_vertical: layout::Gravity,
     child: Option<Box<controls::Control>>,
 }
 
@@ -88,7 +71,7 @@ impl HasLabelInner for WindowsWindow {
 }
 
 impl WindowInner for WindowsWindow {
-	fn with_params(title: &str, window_size: types::WindowStartSize, menu: types::WindowMenu) -> Box<Window> {
+	fn with_params(title: &str, window_size: types::WindowStartSize, _menu: types::WindowMenu) -> Box<Window> {
     	unsafe {
             let mut rect = match window_size {
                 types::WindowStartSize::Exact(width, height) => windef::RECT {
@@ -140,9 +123,7 @@ impl WindowInner for WindowsWindow {
             let mut w: Box<Window> = Box::new(Member::with_inner(SingleContainer::with_inner(
             		WindowsWindow {
 		                hwnd: 0 as windef::HWND,
-		                child: None,
-		                gravity_horizontal: Default::default(),
-					    gravity_vertical: Default::default(),    
+		                child: None,   
 		            }, ()),
             		MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
             ));    
@@ -184,16 +165,6 @@ impl ContainerInner for WindowsWindow {
             }
         }
         None
-    }
-    fn gravity(&self) -> (layout::Gravity, layout::Gravity) {
-    	(self.gravity_horizontal, self.gravity_vertical)
-    }
-    fn set_gravity(&mut self, _: &mut MemberBase, w: layout::Gravity, h: layout::Gravity) {
-    	if self.gravity_horizontal != w || self.gravity_vertical != h {
-    		self.gravity_horizontal = w;
-    		self.gravity_vertical = h;
-    		self.redraw();
-    	}
     }
 }
 

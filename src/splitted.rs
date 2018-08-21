@@ -1,19 +1,6 @@
 use super::*;
+use super::common::*;
 
-use plygui_api::{development, layout, ids, types, controls, utils};
-use plygui_api::development::{Drawable, HasInner};
-
-use winapi::shared::windef;
-use winapi::shared::minwindef;
-use winapi::um::winuser;
-use winapi::um::libloaderapi;
-use winapi::ctypes::c_void;
-
-use std::{ptr, mem, cmp};
-use std::os::windows::ffi::OsStrExt;
-use std::ffi::OsStr;
-
-const DEFAULT_PADDING: i32 = 6;
 const DEFAULT_BOUND: i32 = DEFAULT_PADDING * 2;
 const HALF_BOUND: i32 = DEFAULT_BOUND / 2;
 
@@ -21,14 +8,12 @@ lazy_static! {
 	pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
 }
 
-pub type Splitted = development::Member<development::Control<development::MultiContainer<WindowsSplitted>>>;
+pub type Splitted = Member<Control<MultiContainer<WindowsSplitted>>>;
 
 #[repr(C)]
 pub struct WindowsSplitted {
     base: common::WindowsControlBase<Splitted>,
     
-    gravity_horizontal: layout::Gravity,
-    gravity_vertical: layout::Gravity,
     orientation: layout::Orientation,
     
     splitter: f32,
@@ -86,15 +71,11 @@ impl WindowsSplitted {
 	}
 }
 
-impl development::SplittedInner for WindowsSplitted {
+impl SplittedInner for WindowsSplitted {
 	fn with_content(first: Box<controls::Control>, second: Box<controls::Control>, orientation: layout::Orientation) -> Box<Splitted> {
-		use plygui_api::controls::{HasLayout};
-		
-		let mut b = Box::new(development::Member::with_inner(development::Control::with_inner(development::MultiContainer::with_inner(
+		let mut b = Box::new(Member::with_inner(Control::with_inner(MultiContainer::with_inner(
 			WindowsSplitted {
 				base: common::WindowsControlBase::new(),
-				gravity_horizontal: Default::default(),
-			    gravity_vertical: Default::default(),
 			    orientation: orientation,
 				
 				splitter: 0.5,
@@ -104,16 +85,15 @@ impl development::SplittedInner for WindowsSplitted {
 			    first: first, 
 			    second: second, 
 			},()), ()),
-			development::MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
+			MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
 		));
-		b.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
 		b.as_inner_mut().as_inner_mut().as_inner_mut().update_children_layout();
 		
 		b
 	}
-	fn set_splitter(&mut self, base: &mut development::MemberControlBase, pos: f32) {
+	fn set_splitter(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, pos: f32) {
 		self.splitter = pos;
-		self.base.invalidate(base);
+		self.base.invalidate();
 	}
 	fn splitter(&self) -> f32 {
 		self.splitter
@@ -124,7 +104,7 @@ impl development::SplittedInner for WindowsSplitted {
 	fn second_mut(&mut self) -> &mut controls::Control { self.second.as_mut() }
 }
 
-impl development::MemberInner for WindowsSplitted {
+impl MemberInner for WindowsSplitted {
 	type Id = common::Hwnd;
 	
 	fn size(&self) -> (u16, u16) {
@@ -135,11 +115,10 @@ impl development::MemberInner for WindowsSplitted {
         )
     }
 
-    fn on_set_visibility(&mut self, base: &mut development::MemberBase) {
+    fn on_set_visibility(&mut self, base: &mut MemberBase) {
 	    let hwnd = self.base.hwnd;
         if !hwnd.is_null() {
-        	use plygui_api::development::Drawable;
-		    unsafe {
+        	unsafe {
 	            winuser::ShowWindow(
 	                self.base.hwnd,
 	                if base.visibility == types::Visibility::Visible {
@@ -149,7 +128,7 @@ impl development::MemberInner for WindowsSplitted {
 	                },
 	            );
 	        }
-			self.invalidate(utils::member_control_base_mut(common::member_from_hwnd::<Button>(hwnd)));
+			self.base.invalidate();
 	    }
     }
     unsafe fn native_id(&self) -> Self::Id {
@@ -157,7 +136,7 @@ impl development::MemberInner for WindowsSplitted {
     }
 }
 
-impl development::ControlInner for WindowsSplitted {
+impl ControlInner for WindowsSplitted {
 	fn parent(&self) -> Option<&controls::Member> {
 		self.base.parent().map(|p| p.as_member())
 	}
@@ -170,19 +149,17 @@ impl development::ControlInner for WindowsSplitted {
     fn root_mut(&mut self) -> Option<&mut controls::Member> {
     	self.base.root_mut().map(|p| p.as_member_mut())
     }
-    fn on_added_to_container(&mut self, base: &mut development::MemberControlBase, parent: &controls::Container, px: i32, py: i32) {
-        let selfptr = base as *mut _ as *mut c_void;
+    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &controls::Container, px: i32, py: i32) {
+        let selfptr = member as *mut _ as *mut c_void;
         let (pw, ph) = parent.draw_area_size();
-        let (width, height, _) = self.measure(base, pw, ph);
-        let (lp, tp, _, _) = base.control.layout.padding.into();
-        let (lm, tm, rm, bm) = base.control.layout.margin.into();
+        let (width, height, _) = self.measure(member, control, pw, ph);
         let (hwnd, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
             common::create_control_hwnd(
-                px as i32 + lm,
-                py as i32 + tm,
-                width as i32 - rm - lm,
-                height as i32 - bm - tm,
+                px as i32,
+                py as i32,
+                width as i32,
+                height as i32,
                 parent.native_id() as windef::HWND,
                 winuser::WS_EX_CONTROLPARENT,
                 WINDOW_CLASS.as_ptr(),
@@ -198,8 +175,8 @@ impl development::ControlInner for WindowsSplitted {
         self.reload_cursor();
         self.update_children_layout();
         
-        let mut x = lp + lm;
-        let mut y = tp + tm;
+        let mut x = DEFAULT_PADDING;
+        let mut y = DEFAULT_PADDING;
         
         let self2: &mut Splitted = unsafe { mem::transmute(selfptr) };
             
@@ -219,8 +196,8 @@ impl development::ControlInner for WindowsSplitted {
         
         self.second.on_added_to_container(self2, x, y);     
     }
-    fn on_removed_from_container(&mut self, base: &mut development::MemberControlBase, _: &controls::Container) {
-        let self2: &mut Splitted = unsafe { utils::base_to_impl_mut(&mut base.member) };
+    fn on_removed_from_container(&mut self, member: &mut MemberBase, _control: &mut ControlBase, _: &controls::Container) {
+        let self2: &mut Splitted = unsafe { utils::base_to_impl_mut(member) };
         
         self.first.on_removed_from_container(self2);    
         self.second.on_removed_from_container(self2);    
@@ -232,7 +209,7 @@ impl development::ControlInner for WindowsSplitted {
     }
     
     #[cfg(feature = "markup")]
-    fn fill_from_markup(&mut self, base: &mut MemberControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
+    fn fill_from_markup(&mut self, member: &mut MemberBase, control: &mut ControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
         use plygui_api::markup::MEMBER_TYPE_SPLITTED;
 
         fill_from_markup_base!(
@@ -247,23 +224,22 @@ impl development::ControlInner for WindowsSplitted {
     }
 }
 
-impl development::HasLayoutInner for WindowsSplitted {
-	fn on_layout_changed(&mut self, base: &mut development::MemberBase) {
+impl HasLayoutInner for WindowsSplitted {
+	fn on_layout_changed(&mut self, _base: &mut MemberBase) {
 		self.update_children_layout();
 		
 		let hwnd = self.base.hwnd;
         if !hwnd.is_null() {
-        	use plygui_api::development::{Drawable, ControlInner};
-			let base = self.cast_base_mut(base);
-			self.invalidate(base);
+        	self.base.invalidate();
 		}
+	}
+	fn layout_margin(&self, _member: &MemberBase) -> layout::BoundarySize {
+	    layout::BoundarySize::AllTheSame(DEFAULT_PADDING)
 	}
 }
 
-impl development::ContainerInner for WindowsSplitted {
+impl ContainerInner for WindowsSplitted {
 	fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut controls::Control> {
-		use plygui_api::development::SplittedInner;
-		
 		if self.first().as_member().id() == id_ {
 			return Some(self.first_mut());
 		}
@@ -288,9 +264,7 @@ impl development::ContainerInner for WindowsSplitted {
         None
     }
     fn find_control_by_id(&self, id_: ids::Id) -> Option<&controls::Control> {
-    	use plygui_api::development::SplittedInner;
-    	
-        if self.first().as_member().id() == id_ {
+    	if self.first().as_member().id() == id_ {
 			return Some(self.first());
 		}
 		if self.second().as_member().id() == id_ {
@@ -312,30 +286,20 @@ impl development::ContainerInner for WindowsSplitted {
 		
         None
     }
-    fn gravity(&self) -> (layout::Gravity, layout::Gravity) {
-    	(self.gravity_horizontal, self.gravity_vertical)
-    }
-    fn set_gravity(&mut self, _: &mut development::MemberBase, _: layout::Gravity, _: layout::Gravity) {}
 }
 
-impl development::MultiContainerInner for WindowsSplitted {
+impl MultiContainerInner for WindowsSplitted {
 	fn len(&self) -> usize {
 		2
 	}
-    fn set_child_to(&mut self, _: &mut development::MemberBase, index: usize, mut child: Box<controls::Control>) -> Option<Box<controls::Control>> {
-    	use plygui_api::controls::HasLayout;
-    	
+    fn set_child_to(&mut self, _: &mut MemberBase, index: usize, mut child: Box<controls::Control>) -> Option<Box<controls::Control>> {
     	match index {
 	    	0 => {
 	    		let hwnd = self.base.hwnd;
 			    if !hwnd.is_null() {
-			    	let self2 = common::member_from_hwnd::<Splitted>(hwnd);
-				    
-				    let (lp, tp, _, _) = self2.as_has_layout().layout_padding().into();
-			        let (lm, tm, _, _) = self2.as_has_layout().layout_margin().into();
-			        
-		    		self.first.on_removed_from_container(self2);
-				    child.on_added_to_container(self2, lp + lm, tp + tm);
+			    	let self2 = common::member_from_hwnd::<Splitted>(hwnd);				    
+				    self.first.on_removed_from_container(self2);
+				    child.on_added_to_container(self2, DEFAULT_PADDING, DEFAULT_PADDING);
 			    }
 	    		mem::swap(&mut self.first, &mut child);
 	    	},
@@ -344,10 +308,8 @@ impl development::MultiContainerInner for WindowsSplitted {
 			    if !hwnd.is_null() {
 				    let self2 = common::member_from_hwnd::<Splitted>(hwnd);
 				    
-				    let (lp, tp, _, _) = self2.as_has_layout().layout_padding().into();
-			        let (lm, tm, _, _) = self2.as_has_layout().layout_margin().into();
-			        let mut x = lp + lm;
-				    let mut y = tp + tm;
+				    let mut x = DEFAULT_PADDING;
+				    let mut y = DEFAULT_PADDING;
         
 			        let (xx, yy) = self.first.size();
 					match self.orientation {
@@ -371,12 +333,10 @@ impl development::MultiContainerInner for WindowsSplitted {
     	
     	Some(child)
     }
-    fn remove_child_from(&mut self, _: &mut development::MemberBase, _: usize) -> Option<Box<controls::Control>> {
+    fn remove_child_from(&mut self, _: &mut MemberBase, _: usize) -> Option<Box<controls::Control>> {
     	None
     }
     fn child_at(&self, index: usize) -> Option<&controls::Control> {
-    	use plygui_api::development::SplittedInner;
-    	
     	match index {
     		0 => Some(self.first()),
     		1 => Some(self.second()),
@@ -384,8 +344,6 @@ impl development::MultiContainerInner for WindowsSplitted {
     	}
     }
     fn child_at_mut(&mut self, index: usize) -> Option<&mut controls::Control> {
-    	use plygui_api::development::SplittedInner;
-    	
     	match index {
     		0 => Some(self.first_mut()),
     		1 => Some(self.second_mut()),
@@ -394,44 +352,38 @@ impl development::MultiContainerInner for WindowsSplitted {
     }
 }
 
-impl development::HasOrientationInner for WindowsSplitted {
+impl HasOrientationInner for WindowsSplitted {
 	fn layout_orientation(&self) -> layout::Orientation {
 		self.orientation
 	}
-    fn set_layout_orientation(&mut self, base: &mut development::MemberBase, orientation: layout::Orientation) {
+    fn set_layout_orientation(&mut self, _base: &mut MemberBase, orientation: layout::Orientation) {
     	if orientation != self.orientation {
-    		use plygui_api::development::{Drawable, ControlInner};
-    		
     		self.orientation = orientation;
     		self.reload_cursor();
-    		
-	    	let base = self.cast_base_mut(base);
-			self.invalidate(base);
+	    	self.base.invalidate();
     	}
     }
 }
 
-impl development::Drawable for WindowsSplitted {
-	fn draw(&mut self, base: &mut development::MemberControlBase, coords: Option<(i32, i32)>) {
+impl Drawable for WindowsSplitted {
+	fn draw(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, coords: Option<(i32, i32)>) {
         if coords.is_some() {
             self.base.coords = coords;
         }
-        let (lp, tp, _, _) = base.control.layout.padding.into();
-        let (lm, tm, rm, bm) = base.control.layout.margin.into();
         if let Some((x, y)) = self.base.coords {
             unsafe {
                 winuser::SetWindowPos(
                     self.base.hwnd,
                     ptr::null_mut(),
-                    x + lm,
-                    y + tm,
-                    self.base.measured_size.0 as i32 - rm,
-                    self.base.measured_size.1 as i32 - bm,
+                    x,
+                    y,
+                    self.base.measured_size.0 as i32,
+                    self.base.measured_size.1 as i32,
                     0,
                 );
             }
-            let mut x = lp;
-            let mut y = tp;
+            let mut x = DEFAULT_PADDING;
+            let mut y = DEFAULT_PADDING;
             for ref mut child in [self.first.as_mut(), self.second.as_mut()].iter_mut() {
                 child.draw(Some((x, y)));
                 let (xx, yy) = child.size();
@@ -448,20 +400,18 @@ impl development::Drawable for WindowsSplitted {
             }
         }
     }
-    fn measure(&mut self, base: &mut development::MemberControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+    fn measure(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
         use std::cmp::max;
     	
     	let orientation = self.orientation;
     	let old_size = self.base.measured_size;
-    	let (lp,tp,rp,bp) = base.control.layout.padding.into();
-    	let (lm,tm,rm,bm) = base.control.layout.margin.into();
-    	let hp = lm + rm + lp + rp + if orientation == layout::Orientation::Horizontal { DEFAULT_BOUND } else { 0 };
-    	let vp = tm + bm + tp + bp + if orientation == layout::Orientation::Vertical { DEFAULT_BOUND } else { 0 };
-    	self.base.measured_size = match base.member.visibility {
+    	let hp = DEFAULT_PADDING + DEFAULT_PADDING + if orientation == layout::Orientation::Horizontal { DEFAULT_BOUND } else { 0 };
+    	let vp = DEFAULT_PADDING + DEFAULT_PADDING + if orientation == layout::Orientation::Vertical { DEFAULT_BOUND } else { 0 };
+    	self.base.measured_size = match member.visibility {
         	types::Visibility::Gone => (0,0),
         	_ => {
         		let mut measured = false;
-        		let w = match base.control.layout.width {
+        		let w = match control.layout.width {
         			layout::Size::Exact(w) => w,
         			layout::Size::MatchParent => parent_width,
         			layout::Size::WrapContent => {
@@ -484,7 +434,7 @@ impl development::Drawable for WindowsSplitted {
 	        			max(0, w as i32 + hp) as u16
         			}
         		};
-        		let h = match base.control.layout.height {
+        		let h = match control.layout.height {
         			layout::Size::Exact(h) => h,
         			layout::Size::MatchParent => parent_height,
         			layout::Size::WrapContent => {
@@ -520,8 +470,8 @@ impl development::Drawable for WindowsSplitted {
             self.base.measured_size != old_size,
         )
     }
-    fn invalidate(&mut self, base: &mut development::MemberControlBase) {
-    	self.base.invalidate(base)
+    fn invalidate(&mut self, _member: &mut MemberBase, _control: &mut ControlBase) {
+    	self.base.invalidate()
     }
 }
 
@@ -571,16 +521,12 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             let mut height = (lparam >> 16) as u16;
             let mut ll: &mut Splitted = mem::transmute(ww);
             let o = ll.layout_orientation();
-			let (lp, tp, rp, bp) = ll.is_control().unwrap().layout_padding().into();
-	        let (lm, tm, rm, bm) = ll.is_control().unwrap().layout_margin().into();
-	        let hp = lm + rm + lp + rp + if o == layout::Orientation::Horizontal { DEFAULT_BOUND } else { 0 };
-	    	let vp = tm + bm + tp + bp + if o == layout::Orientation::Vertical { DEFAULT_BOUND } else { 0 };
+			let hp = DEFAULT_PADDING + DEFAULT_PADDING + if o == layout::Orientation::Horizontal { DEFAULT_BOUND } else { 0 };
+	    	let vp = DEFAULT_PADDING + DEFAULT_PADDING + if o == layout::Orientation::Vertical { DEFAULT_BOUND } else { 0 };
     	
             let mut x = 0;
             let mut y = 0;
             {
-            	use plygui_api::development::OuterDrawable;
-            	
             	ll.set_skip_draw(true);
             	{
 	            	let ll = ll.as_inner_mut().as_inner_mut().as_inner_mut();
@@ -588,7 +534,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             	
 	            	for child in [ll.first.as_mut(), ll.second.as_mut()].iter_mut() {
 		            	let (cw, ch, _) = child.measure(cmp::max(0, width as i32 - hp) as u16, cmp::max(0, height as i32 - vp) as u16);
-		                child.draw(Some((x + lp + lm, y + tp + tm))); 
+		                child.draw(Some((x + DEFAULT_PADDING, y + DEFAULT_PADDING))); 
 		                match o {
 		                    layout::Orientation::Horizontal if width >= cw => {
 		                        x += cw as i32;

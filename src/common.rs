@@ -1,21 +1,24 @@
-use std::{ptr, mem, str};
-use std::os::raw::c_void;
-use std::os::windows::ffi::OsStrExt;
-use std::ffi::OsStr;
-use std::marker::PhantomData;
+pub use plygui_api::{controls, layout, types, callbacks, utils, ids};
+pub use plygui_api::development::*;
 
-use plygui_api::{controls, development};
+pub use winapi::shared::windef;
+pub use winapi::shared::minwindef;
+pub use winapi::shared::ntdef;
+pub use winapi::um::winuser;
+pub use winapi::um::wingdi;
+pub use winapi::um::winbase;
+pub use winapi::um::commctrl;
+pub use winapi::um::errhandlingapi;
+pub use winapi::um::libloaderapi;
+pub use winapi::ctypes::c_void;
 
-use winapi::shared::windef;
-use winapi::shared::minwindef;
-use winapi::shared::ntdef;
-use winapi::um::winuser;
-use winapi::um::wingdi;
-use winapi::um::winbase;
-use winapi::um::commctrl;
-use winapi::um::errhandlingapi;
-use winapi::um::libloaderapi;
+pub use std::{ptr, mem, str, cmp};
+pub use std::os::windows::ffi::OsStrExt;
+pub use std::ffi::OsStr;
+pub use std::borrow::Cow;
+pub use std::marker::PhantomData;
 
+pub const DEFAULT_PADDING: i32 = 6;
 pub const WM_UPDATE_INNER: u32 = winuser::WM_APP + 1;
 
 #[inline]
@@ -65,7 +68,7 @@ impl From<Hwnd> for usize {
 		a.0 as usize
 	}
 }
-impl development::NativeId for Hwnd {}
+impl NativeId for Hwnd {}
 
 #[repr(C)]
 pub struct WindowsControlBase<T: controls::Control + Sized> {
@@ -97,7 +100,7 @@ impl <T: controls::Control + Sized> WindowsControlBase<T> {
             }
         }
     }
-    pub fn parent(&self) -> Option<&development::MemberBase> {
+    pub fn parent(&self) -> Option<&MemberBase> {
         unsafe {
             let parent_hwnd = winuser::GetParent(self.hwnd);
             if parent_hwnd == self.hwnd {
@@ -108,7 +111,7 @@ impl <T: controls::Control + Sized> WindowsControlBase<T> {
             mem::transmute(parent_ptr as *mut c_void)
         }
     }
-    pub fn parent_mut(&mut self) -> Option<&mut development::MemberBase> {
+    pub fn parent_mut(&mut self) -> Option<&mut MemberBase> {
         unsafe {
             let parent_hwnd = winuser::GetParent(self.hwnd);
             if parent_hwnd == self.hwnd {
@@ -119,7 +122,7 @@ impl <T: controls::Control + Sized> WindowsControlBase<T> {
             mem::transmute(parent_ptr as *mut c_void)
         }
     }
-    pub fn root(&self) -> Option<&development::MemberBase> {
+    pub fn root(&self) -> Option<&MemberBase> {
         unsafe {
             let parent_hwnd = winuser::GetAncestor(self.hwnd, 2); //GA_ROOT
             if parent_hwnd == self.hwnd {
@@ -130,7 +133,7 @@ impl <T: controls::Control + Sized> WindowsControlBase<T> {
             mem::transmute(parent_ptr as *mut c_void)
         }
     }
-    pub fn root_mut(&mut self) -> Option<&mut development::MemberBase> {
+    pub fn root_mut(&mut self) -> Option<&mut MemberBase> {
         unsafe {
             let parent_hwnd = winuser::GetAncestor(self.hwnd, 2); //GA_ROOT
             if parent_hwnd == self.hwnd {
@@ -141,22 +144,25 @@ impl <T: controls::Control + Sized> WindowsControlBase<T> {
             mem::transmute(parent_ptr as *mut c_void)
         }
     }
-    pub fn invalidate(&mut self, _: &mut development::MemberControlBase) {
+    pub fn invalidate(&mut self) {
     	let parent_hwnd = self.parent_hwnd();	
 		if let Some(parent_hwnd) = parent_hwnd {
 			let mparent = member_base_from_hwnd(parent_hwnd);
 			let (pw, ph) = mparent.as_member().size();
 			let this = member_from_hwnd::<T>(self.hwnd);
 			let (_,_,changed) = this.measure(pw, ph);
-			this.draw(None);
 			
 			if let Some(cparent) = mparent.as_member_mut().is_control_mut() {
 				if changed && !cparent.is_skip_draw()  {
 					cparent.invalidate();
-				} 
+				} else {
+				    this.draw(None);
+				}
+			} else {
+			    this.draw(None);
 			}
-			if parent_hwnd != 0 as ::winapi::shared::windef::HWND {
-	    		unsafe { ::winapi::um::winuser::InvalidateRect(parent_hwnd, ptr::null_mut(), ::winapi::shared::minwindef::TRUE); }
+			if parent_hwnd != 0 as windef::HWND {
+	    		unsafe { winuser::InvalidateRect(parent_hwnd, ptr::null_mut(), minwindef::TRUE); }
 	    	}
 	    }
     }
@@ -277,7 +283,7 @@ pub fn member_from_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T where T: Sized +
     unsafe { cast_hwnd(hwnd) }
 }
 #[inline]
-pub fn member_base_from_hwnd<'a>(hwnd: windef::HWND) -> &'a mut development::MemberBase {
+pub fn member_base_from_hwnd<'a>(hwnd: windef::HWND) -> &'a mut MemberBase {
     unsafe { cast_hwnd(hwnd) }
 }
 
