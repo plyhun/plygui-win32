@@ -258,11 +258,8 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             let height = (lparam >> 16) as u16;
 
             let button: &mut Button = mem::transmute(param);
-		    if let Some(ref mut cb) = button.base_mut().handler_resize {
-                let mut button2: &mut Button = mem::transmute(param);
-                (cb.as_mut())(button2, width, height);
-            }
-		    return 0;
+		    button.call_on_resize(width, height);
+            return 0;
         }
         _ => {}
     }
