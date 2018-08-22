@@ -556,11 +556,8 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             }
 
             if msg != common::WM_UPDATE_INNER {
-            	if let Some(ref mut cb) = ll.base_mut().handler_resize {
-	                let mut ll2: &mut Splitted = mem::transmute(ww);
-	                (cb.as_mut())(ll2, width, height);
-	            }
-            }
+            	ll.call_on_resize(width, height);
+	        }
             return 0;
         }
         winuser::WM_MOUSEMOVE => {

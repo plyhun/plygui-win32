@@ -388,11 +388,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
                 child.measure(cmp::max(0, width as i32 - hp) as u16, cmp::max(0, height as i32 - vp) as u16);
                 child.draw(Some((DEFAULT_PADDING, DEFAULT_PADDING))); 
             }
-
-            if let Some(ref mut cb) = frame.base_mut().handler_resize {
-                let mut frame2: &mut Frame = mem::transmute(ww);
-                (cb.as_mut())(frame2, width, height);
-            }
+            frame.call_on_resize(width, height);
             return 0;
         }
         _ => {}

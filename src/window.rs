@@ -277,12 +277,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             
             ::winapi::um::winuser::InvalidateRect(w.as_inner().as_inner().hwnd, ptr::null_mut(), ::winapi::shared::minwindef::TRUE);
 
-            if let Some(ref mut cb) = w.base_mut().handler_resize {
-                use plygui_api::controls::SingleContainer;
-                
-                let mut w2: &mut window::Window = mem::transmute(ww);
-                (cb.as_mut())(w2.as_single_container_mut().as_container_mut().as_member_mut(), width, height);
-            }
+            w.call_on_resize(width, height);
             return 0;
         }
         winuser::WM_DESTROY => {
