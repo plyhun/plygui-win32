@@ -157,11 +157,11 @@ impl <T: controls::Control + Sized> WindowsControlBase<T> {
 					cparent.invalidate();
 				} else {
 				    this.draw(None);
-				    unsafe { winuser::InvalidateRect(parent_hwnd, ptr::null_mut(), minwindef::TRUE); }
+				    unsafe { winuser::RedrawWindow(self.hwnd, ptr::null_mut(), ptr::null_mut(), winuser::RDW_INVALIDATE | winuser::RDW_UPDATENOW); }
 				}
 			} else {
 			    this.draw(None);
-			    unsafe { winuser::InvalidateRect(parent_hwnd, ptr::null_mut(), minwindef::TRUE); }
+			    unsafe { winuser::RedrawWindow(self.hwnd, ptr::null_mut(), ptr::null_mut(), winuser::RDW_INVALIDATE | winuser::RDW_UPDATENOW); }
 			}
 	    }
     }

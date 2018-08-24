@@ -1,7 +1,7 @@
 use super::*;
 use super::common::*;
 
-const DEFAULT_BOUND: i32 = DEFAULT_PADDING * 2;
+const DEFAULT_BOUND: i32 = DEFAULT_PADDING;
 const HALF_BOUND: i32 = DEFAULT_BOUND / 2;
 
 lazy_static! {
@@ -53,33 +53,30 @@ impl WindowsSplitted {
 		if self.base.hwnd.is_null() { return }
 		
 		let orientation = self.orientation;
-		self.first.set_skip_draw(true);
-		self.second.set_skip_draw(true);
-		
-		match orientation {
-			layout::Orientation::Horizontal => {
-				let splitter_pos = cmp::min(self.base.measured_size.0 as i32, (self.base.measured_size.0 as f32 * self.splitter) as i32);
-				self.first.set_layout_width(layout::Size::Exact(cmp::max(DEFAULT_BOUND, splitter_pos - HALF_BOUND) as u16));
-				self.second.set_layout_width(layout::Size::Exact(cmp::max(DEFAULT_BOUND, self.base.measured_size.0 as i32 - splitter_pos - HALF_BOUND) as u16));
-				self.first.set_layout_height(layout::Size::MatchParent);
-				self.second.set_layout_height(layout::Size::MatchParent);
-			},
-			layout::Orientation::Vertical => {
-				let splitter_pos = cmp::min(self.base.measured_size.1 as i32, (self.base.measured_size.1 as f32 * self.splitter) as i32);
-				self.first.set_layout_width(layout::Size::MatchParent);
-				self.second.set_layout_width(layout::Size::MatchParent);
-				self.first.set_layout_height(layout::Size::Exact(cmp::max(DEFAULT_BOUND, splitter_pos - HALF_BOUND) as u16));
-				self.second.set_layout_height(layout::Size::Exact(cmp::max(DEFAULT_BOUND, self.base.measured_size.1 as i32 - splitter_pos - HALF_BOUND) as u16));
-			},
-		}
-		self.first.set_skip_draw(false);
-		self.second.set_skip_draw(false);
+		let (first_size, second_size) = self.children_sizes();
+		let (width, height) = self.size();
+		for (size, child) in [(first_size, self.first.as_mut()), (second_size, self.second.as_mut())].iter_mut() {
+            match orientation {
+            	layout::Orientation::Horizontal => {
+            	    child.measure(
+                    	cmp::max(0, *size) as u16, 
+                    	cmp::max(0, height as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16
+                    );
+                },
+            	layout::Orientation::Vertical => {
+            	    child.measure(
+                    	cmp::max(0, width as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16, 
+                    	cmp::max(0, *size) as u16
+                    );
+                },
+            }
+        }
 	}
 }
 
 impl SplittedInner for WindowsSplitted {
 	fn with_content(first: Box<controls::Control>, second: Box<controls::Control>, orientation: layout::Orientation) -> Box<Splitted> {
-		let mut b = Box::new(Member::with_inner(Control::with_inner(MultiContainer::with_inner(
+		let b = Box::new(Member::with_inner(Control::with_inner(MultiContainer::with_inner(
 			WindowsSplitted {
 				base: common::WindowsControlBase::new(),
 			    orientation: orientation,
@@ -93,8 +90,6 @@ impl SplittedInner for WindowsSplitted {
 			},()), ()),
 			MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
 		));
-		b.as_inner_mut().as_inner_mut().as_inner_mut().update_children_layout();
-		
 		b
 	}
 	fn set_splitter(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, pos: f32) {
@@ -178,7 +173,7 @@ impl ControlInner for WindowsSplitted {
         self.base.subclass_id = id;
         self.base.coords = Some((px as i32, py as i32));
         self.reload_cursor();
-        self.update_children_layout();
+        //self.update_children_layout();
         
         let self2: &mut Splitted = unsafe { mem::transmute(selfptr) };
         let (first_size, second_size) = self.children_sizes();
@@ -226,7 +221,7 @@ impl ControlInner for WindowsSplitted {
 
 impl HasLayoutInner for WindowsSplitted {
 	fn on_layout_changed(&mut self, _base: &mut MemberBase) {
-		self.update_children_layout();
+		//self.update_children_layout();
 		
 		let hwnd = self.base.hwnd;
         if !hwnd.is_null() {
@@ -530,6 +525,8 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
         }
         return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }
+    
+    println!(" msg {}", msg);
 
     match msg {
         winuser::WM_SIZE | common::WM_UPDATE_INNER => {
@@ -537,44 +534,36 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             let mut height = (lparam >> 16) as u16;
             let mut ll: &mut Splitted = mem::transmute(ww);
             let o = ll.layout_orientation();
-			let hp = DEFAULT_PADDING + DEFAULT_PADDING + if o == layout::Orientation::Horizontal { DEFAULT_BOUND } else { 0 };
-	    	let vp = DEFAULT_PADDING + DEFAULT_PADDING + if o == layout::Orientation::Vertical { DEFAULT_BOUND } else { 0 };
-    	
-            let mut x = 0;
-            let mut y = 0;
-            {
-            	//ll.set_skip_draw(true);
+			{
+            	ll.set_skip_draw(true);
             	{
 	            	let ll = ll.as_inner_mut().as_inner_mut().as_inner_mut();
 	    			ll.update_children_layout();
             	
-	            	for child in [ll.first.as_mut(), ll.second.as_mut()].iter_mut() {
-		            	let (cw, ch, _) = child.measure(cmp::max(0, width as i32 - hp) as u16, cmp::max(0, height as i32 - vp) as u16);
-		                child.draw(Some((x + DEFAULT_PADDING, y + DEFAULT_PADDING))); 
+	            	let mut x = DEFAULT_PADDING;
+		            let mut y = DEFAULT_PADDING;
+		            for ref mut child in [ll.first.as_mut(), ll.second.as_mut()].iter_mut() {
+		                child.draw(Some((x, y)));
+		                let (xx, yy) = child.size();
 		                match o {
-		                    layout::Orientation::Horizontal if width >= cw => {
-		                        x += cw as i32;
-		                        x += DEFAULT_BOUND;
-		                        width -= cw;
-		                        width -= cmp::min(width as i32, DEFAULT_BOUND) as u16;
-		                    }
-		                    layout::Orientation::Vertical if height >= ch => {
-		                        y += ch as i32;
-		                        y += DEFAULT_BOUND;
-		                        height -= ch;
-		                        height -= cmp::min(height as i32, DEFAULT_BOUND) as u16;
-		                    }
-		                    _ => {}
+		                    layout::Orientation::Horizontal => {
+		                    	x += xx as i32;
+			                    x += DEFAULT_BOUND;
+		                    },
+		                    layout::Orientation::Vertical => {
+		                    	y += yy as i32;
+			                    y += DEFAULT_BOUND;
+		                    },
 		                }
 		            }
             	}
-    			//ll.set_skip_draw(false);            	
+    			ll.set_skip_draw(false);            	
             }
 
             if msg != common::WM_UPDATE_INNER {
             	ll.call_on_resize(width, height);
 	        } else {
-	            winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::TRUE);
+	        	winuser::RedrawWindow(hwnd, ptr::null_mut(), ptr::null_mut(), winuser::RDW_INVALIDATE | winuser::RDW_UPDATENOW);
 	        }
             return 0;
         }
@@ -612,6 +601,10 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             if updated {
             	let packed = ((height as i32) << 16) + width as i32;
     			winuser::SendMessageW(hwnd, common::WM_UPDATE_INNER, 0, packed as isize);
+    			/*winuser::SendMessageW(hwnd, winuser::WM_ERASEBKGND, 0, 0);
+    			winuser::SendMessageW(hwnd, winuser::WM_PAINT, 0, 0);
+    			winuser::SendMessageW(hwnd, winuser::WM_CTLCOLORSTATIC, 0, 0);
+    			winuser::SendMessageW(hwnd, winuser::WM_PRINTCLIENT, 0, 0);*/
             }
             return 0;
         },
