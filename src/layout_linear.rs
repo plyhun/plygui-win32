@@ -50,7 +50,9 @@ impl MultiContainerInner for WindowsLinearLayout {
         self.children.insert(index, child);
         if !self.base.hwnd.is_null() {
         	let (w, h) = self.size();
-        	self.children.get_mut(index).unwrap().on_added_to_container(common::member_from_hwnd::<LinearLayout>(self.base.hwnd), w as i32 - DEFAULT_PADDING, h as i32 - DEFAULT_PADDING);
+        	self.children.get_mut(index).unwrap().on_added_to_container(common::member_from_hwnd::<LinearLayout>(self.base.hwnd), w as i32 - DEFAULT_PADDING, h as i32 - DEFAULT_PADDING,
+            	utils::coord_to_size(w as i32 - DEFAULT_PADDING), utils::coord_to_size(h as i32 - DEFAULT_PADDING)
+        	);
 	        self.base.invalidate();
         }
         old
@@ -92,9 +94,8 @@ impl ControlInner for WindowsLinearLayout {
     fn root_mut(&mut self) -> Option<&mut controls::Member> {
     	self.base.root_mut().map(|p| p.as_member_mut())
     }
-    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &controls::Container, px: i32, py: i32) {
+    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &controls::Container, px: i32, py: i32, pw: u16, ph: u16) {
         let selfptr = member as *mut _ as *mut c_void;
-        let (pw, ph) = parent.draw_area_size();
         let (width, height, _) = self.measure(member, control, pw, ph);
         let (hwnd, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
@@ -119,7 +120,7 @@ impl ControlInner for WindowsLinearLayout {
         let mut y = DEFAULT_PADDING;
         for ref mut child in self.children.as_mut_slice() {
             let self2: &mut LinearLayout = unsafe { utils::base_to_impl_mut(member) };
-            child.on_added_to_container(self2, x, y);
+            child.on_added_to_container(self2, x, y, utils::coord_to_size(px as i32 - x) as u16, utils::coord_to_size(py as i32 - y) as u16);
             let (xx, yy) = child.size();
             match self.orientation {
                 layout::Orientation::Horizontal => x += xx as i32,

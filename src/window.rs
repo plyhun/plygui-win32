@@ -181,7 +181,8 @@ impl SingleContainerInner for WindowsWindow {
         if let Some(new) = child.as_mut() {
             let outer_self: &mut window::Window = common::member_from_hwnd::<Window>(self.hwnd); 
         	let outer_self = outer_self.as_single_container_mut().as_container_mut();
-            new.on_added_to_container(outer_self, 0, 0); 
+        	let size = self.size_inner();
+            new.on_added_to_container(outer_self, 0, 0, utils::coord_to_size(size.0 as i32 - DEFAULT_PADDING), utils::coord_to_size(size.1 as i32 - DEFAULT_PADDING)); 
         }
         self.child = child;
 

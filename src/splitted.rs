@@ -25,6 +25,17 @@ pub struct WindowsSplitted {
 }
 
 impl WindowsSplitted {
+    fn children_sizes(&self) -> (u16, u16) {
+        let (w, h) = self.size();
+        let target = match self.orientation {
+    	    layout::Orientation::Horizontal => w,
+        	layout::Orientation::Vertical => h,
+    	};
+    	(
+    	    utils::coord_to_size((target as f32 * self.splitter) as i32 - DEFAULT_PADDING - HALF_BOUND),
+    	    utils::coord_to_size((target as f32 * (1.0 - self.splitter)) as i32 - DEFAULT_PADDING - HALF_BOUND),
+    	)
+    }
 	fn reload_cursor(&mut self) {
 		unsafe { 
 			if !self.cursor.is_null() && winuser::DestroyCursor(self.cursor) == 0 {
@@ -39,31 +50,26 @@ impl WindowsSplitted {
         };
 	}
 	fn update_children_layout(&mut self) {
-		use plygui_api::controls::Container;
-		
 		if self.base.hwnd.is_null() { return }
 		
-		let self2 = common::member_from_hwnd::<Splitted>(self.base.hwnd);
-		
-		let (width, height) = self2.draw_area_size();
 		let orientation = self.orientation;
 		self.first.set_skip_draw(true);
 		self.second.set_skip_draw(true);
 		
 		match orientation {
 			layout::Orientation::Horizontal => {
-				let splitter_pos = cmp::min(width as i32, (width as f32 * self.splitter) as i32);
+				let splitter_pos = cmp::min(self.base.measured_size.0 as i32, (self.base.measured_size.0 as f32 * self.splitter) as i32);
 				self.first.set_layout_width(layout::Size::Exact(cmp::max(DEFAULT_BOUND, splitter_pos - HALF_BOUND) as u16));
-				self.second.set_layout_width(layout::Size::Exact(cmp::max(DEFAULT_BOUND, width as i32 - splitter_pos - HALF_BOUND) as u16));
+				self.second.set_layout_width(layout::Size::Exact(cmp::max(DEFAULT_BOUND, self.base.measured_size.0 as i32 - splitter_pos - HALF_BOUND) as u16));
 				self.first.set_layout_height(layout::Size::MatchParent);
 				self.second.set_layout_height(layout::Size::MatchParent);
 			},
 			layout::Orientation::Vertical => {
-				let splitter_pos = cmp::min(height as i32, (height as f32 * self.splitter) as i32);
+				let splitter_pos = cmp::min(self.base.measured_size.1 as i32, (self.base.measured_size.1 as f32 * self.splitter) as i32);
 				self.first.set_layout_width(layout::Size::MatchParent);
 				self.second.set_layout_width(layout::Size::MatchParent);
 				self.first.set_layout_height(layout::Size::Exact(cmp::max(DEFAULT_BOUND, splitter_pos - HALF_BOUND) as u16));
-				self.second.set_layout_height(layout::Size::Exact(cmp::max(DEFAULT_BOUND, height as i32 - splitter_pos - HALF_BOUND) as u16));
+				self.second.set_layout_height(layout::Size::Exact(cmp::max(DEFAULT_BOUND, self.base.measured_size.1 as i32 - splitter_pos - HALF_BOUND) as u16));
 			},
 		}
 		self.first.set_skip_draw(false);
@@ -149,9 +155,8 @@ impl ControlInner for WindowsSplitted {
     fn root_mut(&mut self) -> Option<&mut controls::Member> {
     	self.base.root_mut().map(|p| p.as_member_mut())
     }
-    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &controls::Container, px: i32, py: i32) {
+    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &controls::Container, px: i32, py: i32, pw: u16, ph: u16) {
         let selfptr = member as *mut _ as *mut c_void;
-        let (pw, ph) = parent.draw_area_size();
         let (width, height, _) = self.measure(member, control, pw, ph);
         let (hwnd, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
@@ -175,26 +180,21 @@ impl ControlInner for WindowsSplitted {
         self.reload_cursor();
         self.update_children_layout();
         
-        let mut x = DEFAULT_PADDING;
-        let mut y = DEFAULT_PADDING;
-        
         let self2: &mut Splitted = unsafe { mem::transmute(selfptr) };
+        let (first_size, second_size) = self.children_sizes();
             
-        self.first.on_added_to_container(self2, x, y); 
-        
-        let (xx, yy) = self.first.size();
         match self.orientation {
             layout::Orientation::Horizontal => {
-            	x += xx as i32;
-            	x += DEFAULT_BOUND;
+                let h = utils::coord_to_size(height as i32 - DEFAULT_PADDING - DEFAULT_PADDING);
+            	self.first.on_added_to_container(self2, DEFAULT_PADDING, DEFAULT_PADDING, first_size, h); 
+                self.second.on_added_to_container(self2, DEFAULT_PADDING + DEFAULT_BOUND + first_size as i32, DEFAULT_PADDING, second_size, h); 
             },
             layout::Orientation::Vertical => {
-            	y += yy as i32;
-	            y += DEFAULT_BOUND;
+                let w = utils::coord_to_size(width as i32 - DEFAULT_PADDING - DEFAULT_PADDING);
+            	self.first.on_added_to_container(self2, DEFAULT_PADDING, DEFAULT_PADDING, w, first_size); 
+                self.second.on_added_to_container(self2, DEFAULT_PADDING, DEFAULT_PADDING + DEFAULT_BOUND + first_size as i32, w, second_size);
             },
-        }    
-        
-        self.second.on_added_to_container(self2, x, y);     
+        }
     }
     fn on_removed_from_container(&mut self, member: &mut MemberBase, _control: &mut ControlBase, _: &controls::Container) {
         let self2: &mut Splitted = unsafe { utils::base_to_impl_mut(member) };
@@ -297,9 +297,10 @@ impl MultiContainerInner for WindowsSplitted {
 	    	0 => {
 	    		let hwnd = self.base.hwnd;
 			    if !hwnd.is_null() {
-			    	let self2 = common::member_from_hwnd::<Splitted>(hwnd);				    
+			    	let self2 = common::member_from_hwnd::<Splitted>(hwnd);		
+			    	let sizes = self.first.size();		    
 				    self.first.on_removed_from_container(self2);
-				    child.on_added_to_container(self2, DEFAULT_PADDING, DEFAULT_PADDING);
+				    child.on_added_to_container(self2, DEFAULT_PADDING, DEFAULT_PADDING, sizes.0, sizes.1);
 			    }
 	    		mem::swap(&mut self.first, &mut child);
 	    	},
@@ -322,9 +323,9 @@ impl MultiContainerInner for WindowsSplitted {
 						    y += DEFAULT_BOUND;
 					    },
 					} 
-			        
+			        let sizes = self.second.size();		
 		    		self.second.on_removed_from_container(self2);
-		    		child.on_added_to_container(self2, x, y);
+		    		child.on_added_to_container(self2, x, y, sizes.0, sizes.1);
 			    }
 	    		mem::swap(&mut self.second, &mut child);
 	    	},
@@ -407,6 +408,7 @@ impl Drawable for WindowsSplitted {
     	let old_size = self.base.measured_size;
     	let hp = DEFAULT_PADDING + DEFAULT_PADDING + if orientation == layout::Orientation::Horizontal { DEFAULT_BOUND } else { 0 };
     	let vp = DEFAULT_PADDING + DEFAULT_PADDING + if orientation == layout::Orientation::Vertical { DEFAULT_BOUND } else { 0 };
+    	let (first_size, second_size) = self.children_sizes();
     	self.base.measured_size = match member.visibility {
         	types::Visibility::Gone => (0,0),
         	_ => {
@@ -416,16 +418,20 @@ impl Drawable for WindowsSplitted {
         			layout::Size::MatchParent => parent_width,
         			layout::Size::WrapContent => {
 	        			let mut w = 0;
-		                for child in [self.first.as_mut(), self.second.as_mut()].iter_mut() {
-		                    let (cw, _, _) = child.measure(
-		                    	max(0, parent_width as i32 - hp) as u16, 
-		                    	max(0, parent_height as i32 - vp) as u16
-		                    );
+		                for (size, child) in [(first_size, self.first.as_mut()), (second_size, self.second.as_mut())].iter_mut() {
 		                    match orientation {
 		                    	layout::Orientation::Horizontal => {
+		                    	    let (cw, _, _) = child.measure(
+        		                    	max(0, *size) as u16, 
+        		                    	max(0, parent_height as i32 - vp) as u16
+        		                    );
 			                    	w += cw;
 			                    },
 		                    	layout::Orientation::Vertical => {
+		                    	    let (cw, _, _) = child.measure(
+        		                    	max(0, parent_width as i32 - hp) as u16, 
+        		                    	max(0, *size) as u16
+        		                    );
 			                    	w = max(w, cw);
 			                    },
 		                    }
@@ -439,14 +445,24 @@ impl Drawable for WindowsSplitted {
         			layout::Size::MatchParent => parent_height,
         			layout::Size::WrapContent => {
 	        			let mut h = 0;
-		                for child in [self.first.as_mut(), self.second.as_mut()].iter_mut() {
+		                for (size, child) in [(first_size, self.first.as_mut()), (second_size, self.second.as_mut())].iter_mut() {
 		                    let ch = if measured {
 		                    	child.size().1
 		                    } else {
-		                    	let (_, ch, _) = child.measure(
-			                    	max(0, parent_width as i32 - hp) as u16, 
-			                    	max(0, parent_height as i32 - vp) as u16
-			                    );
+		                    	let (_, ch, _) = match orientation {
+    		                    	layout::Orientation::Horizontal => {
+    		                    	    child.measure(
+            		                    	max(0, *size) as u16, 
+            		                    	max(0, parent_height as i32 - vp) as u16
+            		                    )
+    			                    },
+    		                    	layout::Orientation::Vertical => {
+    		                    	    child.measure(
+            		                    	max(0, parent_width as i32 - hp) as u16, 
+            		                    	max(0, *size) as u16
+            		                    )
+    			                    },
+    		                    };
 		                    	ch
 		                    };
 		                    match orientation {
@@ -527,7 +543,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             let mut x = 0;
             let mut y = 0;
             {
-            	ll.set_skip_draw(true);
+            	//ll.set_skip_draw(true);
             	{
 	            	let ll = ll.as_inner_mut().as_inner_mut().as_inner_mut();
 	    			ll.update_children_layout();
@@ -552,11 +568,13 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
 		                }
 		            }
             	}
-    			ll.set_skip_draw(false);            	
+    			//ll.set_skip_draw(false);            	
             }
 
             if msg != common::WM_UPDATE_INNER {
             	ll.call_on_resize(width, height);
+	        } else {
+	            winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::TRUE);
 	        }
             return 0;
         }

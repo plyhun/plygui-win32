@@ -157,13 +157,12 @@ impl <T: controls::Control + Sized> WindowsControlBase<T> {
 					cparent.invalidate();
 				} else {
 				    this.draw(None);
+				    unsafe { winuser::InvalidateRect(parent_hwnd, ptr::null_mut(), minwindef::TRUE); }
 				}
 			} else {
 			    this.draw(None);
+			    unsafe { winuser::InvalidateRect(parent_hwnd, ptr::null_mut(), minwindef::TRUE); }
 			}
-			if parent_hwnd != 0 as windef::HWND {
-	    		unsafe { winuser::InvalidateRect(parent_hwnd, ptr::null_mut(), minwindef::TRUE); }
-	    	}
 	    }
     }
 }
