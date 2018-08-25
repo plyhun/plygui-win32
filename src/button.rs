@@ -129,11 +129,7 @@ impl MemberInner for WindowsButton {
     type Id = common::Hwnd;
 	
 	fn size(&self) -> (u16, u16) {
-        let rect = unsafe { common::window_rect(self.base.hwnd) };
-        (
-            (rect.right - rect.left) as u16,
-            (rect.bottom - rect.top) as u16,
-        )
+        self.base.size()
     }
 
     fn on_set_visibility(&mut self, base: &mut MemberBase) {

@@ -183,6 +183,14 @@ impl <T: controls::Control + Sized> WindowsControlBase<T> {
             }
         }
     }
+    pub fn size(&self) -> (u16, u16) {
+        if self.hwnd.is_null() {
+        	self.measured_size
+        } else {
+        	let rect = unsafe { window_rect(self.hwnd) };
+	        ((rect.right - rect.left) as u16, (rect.bottom - rect.top) as u16)
+        }
+    }
 }
 
 pub unsafe fn get_class_name_by_hwnd(hwnd: windef::HWND) -> Vec<u16> {

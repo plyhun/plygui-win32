@@ -43,6 +43,7 @@ impl HasLayoutInner for WindowsFrame {
     fn on_layout_changed(&mut self, _base: &mut MemberBase) {
         let hwnd = self.base.hwnd;
         if !hwnd.is_null() {
+        	unsafe { winuser::RedrawWindow(self.hwnd_gbox, ptr::null_mut(), ptr::null_mut(), winuser::RDW_INVALIDATE | winuser::RDW_UPDATENOW) };
             self.base.invalidate();
         }
     }
@@ -55,7 +56,7 @@ impl HasLabelInner for WindowsFrame {
     fn label<'a>(&'a self) -> ::std::borrow::Cow<'a, str> {
         Cow::Borrowed(self.label.as_ref())
     }
-    fn set_label(&mut self, _base: &mut MemberBase, label: &str) {
+    fn set_label(&mut self, base: &mut MemberBase, label: &str) {
         self.label = label.into();
         let hwnd = self.base.hwnd;
         if !hwnd.is_null() {
@@ -63,13 +64,13 @@ impl HasLabelInner for WindowsFrame {
             unsafe {
                 winuser::SetWindowTextW(self.base.hwnd, control_name.as_ptr());
             }
-            self.base.invalidate();
         }
+        self.on_layout_changed(base);
     }
 }
 
 impl SingleContainerInner for WindowsFrame {
-    fn set_child(&mut self, _base: &mut MemberBase, child: Option<Box<controls::Control>>) -> Option<Box<controls::Control>> {
+    fn set_child(&mut self, base: &mut MemberBase, child: Option<Box<controls::Control>>) -> Option<Box<controls::Control>> {
         let mut old = self.child.take();
         if let Some(old) = old.as_mut() {
             if !self.base.hwnd.is_null() {
@@ -92,7 +93,7 @@ impl SingleContainerInner for WindowsFrame {
                 }
             }
         }
-        self.base.invalidate();
+        self.on_layout_changed(base);
 
         old
     }
@@ -217,8 +218,7 @@ impl MemberInner for WindowsFrame {
     type Id = common::Hwnd;
 
     fn size(&self) -> (u16, u16) {
-        let rect = unsafe { common::window_rect(self.base.hwnd) };
-        ((rect.right - rect.left) as u16, (rect.bottom - rect.top) as u16)
+        self.base.size()
     }
 
     fn on_set_visibility(&mut self, base: &mut MemberBase) {
@@ -227,7 +227,7 @@ impl MemberInner for WindowsFrame {
             unsafe {
                 winuser::ShowWindow(self.base.hwnd, if base.visibility == types::Visibility::Visible { winuser::SW_SHOW } else { winuser::SW_HIDE });
             }
-            self.base.invalidate();
+            self.on_layout_changed(base);
         }
     }
     unsafe fn native_id(&self) -> Self::Id {
@@ -299,7 +299,8 @@ impl Drawable for WindowsFrame {
         (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
     }
     fn invalidate(&mut self, _member: &mut MemberBase, _control: &mut ControlBase) {
-        self.base.invalidate()
+        unsafe { winuser::RedrawWindow(self.hwnd_gbox, ptr::null_mut(), ptr::null_mut(), winuser::RDW_INVALIDATE | winuser::RDW_UPDATENOW) };
+        self.base.invalidate();
     }
 }
 
