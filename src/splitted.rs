@@ -36,6 +36,24 @@ impl WindowsSplitted {
     	    utils::coord_to_size((target as f32 * (1.0 - self.splitter)) as i32 - DEFAULT_PADDING - HALF_BOUND),
     	)
     }
+    fn draw_children(&mut self) {
+    	let mut x = DEFAULT_PADDING;
+        let mut y = DEFAULT_PADDING;
+        for ref mut child in [self.first.as_mut(), self.second.as_mut()].iter_mut() {
+            child.draw(Some((x, y)));
+            let (xx, yy) = child.size();
+            match self.orientation {
+                layout::Orientation::Horizontal => {
+                	x += xx as i32;
+                    x += DEFAULT_BOUND;
+                },
+                layout::Orientation::Vertical => {
+                	y += yy as i32;
+                    y += DEFAULT_BOUND;
+                },
+            }
+        }
+    } 
 	fn reload_cursor(&mut self) {
 		unsafe { 
 			if !self.cursor.is_null() && winuser::DestroyCursor(self.cursor) == 0 {
@@ -378,22 +396,7 @@ impl Drawable for WindowsSplitted {
                     0,
                 );
             }
-            let mut x = DEFAULT_PADDING;
-            let mut y = DEFAULT_PADDING;
-            for ref mut child in [self.first.as_mut(), self.second.as_mut()].iter_mut() {
-                child.draw(Some((x, y)));
-                let (xx, yy) = child.size();
-                match self.orientation {
-                    layout::Orientation::Horizontal => {
-                    	x += xx as i32;
-	                    x += DEFAULT_BOUND;
-                    },
-                    layout::Orientation::Vertical => {
-                    	y += yy as i32;
-	                    y += DEFAULT_BOUND;
-                    },
-                }
-            }
+            self.draw_children();
         }
     }
     fn measure(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
@@ -525,37 +528,17 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
         }
         return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }
-    
-    println!(" msg {}", msg);
-
     match msg {
         winuser::WM_SIZE | common::WM_UPDATE_INNER => {
 	    	let mut width = lparam as u16;
             let mut height = (lparam >> 16) as u16;
             let mut ll: &mut Splitted = mem::transmute(ww);
-            let o = ll.layout_orientation();
-			{
+            {
             	ll.set_skip_draw(true);
             	{
 	            	let ll = ll.as_inner_mut().as_inner_mut().as_inner_mut();
 	    			ll.update_children_layout();
-            	
-	            	let mut x = DEFAULT_PADDING;
-		            let mut y = DEFAULT_PADDING;
-		            for ref mut child in [ll.first.as_mut(), ll.second.as_mut()].iter_mut() {
-		                child.draw(Some((x, y)));
-		                let (xx, yy) = child.size();
-		                match o {
-		                    layout::Orientation::Horizontal => {
-		                    	x += xx as i32;
-			                    x += DEFAULT_BOUND;
-		                    },
-		                    layout::Orientation::Vertical => {
-		                    	y += yy as i32;
-			                    y += DEFAULT_BOUND;
-		                    },
-		                }
-		            }
+	            	ll.draw_children();
             	}
     			ll.set_skip_draw(false);            	
             }
@@ -564,6 +547,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             	ll.call_on_resize(width, height);
 	        } else {
 	        	winuser::RedrawWindow(hwnd, ptr::null_mut(), ptr::null_mut(), winuser::RDW_INVALIDATE | winuser::RDW_UPDATENOW);
+	        	//winuser::InvalidateRect(hwnd, &window_rect(hwnd), minwindef::TRUE);
 	        }
             return 0;
         }
@@ -601,10 +585,6 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             if updated {
             	let packed = ((height as i32) << 16) + width as i32;
     			winuser::SendMessageW(hwnd, common::WM_UPDATE_INNER, 0, packed as isize);
-    			/*winuser::SendMessageW(hwnd, winuser::WM_ERASEBKGND, 0, 0);
-    			winuser::SendMessageW(hwnd, winuser::WM_PAINT, 0, 0);
-    			winuser::SendMessageW(hwnd, winuser::WM_CTLCOLORSTATIC, 0, 0);
-    			winuser::SendMessageW(hwnd, winuser::WM_PRINTCLIENT, 0, 0);*/
             }
             return 0;
         },
