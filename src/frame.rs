@@ -247,7 +247,6 @@ impl Drawable for WindowsFrame {
             }
             if let Some(ref mut child) = self.child {
                 child.draw(Some((DEFAULT_PADDING, DEFAULT_PADDING)));
-                //child.size();
             }
         }
     }

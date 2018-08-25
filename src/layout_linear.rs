@@ -228,28 +228,15 @@ impl ContainerInner for WindowsLinearLayout {
 
 impl Drawable for WindowsLinearLayout {
     fn draw(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, coords: Option<(i32, i32)>) {
-        if coords.is_some() {
-            self.base.coords = coords;
-        }
-        if let Some((x, y)) = self.base.coords {
-            unsafe {
-                winuser::SetWindowPos(self.base.hwnd,
-                                      ptr::null_mut(),
-                                      x,
-                                      y,
-                                      self.base.measured_size.0 as i32,
-                                      self.base.measured_size.1 as i32,
-                                      0);
-            }
-            let mut x = DEFAULT_PADDING;
-            let mut y = DEFAULT_PADDING;
-            for ref mut child in self.children.as_mut_slice() {
-                child.draw(Some((x, y)));
-                let (xx, yy) = child.size();
-                match self.orientation {
-                    layout::Orientation::Horizontal => x += xx as i32,
-                    layout::Orientation::Vertical => y += yy as i32,
-                }
+        self.base.draw(coords);
+        let mut x = DEFAULT_PADDING;
+        let mut y = DEFAULT_PADDING;
+        for ref mut child in self.children.as_mut_slice() {
+            child.draw(Some((x, y)));
+            let (xx, yy) = child.size();
+            match self.orientation {
+                layout::Orientation::Horizontal => x += xx as i32,
+                layout::Orientation::Vertical => y += yy as i32,
             }
         }
     }

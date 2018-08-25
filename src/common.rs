@@ -165,6 +165,24 @@ impl <T: controls::Control + Sized> WindowsControlBase<T> {
 			}
 	    }
     }
+    pub fn draw(&mut self, coords: Option<(i32, i32)>) {
+        if coords.is_some() {
+            self.coords = coords;
+        }
+        if let Some((x, y)) = self.coords {
+            unsafe {
+                winuser::SetWindowPos(
+                    self.hwnd,
+                    ptr::null_mut(),
+                    x,
+                    y,
+                    self.measured_size.0 as i32,
+                    self.measured_size.1 as i32,
+                    0,
+                );
+            }
+        }
+    }
 }
 
 pub unsafe fn get_class_name_by_hwnd(hwnd: windef::HWND) -> Vec<u16> {

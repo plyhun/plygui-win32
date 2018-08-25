@@ -381,23 +381,8 @@ impl HasOrientationInner for WindowsSplitted {
 
 impl Drawable for WindowsSplitted {
 	fn draw(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, coords: Option<(i32, i32)>) {
-        if coords.is_some() {
-            self.base.coords = coords;
-        }
-        if let Some((x, y)) = self.base.coords {
-            unsafe {
-                winuser::SetWindowPos(
-                    self.base.hwnd,
-                    ptr::null_mut(),
-                    x,
-                    y,
-                    self.base.measured_size.0 as i32,
-                    self.base.measured_size.1 as i32,
-                    0,
-                );
-            }
-            self.draw_children();
-        }
+        self.base.draw(coords);
+        self.draw_children();
     }
     fn measure(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
         use std::cmp::max;
