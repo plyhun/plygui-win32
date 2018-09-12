@@ -1,4 +1,4 @@
-pub use plygui_api::{controls, layout, types, callbacks, utils, ids};
+pub use plygui_api::{controls, defaults, layout, types, callbacks, utils, ids};
 pub use plygui_api::development::*;
 
 pub use winapi::shared::windef;
