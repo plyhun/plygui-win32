@@ -106,7 +106,7 @@ impl WindowInner for WindowsWindow {
                 }
             };
             let style = winuser::WS_OVERLAPPEDWINDOW;
-            let exstyle = winuser::WS_EX_APPWINDOW;
+            let exstyle = winuser::WS_EX_APPWINDOW | winuser::WS_EX_COMPOSITED;
 
             winuser::AdjustWindowRectEx(&mut rect, style, minwindef::FALSE, exstyle);
             let window_name = OsStr::new(title)

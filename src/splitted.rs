@@ -527,8 +527,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             if msg != common::WM_UPDATE_INNER {
             	ll.call_on_resize(width, height);
 	        } else {
-	        	winuser::RedrawWindow(hwnd, ptr::null_mut(), ptr::null_mut(), winuser::RDW_INVALIDATE | winuser::RDW_UPDATENOW);
-	        	//winuser::InvalidateRect(hwnd, &window_rect(hwnd), minwindef::TRUE);
+	        	winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::TRUE);
 	        }
             return 0;
         }
