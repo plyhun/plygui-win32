@@ -1,23 +1,46 @@
-use super::*;
 use super::common::*;
+use super::*;
+
+use std::sync::mpsc;
 
 lazy_static! {
-	pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
+    pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
 }
+
+const MAX_FRAME_CALLBACKS: usize = 8;
 
 #[repr(C)]
 pub struct WindowsWindow {
     hwnd: windef::HWND,
     child: Option<Box<controls::Control>>,
+    queue: mpsc::Receiver<callbacks::Frame>,
+    sender: mpsc::Sender<callbacks::Frame>,
 }
 
 pub type Window = Member<SingleContainer<WindowsWindow>>;
 
 impl WindowsWindow {
     pub(crate) fn start(&mut self) {
+        let mut frame_callbacks;
         unsafe {
             let mut msg: winuser::MSG = mem::zeroed();
             loop {
+                frame_callbacks = 0;
+                while frame_callbacks < MAX_FRAME_CALLBACKS {
+                    match self.queue.try_recv() {
+                        Ok(mut cmd) => {
+                            if (cmd.as_mut())(member_from_hwnd::<Window>(self.hwnd)) {
+                                let _ = self.sender.send(cmd);
+                            }
+                            frame_callbacks += 1;
+                        }
+                        Err(e) => match e {
+                            mpsc::TryRecvError::Empty => break,
+                            mpsc::TryRecvError::Disconnected => unreachable!(),
+                        },
+                    }
+                }
+
                 let status = winuser::GetMessageW(&mut msg, ptr::null_mut(), 0, 0);
                 if status <= 0 {
                     //println!("break caused by {:?}", status);
@@ -49,15 +72,12 @@ impl HasLabelInner for WindowsWindow {
             let len = unsafe { winuser::GetWindowTextW(self.hwnd, wbuffer.as_mut_slice().as_mut_ptr(), 4096) };
             Cow::Owned(String::from_utf16_lossy(&wbuffer.as_slice()[..len as usize]))
         } else {
-            panic!("Unattached window!");
+            unreachable!();
         }
     }
     fn set_label(&mut self, _: &mut MemberBase, label: &str) {
         if self.hwnd != 0 as windef::HWND {
-            let control_name = OsStr::new(label)
-                .encode_wide()
-                .chain(Some(0).into_iter())
-                .collect::<Vec<_>>();
+            let control_name = OsStr::new(label).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
             unsafe {
                 winuser::SetWindowTextW(self.hwnd, control_name.as_ptr());
             }
@@ -69,32 +89,17 @@ impl WindowInner for WindowsWindow {
     fn with_params(title: &str, window_size: types::WindowStartSize, _menu: types::WindowMenu) -> Box<Window> {
         unsafe {
             let mut rect = match window_size {
-                types::WindowStartSize::Exact(width, height) => {
-                    windef::RECT {
-                        left: 0,
-                        top: 0,
-                        right: width as i32,
-                        bottom: height as i32,
-                    }
-                }
+                types::WindowStartSize::Exact(width, height) => windef::RECT {
+                    left: 0,
+                    top: 0,
+                    right: width as i32,
+                    bottom: height as i32,
+                },
                 types::WindowStartSize::Fullscreen => {
-                    let mut rect = windef::RECT {
-                        left: 0,
-                        right: 0,
-                        top: 0,
-                        bottom: 0,
-                    };
-                    if winuser::SystemParametersInfoW(winuser::SPI_GETWORKAREA,
-                                                      0,
-                                                      &mut rect as *mut _ as *mut c_void,
-                                                      0) == 0 {
+                    let mut rect = windef::RECT { left: 0, right: 0, top: 0, bottom: 0 };
+                    if winuser::SystemParametersInfoW(winuser::SPI_GETWORKAREA, 0, &mut rect as *mut _ as *mut c_void, 0) == 0 {
                         log_error();
-                        windef::RECT {
-                            left: 0,
-                            top: 0,
-                            right: 640,
-                            bottom: 480,
-                        }
+                        windef::RECT { left: 0, top: 0, right: 640, bottom: 480 }
                     } else {
                         windef::RECT {
                             left: 0,
@@ -109,34 +114,46 @@ impl WindowInner for WindowsWindow {
             let exstyle = winuser::WS_EX_APPWINDOW | winuser::WS_EX_COMPOSITED;
 
             winuser::AdjustWindowRectEx(&mut rect, style, minwindef::FALSE, exstyle);
-            let window_name = OsStr::new(title)
-                .encode_wide()
-                .chain(Some(0).into_iter())
-                .collect::<Vec<_>>();
+            let window_name = OsStr::new(title).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+            let (sender, receiver) = mpsc::channel();
 
-            let mut w: Box<Window> = Box::new(Member::with_inner(SingleContainer::with_inner(WindowsWindow {
-                                                                                                 hwnd: 0 as windef::HWND,
-                                                                                                 child: None,
-                                                                                             },
-                                                                                             ()),
-                                                                 MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut)));
+            let mut w: Box<Window> = Box::new(Member::with_inner(
+                SingleContainer::with_inner(
+                    WindowsWindow {
+                        hwnd: 0 as windef::HWND,
+                        child: None,
+                        queue: receiver,
+                        sender: sender,
+                    },
+                    (),
+                ),
+                MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
+            ));
 
-            let hwnd = winuser::CreateWindowExW(exstyle,
-                                                WINDOW_CLASS.as_ptr(),
-                                                window_name.as_ptr() as ntdef::LPCWSTR,
-                                                style | winuser::WS_VISIBLE | winuser::CS_HREDRAW | winuser::CS_VREDRAW,
-                                                winuser::CW_USEDEFAULT,
-                                                winuser::CW_USEDEFAULT,
-                                                rect.right - rect.left,
-                                                rect.bottom - rect.top,
-                                                ptr::null_mut(),
-                                                ptr::null_mut(),
-                                                hinstance(),
-                                                w.as_mut() as *mut _ as *mut c_void);
+            let hwnd = winuser::CreateWindowExW(
+                exstyle,
+                WINDOW_CLASS.as_ptr(),
+                window_name.as_ptr() as ntdef::LPCWSTR,
+                style | winuser::WS_VISIBLE | winuser::CS_HREDRAW | winuser::CS_VREDRAW,
+                winuser::CW_USEDEFAULT,
+                winuser::CW_USEDEFAULT,
+                rect.right - rect.left,
+                rect.bottom - rect.top,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                hinstance(),
+                w.as_mut() as *mut _ as *mut c_void,
+            );
 
             w.as_inner_mut().as_inner_mut().hwnd = hwnd;
             w
         }
+    }
+    fn on_frame(&mut self, cb: callbacks::Frame) {
+        let _ = self.sender.send(cb);
+    }
+    fn on_frame_async_feeder(&mut self) -> callbacks::AsyncFeeder<callbacks::Frame> {
+        self.sender.clone().into()
     }
 }
 
@@ -183,7 +200,6 @@ impl SingleContainerInner for WindowsWindow {
         self.child.as_ref().map(|c| c.as_ref())
     }
     fn child_mut(&mut self) -> Option<&mut controls::Control> {
-        //self.child.as_mut().map(|c|c.as_mut()) // WTF ??
         if let Some(child) = self.child.as_mut() {
             Some(child.as_mut())
         } else {
@@ -201,12 +217,7 @@ impl MemberInner for WindowsWindow {
 
     fn on_set_visibility(&mut self, base: &mut MemberBase) {
         unsafe {
-            winuser::ShowWindow(self.hwnd,
-                                if base.visibility == types::Visibility::Visible {
-                                    winuser::SW_SHOW
-                                } else {
-                                    winuser::SW_HIDE
-                                });
+            winuser::ShowWindow(self.hwnd, if base.visibility == types::Visibility::Visible { winuser::SW_SHOW } else { winuser::SW_HIDE });
         }
     }
 
@@ -224,10 +235,7 @@ impl Drop for WindowsWindow {
 }
 
 unsafe fn register_window_class() -> Vec<u16> {
-    let class_name = OsStr::new("PlyguiWin32Window")
-        .encode_wide()
-        .chain(Some(0).into_iter())
-        .collect::<Vec<_>>();
+    let class_name = OsStr::new("PlyguiWin32Window").encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
 
     let class = winuser::WNDCLASSEXW {
         cbSize: mem::size_of::<winuser::WNDCLASSEXW>() as minwindef::UINT,
@@ -265,9 +273,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
 
             w.as_inner_mut().as_inner_mut().redraw();
 
-            winuser::InvalidateRect(w.as_inner().as_inner().hwnd,
-                                    ptr::null_mut(),
-                                    minwindef::TRUE);
+            winuser::InvalidateRect(w.as_inner().as_inner().hwnd, ptr::null_mut(), minwindef::TRUE);
 
             w.call_on_resize(width, height);
             return 0;
@@ -276,15 +282,6 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             winuser::PostQuitMessage(0);
             return 0;
         }
-        /*winuser::WM_NOTIFY => {
-        	let hdr: winuser::LPNMHDR = mem::transmute(lparam);
-        	println!("notify for {:?}", hdr);
-        },
-        winuser::WM_COMMAND => {
-        	let hdr: winuser::LPNMHDR = mem::transmute(lparam);
-        	
-        	println!("command for {:?}", hdr);
-        }*/
         _ => {}
     }
 

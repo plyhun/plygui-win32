@@ -1,9 +1,9 @@
-use super::*;
 use super::common::*;
+use super::*;
 
 lazy_static! {
-	pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
-	//pub static ref INSTANCE: winuser::HINSTANCE = unsafe { kernel32::GetModuleHandleW(ptr::null()) };
+    pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
+    //pub static ref INSTANCE: winuser::HINSTANCE = unsafe { kernel32::GetModuleHandleW(ptr::null()) };
 }
 
 pub type LinearLayout = Member<Control<MultiContainer<WindowsLinearLayout>>>;
@@ -17,14 +17,20 @@ pub struct WindowsLinearLayout {
 
 impl LinearLayoutInner for WindowsLinearLayout {
     fn with_orientation(orientation: layout::Orientation) -> Box<LinearLayout> {
-        let b = Box::new(Member::with_inner(Control::with_inner(MultiContainer::with_inner(WindowsLinearLayout {
-                                                                                               base: WindowsControlBase::new(),
-                                                                                               orientation: orientation,
-                                                                                               children: Vec::new(),
-                                                                                           },
-                                                                                           ()),
-                                                                ()),
-                                            MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut)));
+        let b = Box::new(Member::with_inner(
+            Control::with_inner(
+                MultiContainer::with_inner(
+                    WindowsLinearLayout {
+                        base: WindowsControlBase::new(),
+                        orientation: orientation,
+                        children: Vec::new(),
+                    },
+                    (),
+                ),
+                (),
+            ),
+            MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
+        ));
         b
     }
 }
@@ -50,14 +56,13 @@ impl MultiContainerInner for WindowsLinearLayout {
         self.children.insert(index, child);
         if !self.base.hwnd.is_null() {
             let (w, h) = self.size();
-            self.children
-                .get_mut(index)
-                .unwrap()
-                .on_added_to_container(common::member_from_hwnd::<LinearLayout>(self.base.hwnd),
-                                       w as i32 - DEFAULT_PADDING,
-                                       h as i32 - DEFAULT_PADDING,
-                                       utils::coord_to_size(w as i32 - DEFAULT_PADDING),
-                                       utils::coord_to_size(h as i32 - DEFAULT_PADDING));
+            self.children.get_mut(index).unwrap().on_added_to_container(
+                common::member_from_hwnd::<LinearLayout>(self.base.hwnd),
+                w as i32 - DEFAULT_PADDING,
+                h as i32 - DEFAULT_PADDING,
+                utils::coord_to_size(w as i32 - DEFAULT_PADDING),
+                utils::coord_to_size(h as i32 - DEFAULT_PADDING),
+            );
             self.base.invalidate();
         }
         old
@@ -104,17 +109,19 @@ impl ControlInner for WindowsLinearLayout {
         let (width, height, _) = self.measure(member, control, pw, ph);
         let (hwnd, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
-            common::create_control_hwnd(px as i32,
-                                        py as i32,
-                                        width as i32,
-                                        height as i32,
-                                        parent.native_id() as windef::HWND,
-                                        winuser::WS_EX_CONTROLPARENT,
-                                        WINDOW_CLASS.as_ptr(),
-                                        "",
-                                        0,
-                                        selfptr,
-                                        None)
+            common::create_control_hwnd(
+                px as i32,
+                py as i32,
+                width as i32,
+                height as i32,
+                parent.native_id() as windef::HWND,
+                winuser::WS_EX_CONTROLPARENT,
+                WINDOW_CLASS.as_ptr(),
+                "",
+                0,
+                selfptr,
+                None,
+            )
         };
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
@@ -123,11 +130,13 @@ impl ControlInner for WindowsLinearLayout {
         let mut y = DEFAULT_PADDING;
         for ref mut child in self.children.as_mut_slice() {
             let self2: &mut LinearLayout = unsafe { utils::base_to_impl_mut(member) };
-            child.on_added_to_container(self2,
-                                        x,
-                                        y,
-                                        utils::coord_to_size(pw as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16,
-                                        utils::coord_to_size(ph as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16);
+            child.on_added_to_container(
+                self2,
+                x,
+                y,
+                utils::coord_to_size(pw as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16,
+                utils::coord_to_size(ph as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16,
+            );
             let (xx, yy) = child.size();
             match self.orientation {
                 layout::Orientation::Horizontal => x += xx as i32,
@@ -149,12 +158,7 @@ impl ControlInner for WindowsLinearLayout {
     fn fill_from_markup(&mut self, member: &mut MemberBase, _control: &mut ControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
         use plygui_api::markup::MEMBER_TYPE_LINEAR_LAYOUT;
 
-        fill_from_markup_base!(self,
-                               member,
-                               markup,
-                               registry,
-                               LinearLayout,
-                               [MEMBER_TYPE_LINEAR_LAYOUT]);
+        fill_from_markup_base!(self, member, markup, registry, LinearLayout, [MEMBER_TYPE_LINEAR_LAYOUT]);
         fill_from_markup_children!(self, member, markup, registry);
     }
 }
@@ -180,12 +184,7 @@ impl MemberInner for WindowsLinearLayout {
         let hwnd = self.base.hwnd;
         if !hwnd.is_null() {
             unsafe {
-                winuser::ShowWindow(self.base.hwnd,
-                                    if base.visibility == types::Visibility::Visible {
-                                        winuser::SW_SHOW
-                                    } else {
-                                        winuser::SW_HIDE
-                                    });
+                winuser::ShowWindow(self.base.hwnd, if base.visibility == types::Visibility::Visible { winuser::SW_SHOW } else { winuser::SW_HIDE });
             }
             self.base.invalidate();
         }
@@ -256,8 +255,7 @@ impl Drawable for WindowsLinearLayout {
                     layout::Size::WrapContent => {
                         let mut w = 0;
                         for child in self.children.as_mut_slice() {
-                            let (cw, _, _) = child.measure(max(0, parent_width as i32 - hp) as u16,
-                                                           max(0, parent_height as i32 - vp) as u16);
+                            let (cw, _, _) = child.measure(max(0, parent_width as i32 - hp) as u16, max(0, parent_height as i32 - vp) as u16);
                             match orientation {
                                 layout::Orientation::Horizontal => {
                                     w += cw;
@@ -280,8 +278,7 @@ impl Drawable for WindowsLinearLayout {
                             let ch = if measured {
                                 child.size().1
                             } else {
-                                let (_, ch, _) = child.measure(max(0, parent_width as i32 - hp) as u16,
-                                                               max(0, parent_height as i32 - vp) as u16);
+                                let (_, ch, _) = child.measure(max(0, parent_width as i32 - hp) as u16, max(0, parent_height as i32 - vp) as u16);
                                 ch
                             };
                             match orientation {
@@ -312,10 +309,7 @@ pub(crate) fn spawn() -> Box<controls::Control> {
 }
 
 unsafe fn register_window_class() -> Vec<u16> {
-    let class_name = OsStr::new("PlyguiWin32LinearLayout")
-        .encode_wide()
-        .chain(Some(0).into_iter())
-        .collect::<Vec<_>>();
+    let class_name = OsStr::new("PlyguiWin32LinearLayout").encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
     let class = winuser::WNDCLASSW {
         style: winuser::CS_DBLCLKS,
         lpfnWndProc: Some(whandler),
@@ -355,13 +349,8 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
 
             let mut x = 0;
             let mut y = 0;
-            for child in ll.as_inner_mut()
-                    .as_inner_mut()
-                    .as_inner_mut()
-                    .children
-                    .as_mut_slice() {
-                let (cw, ch, _) = child.measure(max(0, width as i32 - hp) as u16,
-                                                max(0, height as i32 - vp) as u16);
+            for child in ll.as_inner_mut().as_inner_mut().as_inner_mut().children.as_mut_slice() {
+                let (cw, ch, _) = child.measure(max(0, width as i32 - hp) as u16, max(0, height as i32 - vp) as u16);
                 child.draw(Some((x + DEFAULT_PADDING, y + DEFAULT_PADDING)));
                 match o {
                     layout::Orientation::Horizontal if width >= cw => {
