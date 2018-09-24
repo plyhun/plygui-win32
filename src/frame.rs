@@ -74,7 +74,7 @@ impl SingleContainerInner for WindowsFrame {
         let mut old = self.child.take();
         if let Some(old) = old.as_mut() {
             if !self.base.hwnd.is_null() {
-                old.on_removed_from_container(common::member_from_hwnd::<Frame>(self.base.hwnd));
+                old.on_removed_from_container(self.base.as_outer_mut());
             }
         }
         self.child = child;
@@ -84,7 +84,7 @@ impl SingleContainerInner for WindowsFrame {
                 let (w, h) = self.size();
                 if let Some(new) = self.child.as_mut() {
                     new.as_mut().on_added_to_container(
-                        common::member_from_hwnd::<Frame>(self.base.hwnd),
+                        self.base.as_outer_mut(),
                         DEFAULT_PADDING,
                         DEFAULT_PADDING,
                         cmp::max(0, w as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16,
@@ -112,19 +112,29 @@ impl SingleContainerInner for WindowsFrame {
 impl ContainerInner for WindowsFrame {
     fn find_control_by_id_mut(&mut self, id: ids::Id) -> Option<&mut controls::Control> {
         if let Some(child) = self.child.as_mut() {
-            if let Some(c) = child.is_container_mut() {
-                return c.find_control_by_id_mut(id);
+            if child.as_member().id() == id {
+                Some(child.as_mut())
+            } else if let Some(c) = child.is_container_mut() {
+                c.find_control_by_id_mut(id)
+            } else {
+            	None
             }
+        } else {
+	        None
         }
-        None
     }
     fn find_control_by_id(&self, id: ids::Id) -> Option<&controls::Control> {
         if let Some(child) = self.child.as_ref() {
-            if let Some(c) = child.is_container() {
-                return c.find_control_by_id(id);
+            if child.as_member().id() == id {
+                Some(child.as_ref())
+            } else if let Some(c) = child.is_container() {
+                c.find_control_by_id(id)
+            } else {
+            	None
             }
+        } else {
+	        None
         }
-        None
     }
 }
 
@@ -216,7 +226,7 @@ impl ControlInner for WindowsFrame {
 
 impl MemberInner for WindowsFrame {
     type Id = common::Hwnd;
-
+    
     fn size(&self) -> (u16, u16) {
         self.base.size()
     }

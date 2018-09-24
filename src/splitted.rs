@@ -138,7 +138,7 @@ impl SplittedInner for WindowsSplitted {
 
 impl MemberInner for WindowsSplitted {
     type Id = common::Hwnd;
-
+    
     fn size(&self) -> (u16, u16) {
         self.base.size()
     }
@@ -303,9 +303,8 @@ impl MultiContainerInner for WindowsSplitted {
     fn set_child_to(&mut self, _: &mut MemberBase, index: usize, mut child: Box<controls::Control>) -> Option<Box<controls::Control>> {
         match index {
             0 => {
-                let hwnd = self.base.hwnd;
-                if !hwnd.is_null() {
-                    let self2 = common::member_from_hwnd::<Splitted>(hwnd);
+                if !self.base.hwnd.is_null() {
+                    let self2 = self.base.as_outer_mut();
                     let sizes = self.first.size();
                     self.first.on_removed_from_container(self2);
                     child.on_added_to_container(self2, DEFAULT_PADDING, DEFAULT_PADDING, sizes.0, sizes.1);
@@ -313,9 +312,8 @@ impl MultiContainerInner for WindowsSplitted {
                 mem::swap(&mut self.first, &mut child);
             }
             1 => {
-                let hwnd = self.base.hwnd;
-                if !hwnd.is_null() {
-                    let self2 = common::member_from_hwnd::<Splitted>(hwnd);
+                if !self.base.hwnd.is_null() {
+                    let self2 = self.base.as_outer_mut();
 
                     let mut x = DEFAULT_PADDING;
                     let mut y = DEFAULT_PADDING;

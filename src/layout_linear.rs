@@ -57,7 +57,7 @@ impl MultiContainerInner for WindowsLinearLayout {
         if !self.base.hwnd.is_null() {
             let (w, h) = self.size();
             self.children.get_mut(index).unwrap().on_added_to_container(
-                common::member_from_hwnd::<LinearLayout>(self.base.hwnd),
+                self.base.as_outer_mut(),
                 w as i32 - DEFAULT_PADDING,
                 h as i32 - DEFAULT_PADDING,
                 utils::coord_to_size(w as i32 - DEFAULT_PADDING),
@@ -71,7 +71,7 @@ impl MultiContainerInner for WindowsLinearLayout {
         if index < self.children.len() {
             let mut old = self.children.remove(index);
             if !self.base.hwnd.is_null() {
-                old.on_removed_from_container(common::member_from_hwnd::<LinearLayout>(self.base.hwnd));
+                old.on_removed_from_container(self.base.as_outer_mut());
                 self.base.invalidate();
             }
             Some(old)
@@ -175,7 +175,7 @@ impl HasLayoutInner for WindowsLinearLayout {
 }
 impl MemberInner for WindowsLinearLayout {
     type Id = common::Hwnd;
-
+    
     fn size(&self) -> (u16, u16) {
         self.base.size()
     }

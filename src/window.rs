@@ -24,9 +24,12 @@ impl WindowsWindow {
         let mut frame_callbacks;
         unsafe {
             let mut msg: winuser::MSG = mem::zeroed();
-            loop {
+            while winuser::GetMessageW(&mut msg, ptr::null_mut(), 0, 0) > 0 {
+                winuser::TranslateMessage(&mut msg);
+                winuser::DispatchMessageW(&mut msg);
+                
                 frame_callbacks = 0;
-                while frame_callbacks < MAX_FRAME_CALLBACKS {
+                while !self.hwnd.is_null() && frame_callbacks < MAX_FRAME_CALLBACKS {
                     match self.queue.try_recv() {
                         Ok(mut cmd) => {
                             if (cmd.as_mut())(member_from_hwnd::<Window>(self.hwnd)) {
@@ -39,15 +42,6 @@ impl WindowsWindow {
                             mpsc::TryRecvError::Disconnected => unreachable!(),
                         },
                     }
-                }
-
-                let status = winuser::GetMessageW(&mut msg, ptr::null_mut(), 0, 0);
-                if status <= 0 {
-                    //println!("break caused by {:?}", status);
-                    break;
-                } else {
-                    winuser::TranslateMessage(&mut msg);
-                    winuser::DispatchMessageW(&mut msg);
                 }
             }
         }
@@ -210,7 +204,7 @@ impl SingleContainerInner for WindowsWindow {
 
 impl MemberInner for WindowsWindow {
     type Id = common::Hwnd;
-
+    
     fn size(&self) -> (u16, u16) {
         self.size_inner()
     }
@@ -280,6 +274,9 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
         }
         winuser::WM_DESTROY => {
             winuser::PostQuitMessage(0);
+            
+            let mut w: &mut window::Window = mem::transmute(ww);
+            w.as_inner_mut().as_inner_mut().hwnd = ptr::null_mut();
             return 0;
         }
         _ => {}
