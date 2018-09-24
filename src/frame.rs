@@ -117,10 +117,10 @@ impl ContainerInner for WindowsFrame {
             } else if let Some(c) = child.is_container_mut() {
                 c.find_control_by_id_mut(id)
             } else {
-            	None
+                None
             }
         } else {
-	        None
+            None
         }
     }
     fn find_control_by_id(&self, id: ids::Id) -> Option<&controls::Control> {
@@ -130,10 +130,10 @@ impl ContainerInner for WindowsFrame {
             } else if let Some(c) = child.is_container() {
                 c.find_control_by_id(id)
             } else {
-            	None
+                None
             }
         } else {
-	        None
+            None
         }
     }
 }
@@ -226,7 +226,7 @@ impl ControlInner for WindowsFrame {
 
 impl MemberInner for WindowsFrame {
     type Id = common::Hwnd;
-    
+
     fn size(&self) -> (u16, u16) {
         self.base.size()
     }

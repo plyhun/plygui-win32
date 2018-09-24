@@ -138,7 +138,7 @@ impl SplittedInner for WindowsSplitted {
 
 impl MemberInner for WindowsSplitted {
     type Id = common::Hwnd;
-    
+
     fn size(&self) -> (u16, u16) {
         self.base.size()
     }

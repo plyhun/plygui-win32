@@ -13,27 +13,28 @@ const MAX_FRAME_CALLBACKS: usize = 8;
 pub struct WindowsWindow {
     hwnd: windef::HWND,
     child: Option<Box<controls::Control>>,
-    queue: mpsc::Receiver<callbacks::Frame>,
-    sender: mpsc::Sender<callbacks::Frame>,
 }
 
-pub type Window = Member<SingleContainer<WindowsWindow>>;
+pub type Window = Member<SingleContainer<plygui_api::development::Window<WindowsWindow>>>;
 
 impl WindowsWindow {
     pub(crate) fn start(&mut self) {
         let mut frame_callbacks;
-        unsafe {
-            let mut msg: winuser::MSG = mem::zeroed();
-            while winuser::GetMessageW(&mut msg, ptr::null_mut(), 0, 0) > 0 {
-                winuser::TranslateMessage(&mut msg);
-                winuser::DispatchMessageW(&mut msg);
-                
+        {
+            let mut msg: winuser::MSG = unsafe { mem::zeroed() };
+            while unsafe { winuser::GetMessageW(&mut msg, ptr::null_mut(), 0, 0) } > 0 {
+                unsafe {
+                    winuser::TranslateMessage(&mut msg);
+                    winuser::DispatchMessageW(&mut msg);
+                }
+
                 frame_callbacks = 0;
                 while !self.hwnd.is_null() && frame_callbacks < MAX_FRAME_CALLBACKS {
-                    match self.queue.try_recv() {
+                    let w = member_from_hwnd::<Window>(self.hwnd).as_inner_mut().as_inner_mut().base_mut();
+                    match w.queue().try_recv() {
                         Ok(mut cmd) => {
                             if (cmd.as_mut())(member_from_hwnd::<Window>(self.hwnd)) {
-                                let _ = self.sender.send(cmd);
+                                let _ = w.sender().send(cmd);
                             }
                             frame_callbacks += 1;
                         }
@@ -109,18 +110,9 @@ impl WindowInner for WindowsWindow {
 
             winuser::AdjustWindowRectEx(&mut rect, style, minwindef::FALSE, exstyle);
             let window_name = OsStr::new(title).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
-            let (sender, receiver) = mpsc::channel();
 
             let mut w: Box<Window> = Box::new(Member::with_inner(
-                SingleContainer::with_inner(
-                    WindowsWindow {
-                        hwnd: 0 as windef::HWND,
-                        child: None,
-                        queue: receiver,
-                        sender: sender,
-                    },
-                    (),
-                ),
+                SingleContainer::with_inner(plygui_api::development::Window::with_inner(WindowsWindow { hwnd: 0 as windef::HWND, child: None }, ()), ()),
                 MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
             ));
 
@@ -139,15 +131,15 @@ impl WindowInner for WindowsWindow {
                 w.as_mut() as *mut _ as *mut c_void,
             );
 
-            w.as_inner_mut().as_inner_mut().hwnd = hwnd;
+            w.as_inner_mut().as_inner_mut().as_inner_mut().hwnd = hwnd;
             w
         }
     }
     fn on_frame(&mut self, cb: callbacks::Frame) {
-        let _ = self.sender.send(cb);
+        let _ = member_from_hwnd::<Window>(self.hwnd).as_inner_mut().as_inner_mut().base_mut().sender().send(cb);
     }
     fn on_frame_async_feeder(&mut self) -> callbacks::AsyncFeeder<callbacks::Frame> {
-        self.sender.clone().into()
+        member_from_hwnd::<Window>(self.hwnd).as_inner_mut().as_inner_mut().base_mut().sender().clone().into()
     }
 }
 
@@ -204,7 +196,7 @@ impl SingleContainerInner for WindowsWindow {
 
 impl MemberInner for WindowsWindow {
     type Id = common::Hwnd;
-    
+
     fn size(&self) -> (u16, u16) {
         self.size_inner()
     }
@@ -265,23 +257,22 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             let height = (lparam >> 16) as u16;
             let mut w: &mut window::Window = mem::transmute(ww);
 
-            w.as_inner_mut().as_inner_mut().redraw();
+            w.as_inner_mut().as_inner_mut().as_inner_mut().redraw();
 
-            winuser::InvalidateRect(w.as_inner().as_inner().hwnd, ptr::null_mut(), minwindef::TRUE);
+            winuser::InvalidateRect(w.as_inner().as_inner().as_inner().hwnd, ptr::null_mut(), minwindef::TRUE);
 
             w.call_on_resize(width, height);
             return 0;
         }
         winuser::WM_DESTROY => {
             winuser::PostQuitMessage(0);
-            
+
             let mut w: &mut window::Window = mem::transmute(ww);
-            w.as_inner_mut().as_inner_mut().hwnd = ptr::null_mut();
+            w.as_inner_mut().as_inner_mut().as_inner_mut().hwnd = ptr::null_mut();
             return 0;
         }
         _ => {}
     }
-
     winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 

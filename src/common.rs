@@ -145,10 +145,10 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
         }
     }
     pub fn as_outer(&self) -> &T {
-    	member_from_hwnd::<T>(self.hwnd)
+        member_from_hwnd::<T>(self.hwnd)
     }
     pub fn as_outer_mut(&self) -> &mut T {
-    	member_from_hwnd::<T>(self.hwnd)
+        member_from_hwnd::<T>(self.hwnd)
     }
     pub fn invalidate(&mut self) {
         let parent_hwnd = self.parent_hwnd();

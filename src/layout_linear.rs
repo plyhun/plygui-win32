@@ -175,7 +175,7 @@ impl HasLayoutInner for WindowsLinearLayout {
 }
 impl MemberInner for WindowsLinearLayout {
     type Id = common::Hwnd;
-    
+
     fn size(&self) -> (u16, u16) {
         self.base.size()
     }
