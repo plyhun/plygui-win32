@@ -1,13 +1,9 @@
 use super::common::*;
 use super::*;
 
-use std::sync::mpsc;
-
 lazy_static! {
     pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
 }
-
-const MAX_FRAME_CALLBACKS: usize = 8;
 
 #[repr(C)]
 pub struct WindowsWindow {
@@ -29,7 +25,7 @@ impl WindowsWindow {
                 }
 
                 frame_callbacks = 0;
-                while !self.hwnd.is_null() && frame_callbacks < MAX_FRAME_CALLBACKS {
+                while !self.hwnd.is_null() && frame_callbacks < defaults::MAX_FRAME_CALLBACKS {
                     let w = member_from_hwnd::<Window>(self.hwnd).as_inner_mut().as_inner_mut().base_mut();
                     match w.queue().try_recv() {
                         Ok(mut cmd) => {

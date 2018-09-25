@@ -16,7 +16,7 @@ pub use std::borrow::Cow;
 pub use std::ffi::OsStr;
 pub use std::marker::PhantomData;
 pub use std::os::windows::ffi::OsStrExt;
-pub use std::{cmp, mem, ptr, str};
+pub use std::{cmp, mem, ptr, str, sync::mpsc};
 
 pub const DEFAULT_PADDING: i32 = 6;
 pub const WM_UPDATE_INNER: u32 = winuser::WM_APP + 1;
