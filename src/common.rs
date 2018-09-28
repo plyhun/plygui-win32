@@ -21,7 +21,8 @@ pub use std::{cmp, mem, ptr, str, ops, sync::mpsc};
 pub const DEFAULT_PADDING: i32 = 6;
 pub const WM_UPDATE_INNER: u32 = winuser::WM_APP + 1;
 
-pub type WndProc = unsafe extern "system" fn(windef::HWND, msg: minwindef::UINT, minwindef::WPARAM, minwindef::LPARAM, usize, usize) -> isize;
+pub type WndHandler = unsafe extern "system" fn(windef::HWND, msg: minwindef::UINT, minwindef::WPARAM, minwindef::LPARAM, usize, usize) -> isize;
+pub type WndProc = unsafe extern "system" fn (hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT;
 
 #[derive(Debug, Clone)]
 pub struct Hfont(windef::HFONT);
@@ -240,7 +241,7 @@ pub unsafe fn create_control_hwnd(
     control_name: &str,
     style: minwindef::DWORD,
     param: minwindef::LPVOID,
-    handler: Option<WndProc>,
+    handler: Option<WndHandler>,
 ) -> (windef::HWND, usize) {
     let mut style = style;
     if (style & winuser::WS_TABSTOP) != 0 {
