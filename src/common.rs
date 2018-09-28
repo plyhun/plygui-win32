@@ -16,29 +16,55 @@ pub use std::borrow::Cow;
 pub use std::ffi::OsStr;
 pub use std::marker::PhantomData;
 pub use std::os::windows::ffi::OsStrExt;
-pub use std::{cmp, mem, ptr, str, sync::mpsc};
+pub use std::{cmp, mem, ptr, str, ops, sync::mpsc};
 
 pub const DEFAULT_PADDING: i32 = 6;
 pub const WM_UPDATE_INNER: u32 = winuser::WM_APP + 1;
 
+pub type WndProc = unsafe extern "system" fn(windef::HWND, msg: minwindef::UINT, minwindef::WPARAM, minwindef::LPARAM, usize, usize) -> isize;
+
+#[derive(Debug, Clone)]
+pub struct Hfont(windef::HFONT);
+
+impl From<windef::HFONT> for Hfont {
+	fn from(a: windef::HFONT) -> Self {
+		Hfont(a)
+	}
+}
+impl AsRef<windef::HFONT> for Hfont {
+	fn as_ref(&self) -> &windef::HFONT {
+		&self.0
+	}
+}
+impl Drop for Hfont {
+	fn drop(&mut self) {
+		unsafe {
+			if wingdi::DeleteObject(self.0 as *mut c_void) == minwindef::FALSE {
+				log_error();
+				panic!("Could not delete HFONT {:?}", self.0);
+			}
+		}
+	}
+}
+unsafe impl Sync for Hfont {}
+
 #[inline]
 fn hfont() -> windef::HFONT {
-    *HFONT as *mut c_void as windef::HFONT
+    *(*HFONT).as_ref()
 }
 lazy_static! {
-    static ref HFONT: usize = unsafe {
+    static ref HFONT: Hfont = unsafe {
         let mut ncm: winuser::NONCLIENTMETRICSW = mem::zeroed();
         let size = mem::size_of::<winuser::NONCLIENTMETRICSW>() as u32;
         ncm.cbSize = size;
         if winuser::SystemParametersInfoW(winuser::SPI_GETNONCLIENTMETRICS, size, &mut ncm as *mut _ as *mut ::winapi::ctypes::c_void, size) == 0 {
-            return 0;
+            panic!("Cannot get NonClientMetrics for Font");
         }
         let hfont = wingdi::CreateFontIndirectW(&mut ncm.lfMessageFont);
         if hfont.is_null() {
             log_error();
         }
-        hfont as usize
-        // TODO cleanup!
+        hfont.into()
     };
 }
 
@@ -214,17 +240,17 @@ pub unsafe fn create_control_hwnd(
     control_name: &str,
     style: minwindef::DWORD,
     param: minwindef::LPVOID,
-    handler: Option<unsafe extern "system" fn(windef::HWND, msg: minwindef::UINT, minwindef::WPARAM, minwindef::LPARAM, usize, usize) -> isize>,
+    handler: Option<WndProc>,
 ) -> (windef::HWND, usize) {
     let mut style = style;
     if (style & winuser::WS_TABSTOP) != 0 {
         style |= winuser::WS_GROUP;
     }
-    #[allow(deprecated)]
     let subclass_id = {
-        use std::hash::{Hasher, SipHasher};
+        use std::hash::Hasher;
+        use std::collections::hash_map::DefaultHasher;
 
-        let mut hasher = SipHasher::new();
+        let mut hasher = DefaultHasher::new();
         hasher.write_usize(class_name as usize);
         hasher.finish()
     };
