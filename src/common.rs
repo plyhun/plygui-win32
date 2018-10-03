@@ -188,17 +188,9 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
             if let Some(cparent) = mparent.as_member_mut().is_control_mut() {
                 if changed && !cparent.is_skip_draw() {
                     cparent.invalidate();
-                } else {
-                    this.draw(None);
-                    unsafe {
-                        winuser::RedrawWindow(self.hwnd, ptr::null_mut(), ptr::null_mut(), winuser::RDW_INVALIDATE | winuser::RDW_UPDATENOW);
-                    }
                 }
             } else {
                 this.draw(None);
-                unsafe {
-                    winuser::RedrawWindow(self.hwnd, ptr::null_mut(), ptr::null_mut(), winuser::RDW_INVALIDATE | winuser::RDW_UPDATENOW);
-                }
             }
         }
     }
