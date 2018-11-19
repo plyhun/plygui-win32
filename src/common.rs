@@ -179,10 +179,13 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
     }
     pub fn invalidate(&mut self) {
         let parent_hwnd = self.parent_hwnd();
+        let this = self.as_outer_mut();
+        if this.is_skip_draw() {
+           return; 
+        }
         if let Some(parent_hwnd) = parent_hwnd {
             let mparent = member_base_from_hwnd(parent_hwnd);
             let (pw, ph) = mparent.as_member().size();
-            let this = self.as_outer_mut();
             let (_, _, changed) = this.measure(pw, ph);
 
             if let Some(cparent) = mparent.as_member_mut().is_control_mut() {
