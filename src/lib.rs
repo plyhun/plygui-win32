@@ -21,6 +21,7 @@ mod frame;
 mod layout_linear;
 mod splitted;
 mod window;
+mod text;
 
 #[cfg(feature = "markup")]
 pub fn register_members(registry: &mut plygui_api::markup::MarkupRegistry) {
@@ -45,5 +46,6 @@ pub mod prelude {
         pub use layout_linear::LinearLayout;
         pub use splitted::Splitted;
         pub use window::Window;
+        pub use text::Text;
     }
 }

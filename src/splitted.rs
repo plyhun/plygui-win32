@@ -447,10 +447,10 @@ impl Drawable for WindowsSplitted {
     }
 }
 
-/*#[allow(dead_code)]
+#[allow(dead_code)]
 pub(crate) fn spawn() -> Box<controls::Control> {
-    Splitted::with_content(layout::Orientation::Vertical).into_control()
-}*/
+    Splitted::with_content(super::text::spawn(), super::text::spawn(), layout::Orientation::Vertical).into_control()
+}
 
 unsafe fn register_window_class() -> Vec<u16> {
     let class_name = OsStr::new("PlyguiWin32Splitted").encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
