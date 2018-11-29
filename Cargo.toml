@@ -9,7 +9,7 @@ path = "src/lib.rs"
 
 [dependencies]
 plygui-api = {version = "0.0.1", path = "../plygui-api"}
-winapi = { version = "~0.3", features = ["windef", "minwindef", "winuser", "winbase", "commctrl", "errhandlingapi", "libloaderapi", "wingdi"] }
+winapi = { version = "~0.3", features = ["windef", "minwindef", "winuser", "winbase", "commctrl", "errhandlingapi", "libloaderapi", "wingdi", "winerror"] }
 lazy_static = "~0.2"
 derive_builder = "~0.5"
 
@@ -18,5 +18,6 @@ embed-resource = { version = "~1.1", optional = true }
 
 [features]
 markup = ["plygui-api/markup"]
+prettier = ["winapi/dwmapi","winapi/uxtheme"]
 manifest = ["embed-resource"]
-default = ["manifest"]
+default = ["manifest","prettier"]

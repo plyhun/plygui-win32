@@ -44,8 +44,11 @@ impl WindowsWindow {
         }
     }
     fn size_inner(&self) -> (u16, u16) {
-        let rect = unsafe { window_rect(self.hwnd) };
-        ((rect.right - rect.left) as u16, (rect.bottom - rect.top) as u16)
+        let rect = common::window_rect(self.hwnd);
+        match rect {
+            Err(()) => (0, 0),
+            Ok(rect) => ((rect.right - rect.left) as u16, (rect.bottom - rect.top) as u16),
+        }
     }
     fn redraw(&mut self) {
         let size = self.size_inner();
@@ -116,7 +119,7 @@ impl WindowInner for WindowsWindow {
                 exstyle,
                 WINDOW_CLASS.as_ptr(),
                 window_name.as_ptr() as ntdef::LPCWSTR,
-                style | winuser::WS_VISIBLE | winuser::CS_HREDRAW | winuser::CS_VREDRAW,
+                style | winuser::WS_VISIBLE,
                 winuser::CW_USEDEFAULT,
                 winuser::CW_USEDEFAULT,
                 rect.right - rect.left,
@@ -266,6 +269,11 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             let mut w: &mut window::Window = mem::transmute(ww);
             w.as_inner_mut().as_inner_mut().as_inner_mut().hwnd = ptr::null_mut();
             return 0;
+        }
+        #[cfg(feature = "prettier")]
+        winuser::WM_PAINT => {
+            common::aero::prettify(hwnd);
+            return 1;
         }
         _ => {}
     }

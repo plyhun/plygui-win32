@@ -5,12 +5,15 @@ pub use winapi::ctypes::c_void;
 pub use winapi::shared::minwindef;
 pub use winapi::shared::ntdef;
 pub use winapi::shared::windef;
+pub use winapi::shared::winerror;
 pub use winapi::um::commctrl;
 pub use winapi::um::errhandlingapi;
 pub use winapi::um::libloaderapi;
 pub use winapi::um::winbase;
 pub use winapi::um::wingdi;
 pub use winapi::um::winuser;
+#[cfg(feature = "prettier")]
+pub use winapi::um::{dwmapi, uxtheme};
 
 pub use std::borrow::Cow;
 pub use std::ffi::OsStr;
@@ -211,8 +214,11 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
         if self.hwnd.is_null() {
             self.measured_size
         } else {
-            let rect = unsafe { window_rect(self.hwnd) };
-            ((rect.right - rect.left) as u16, (rect.bottom - rect.top) as u16)
+            let rect = window_rect(self.hwnd);
+            match rect {
+                Ok(rect) => ((rect.right - rect.left) as u16, (rect.bottom - rect.top) as u16),
+                Err(_) => self.measured_size
+            }
         }
     }
 }
@@ -291,10 +297,13 @@ pub fn destroy_hwnd(hwnd: windef::HWND, subclass_id: usize, handler: Option<unsa
 }
 
 #[inline]
-pub unsafe fn window_rect(hwnd: windef::HWND) -> windef::RECT {
-    let mut rect: windef::RECT = mem::zeroed();
-    winuser::GetClientRect(hwnd, &mut rect);
-    rect
+pub fn window_rect(hwnd: windef::HWND) -> Result<windef::RECT, ()> {
+    let mut rect: windef::RECT = unsafe { mem::zeroed() };
+    if unsafe { winuser::GetClientRect(hwnd, &mut rect) } >= 0 {
+        Ok(rect)
+    } else {
+         Err(())
+    }
 }
 
 #[inline]
@@ -339,4 +348,151 @@ pub unsafe fn log_error() {
     );
 
     println!("Last error #{}: {}", error, String::from_utf16_lossy(&string));
+}
+
+#[cfg(feature = "prettier")]
+pub mod aero {
+    pub use super::*;
+    
+    const DEFAULT_GLOW_SIZE: i32 = 12;
+    
+    lazy_static! {
+        static ref WINDOW_CLASS_COMPOSITED: Vec<u16> = OsStr::new("CompositedWindow::Window").encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+        static ref WINDOW_CLASS_EDIT: Vec<u16> = OsStr::new("Edit").encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+    }
+    
+    pub unsafe fn prettify(hwnd: windef::HWND) -> Result<(),()> {
+        let mut ps: winuser::PAINTSTRUCT = mem::zeroed();
+        let hdc = winuser::BeginPaint(hwnd, &mut ps);
+        let margins = uxtheme::MARGINS { cxLeftWidth: -1, cxRightWidth: -1, cyBottomHeight: -1, cyTopHeight: -1}; 
+        let mut enabled = minwindef::FALSE;
+        if !hdc.is_null() && winerror::SUCCEEDED(dwmapi::DwmIsCompositionEnabled(&mut enabled)) && winerror::SUCCEEDED(dwmapi::DwmExtendFrameIntoClientArea(hwnd, &margins)) {
+            let rclient = window_rect(hwnd)?;
+            wingdi::PatBlt(hdc, 0, 0, rclient.right - rclient.left, rclient.bottom - rclient.top, wingdi::BLACKNESS);
+        } else {
+            log_error();
+        }
+        winuser::EndPaint(hwnd, &mut ps);
+        Ok(())
+    }
+    pub fn state_from_button_state(style: u32, hot: bool, focus: bool, check_state: usize, part_id: i32, has_mouse_capture: bool) -> i32 {
+        let mut state;
+        match part_id {
+            1 => { // BP_PUSHBUTTON:
+                state = 1; //PBS_NORMAL;
+                if (style & winuser::WS_DISABLED) != 0 {
+                    state = 4; //PBS_DISABLED;
+                } else {
+                    if (style & winuser::BS_DEFPUSHBUTTON) != 0 {
+                        state = 5; //PBS_DEFAULTED;
+                    }
+                    if has_mouse_capture && hot {
+                        state = 3; //PBS_PRESSED;
+                    } else if has_mouse_capture || hot {
+                        state = 2; //PBS_HOT;
+                    }
+                }
+            }
+            4 => { // BP_GROUPBOX:
+                state = if (style & winuser::WS_DISABLED) != 0 { 1 /*GBS_DISABLED*/ } else { 2 /*GBS_NORMAL*/ };
+            }
+            2 => { // BP_RADIOBUTTON:
+                match check_state {
+                    winuser::BST_CHECKED => {
+                        if (style & winuser::WS_DISABLED) != 0 {
+                            state = 8; //RBS_CHECKEDDISABLED;
+                        } else if focus {
+                            state = 7; //RBS_CHECKEDPRESSED;
+                        } else if hot {
+                            state = 6; //RBS_CHECKEDHOT;
+                        } else {
+                            state = 5; //RBS_CHECKEDNORMAL;       
+                        }
+                    }
+                    winuser::BST_UNCHECKED => {
+                        if (style & winuser::WS_DISABLED) != 0 {
+                            state = 4; //RBS_UNCHECKEDDISABLED;
+                        } else if focus {
+                            state = 3; //RBS_UNCHECKEDPRESSED;
+                        } else if hot {
+                            state = 2; //RBS_UNCHECKEDHOT;
+                        } else { 
+                            state = 1; //RBS_UNCHECKEDNORMAL;       
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            3 => { // BP_CHECKBOX:
+                match check_state {
+                    winuser::BST_CHECKED => {
+                        if (style & winuser::WS_DISABLED) != 0 {
+                            state = 8; //CBS_CHECKEDDISABLED;
+                        } else if focus {
+                            state = 7; //CBS_CHECKEDPRESSED;
+                        } else if hot {
+                            state = 6; //CBS_CHECKEDHOT;
+                        } else {
+                            state = 5; //CBS_CHECKEDNORMAL; 
+                        }      
+                    }
+                    winuser::BST_INDETERMINATE => {
+                        if (style & winuser::WS_DISABLED) != 0 {
+                            state = 12; //CBS_MIXEDDISABLED;
+                        } else if focus {
+                            state = 11; //CBS_MIXEDPRESSED;
+                        } else if hot {
+                            state = 10; //CBS_MIXEDHOT;
+                        } else { 
+                            state = 9; //CBS_MIXEDNORMAL;
+                        }       
+                    }
+                    winuser::BST_UNCHECKED => {
+                        if (style & winuser::WS_DISABLED) != 0 {
+                            state = 4; //CBS_UNCHECKEDDISABLED;
+                        } else if focus {
+                            state = 3; //CBS_UNCHECKEDPRESSED;
+                        } else if hot {
+                            state = 2; //CBS_UNCHECKEDHOT;
+                        } else { 
+                            state = 1; //CBS_UNCHECKEDNORMAL;
+                        }       
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            _ => unreachable!()
+        }
+    
+        state
+    }
+    
+    pub fn glow_size(mut class_id: *const u16) -> Result<i32,()> {
+        if class_id.is_null() {
+            class_id = WINDOW_CLASS_COMPOSITED.as_ptr();
+        }
+        let theme = unsafe { uxtheme::OpenThemeData(ptr::null_mut(), class_id) };
+        if theme.is_null() { return Err(()); }
+        
+        let mut size = DEFAULT_GLOW_SIZE;
+        
+        unsafe { 
+            winerror::SUCCEEDED(uxtheme::GetThemeInt(theme, 0, 0, 2425 /*TMT_TEXTGLOWSIZE*/, &mut size)); 
+            winerror::SUCCEEDED(uxtheme::CloseThemeData(theme));
+        }    
+        Ok(size)
+    }
+    
+    pub fn edit_border_color(hwnd: windef::HWND) -> Result<windef::COLORREF, ()> {
+        let theme = unsafe { uxtheme::OpenThemeData(hwnd, WINDOW_CLASS_EDIT.as_ptr()) };
+        if theme.is_null() { return Err(()); }
+        
+        let mut color: windef::COLORREF = wingdi::RGB(0, 0, 0);
+    
+        unsafe { 
+            winerror::SUCCEEDED(uxtheme::GetThemeColor(theme, 5 /*EP_BACKGROUNDWITHBORDER*/, 1 /*EBWBS_NORMAL*/, 3801 /*TMT_BORDERCOLOR*/, &mut color)); 
+            winerror::SUCCEEDED(uxtheme::CloseThemeData(theme));
+        }    
+        Ok(color)
+    }
 }

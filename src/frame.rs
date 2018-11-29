@@ -1,8 +1,10 @@
 use super::common::*;
 use super::*;
 
+const CLASS_ID: &str = "Button";
+
 lazy_static! {
-    pub static ref WINDOW_CLASS_GBOX: Vec<u16> = OsStr::new("Button").encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+    pub static ref WINDOW_CLASS_GBOX: Vec<u16> = OsStr::new(CLASS_ID).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
     pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
 }
 
@@ -374,10 +376,141 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             frame.call_on_resize(width, height);
             return 0;
         }
+        #[cfg(feature = "prettier")]
+        winuser::WM_PAINT => {
+            if aerize(hwnd).is_ok() {
+                return 1;
+            }
+        }
         _ => {}
     }
 
     winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
+}
+
+#[cfg(feature = "prettier")]
+unsafe fn aerize(hwnd: windef::HWND) -> Result<(),()> {
+    let mut ps: winuser::PAINTSTRUCT = mem::zeroed();
+    let hdc = winuser::BeginPaint(hwnd, &mut ps);
+    
+    if hdc.is_null() { return Err(()); }
+        
+    let style = winuser::GetWindowLongPtrW(hwnd, winuser::GWL_STYLE);
+    //let btn_style = minwindef::LOWORD(style as u32);
+    //let btn_type = btn_style & 0xF;
+    let mut client_rect = common::window_rect(hwnd)?;
+    let theme = uxtheme::OpenThemeData(hwnd, WINDOW_CLASS_GBOX.as_ptr());
+    
+    if theme.is_null() { return Err(()); }
+    
+    let mut hdc_paint: windef::HDC = ptr::null_mut();
+    let mut paint_params: uxtheme::BP_PAINTPARAMS = mem::zeroed();
+    paint_params.dwFlags = uxtheme::BPPF_ERASE;
+    let mut exclusion_rect = client_rect.clone();
+    
+    let mut font_old = winuser::SendMessageW(hwnd, winuser::WM_GETFONT, 0, 0) as windef::HFONT;
+    if !font_old.is_null() {
+        font_old = wingdi::SelectObject(hdc, font_old as *mut c_void) as windef::HFONT;
+    }
+    
+    let mut draw_rect = client_rect.clone();
+    let dw_flags = winuser::DT_SINGLELINE;
+    
+    // Reusing WINDOW_CLASS_GBOX for getting text height, because it has a capital letter
+    winuser::DrawTextW(hdc, WINDOW_CLASS_GBOX.as_ptr(), -1, &mut draw_rect, dw_flags | winuser::DT_CALCRECT);
+    
+    if !font_old.is_null() {
+        wingdi::SelectObject(hdc, font_old as *mut c_void);
+        //font_old = ptr::null_mut();
+    }
+    
+    if winuser::InflateRect(&mut exclusion_rect, -1, -1 * (draw_rect.bottom - draw_rect.top)) < 0 { return Err(()) }
+    
+    let buff_paint = uxtheme::BeginBufferedPaint(hdc, &mut client_rect, uxtheme::BPBF_TOPDOWNDIB, &mut paint_params, &mut hdc_paint);
+    
+    if hdc_paint.is_null() {
+        common::log_error();
+        uxtheme::CloseThemeData(theme);
+        return Err(());
+    }
+    
+    font_old = winuser::SendMessageW(hwnd, winuser::WM_GETFONT, 0, 0) as windef::HFONT;
+    if !font_old.is_null() {
+        font_old = wingdi::SelectObject(hdc_paint, font_old as *mut c_void) as windef::HFONT;
+    }
+    
+    if wingdi::PatBlt(hdc_paint, 0, 0, client_rect.right - client_rect.left, client_rect.bottom - client_rect.top, wingdi::BLACKNESS) < 0 {
+        uxtheme::CloseThemeData(theme);
+        return Err(());
+    }
+    if uxtheme::BufferedPaintSetAlpha(buff_paint, &mut ps.rcPaint, 0) != winerror::S_OK {
+        uxtheme::CloseThemeData(theme);
+        return Err(());
+    }
+    
+    let part = 4i32; // BP_GROUPBOX
+    let state = common::aero::state_from_button_state(style as u32, false, false, 0, part, false);
+    
+    let mut dtt_opts: uxtheme::DTTOPTS = mem::zeroed();
+    dtt_opts.dwFlags = uxtheme::DTT_COMPOSITED | uxtheme::DTT_GLOWSIZE;
+    dtt_opts.crText = wingdi::RGB(0xFF, 0xFF, 0xFF);
+    dtt_opts.iGlowSize = common::aero::glow_size(ptr::null()).map_err(|e| {
+        uxtheme::CloseThemeData(theme);
+        e
+    })?;
+    
+    {
+        let original = wingdi::SelectObject(hdc_paint, wingdi::GetStockObject(wingdi::DC_PEN as i32));
+        
+        let mut cr = common::aero::edit_border_color(hwnd).map_err(|e| {
+            uxtheme::CloseThemeData(theme);
+            e
+        })?;
+        cr |= 0xFF000000;
+        
+        wingdi::SetDCPenColor(hdc_paint, cr);
+        
+        let iy = (draw_rect.bottom - draw_rect.top) / 2;
+        wingdi::Rectangle(hdc_paint, client_rect.left, client_rect.top + iy, client_rect.right - 1, client_rect.bottom - iy - 1);
+        
+        wingdi::SelectObject(hdc_paint, original);
+    }
+    
+    let mut len = winuser::GetWindowTextLengthW(hwnd);
+    if len < 0 {
+        uxtheme::CloseThemeData(theme);
+        return Err(());
+    }
+    
+    len += 5;
+    let mut text: Vec<u16> = Vec::with_capacity(len as usize);
+    
+    len = winuser::GetWindowTextW(hwnd, text.as_mut_slice().as_mut_ptr(), len);
+    if len < 0 {
+        uxtheme::CloseThemeData(theme);
+        return Err(());
+    }
+    
+    let ix = draw_rect.right - draw_rect.left;
+    draw_rect = client_rect.clone();
+    draw_rect.left += ix;
+    winuser::DrawTextW(hdc_paint, text.as_mut_slice().as_mut_ptr(), -1,  &mut draw_rect, dw_flags | winuser::DT_CALCRECT);
+    wingdi::PatBlt(hdc_paint, draw_rect.left, draw_rect.top, draw_rect.right - draw_rect.left + 3, draw_rect.bottom - draw_rect.top, wingdi::BLACKNESS);
+    draw_rect.left += 1;
+    draw_rect.right += 1;
+    
+    if uxtheme::DrawThemeTextEx(theme, hdc_paint, part, state, text.as_mut_slice().as_mut_ptr(), -1, dw_flags, &mut draw_rect, &mut dtt_opts) != winerror::S_OK {
+        uxtheme::CloseThemeData(theme);
+        return Err(());
+    }
+    if !font_old.is_null() {
+        wingdi::SelectObject(hdc_paint, font_old as *mut c_void);
+    }
+    uxtheme::EndBufferedPaint(buff_paint, minwindef::TRUE);
+    uxtheme::CloseThemeData(theme);
+    winuser::EndPaint(hwnd, &mut ps);
+    
+    Ok(())
 }
 
 impl_all_defaults!(Frame);

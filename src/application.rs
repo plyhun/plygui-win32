@@ -1,7 +1,7 @@
 use super::*;
 
 use std::borrow::Cow;
-use std::{mem, thread};
+use std::thread;
 
 use plygui_api::controls;
 use plygui_api::development::*;
@@ -9,7 +9,6 @@ use plygui_api::ids::Id;
 use plygui_api::types;
 
 use winapi::shared::windef;
-use winapi::um::commctrl;
 
 pub struct WindowsApplication {
     name: String,
@@ -97,11 +96,28 @@ fn start_window(hwnd: windef::HWND) {
 
 fn init_comctl() {
     unsafe {
+        use super::common::*;
+        
         let mut icc: commctrl::INITCOMMONCONTROLSEX = mem::zeroed();
         icc.dwSize = mem::size_of::<commctrl::INITCOMMONCONTROLSEX>() as u32;
         icc.dwICC = commctrl::ICC_STANDARD_CLASSES | commctrl::ICC_LISTVIEW_CLASSES | commctrl::ICC_TAB_CLASSES | commctrl::ICC_PROGRESS_CLASS | commctrl::ICC_UPDOWN_CLASS | commctrl::ICC_BAR_CLASSES;
         if commctrl::InitCommonControlsEx(&icc) == 0 {
             common::log_error();
+        }
+        #[cfg(feature = "prettier")]
+        {
+            if uxtheme::BufferedPaintInit() != winerror::S_OK {
+                common::log_error();
+            }
+        }
+    }
+}
+
+impl Drop for WindowsApplication {
+    fn drop(&mut self) {
+        unsafe {
+            #[cfg(feature = "prettier")]
+            common::uxtheme::BufferedPaintUnInit();
         }
     }
 }
