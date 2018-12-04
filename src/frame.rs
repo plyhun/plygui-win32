@@ -334,11 +334,11 @@ unsafe fn register_window_class() -> Vec<u16> {
     let class_name = OsStr::new("PlyguiWin32Frame").encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
     let class = winuser::WNDCLASSEXW {
         cbSize: mem::size_of::<winuser::WNDCLASSEXW>() as minwindef::UINT,
-        style: winuser::CS_DBLCLKS,
+        style: 0,
         lpfnWndProc: Some(whandler),
         cbClsExtra: 0,
         cbWndExtra: 0,
-        hInstance: libloaderapi::GetModuleHandleW(ptr::null()),
+        hInstance: common::hinstance(),
         hIcon: winuser::LoadIconW(ptr::null_mut(), winuser::IDI_APPLICATION),
         hCursor: winuser::LoadCursorW(ptr::null_mut(), winuser::IDC_ARROW),
         hbrBackground: ptr::null_mut(),
@@ -378,7 +378,8 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
         }
         #[cfg(feature = "prettier")]
         winuser::WM_PAINT => {
-            if aerize(hwnd).is_ok() {
+            let mut frame: &mut Frame = mem::transmute(ww);
+            if aerize(frame.as_inner_mut().as_inner_mut().as_inner_mut().hwnd_gbox).is_ok() {
                 return 1;
             }
         }
@@ -390,14 +391,12 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
 
 #[cfg(feature = "prettier")]
 unsafe fn aerize(hwnd: windef::HWND) -> Result<(),()> {
+    let style = winuser::GetWindowLongPtrW(hwnd, winuser::GWL_STYLE);
+    
     let mut ps: winuser::PAINTSTRUCT = mem::zeroed();
     let hdc = winuser::BeginPaint(hwnd, &mut ps);
-    
     if hdc.is_null() { return Err(()); }
         
-    let style = winuser::GetWindowLongPtrW(hwnd, winuser::GWL_STYLE);
-    //let btn_style = minwindef::LOWORD(style as u32);
-    //let btn_type = btn_style & 0xF;
     let mut client_rect = common::window_rect(hwnd)?;
     let mut hdc_paint: windef::HDC = ptr::null_mut();
     let mut paint_params: uxtheme::BP_PAINTPARAMS = mem::zeroed();
@@ -406,8 +405,10 @@ unsafe fn aerize(hwnd: windef::HWND) -> Result<(),()> {
     let mut exclusion_rect = client_rect.clone();
     
     let theme = uxtheme::OpenThemeData(hwnd, WINDOW_CLASS_GBOX.as_ptr());
-    
-    if theme.is_null() { return Err(()); }
+    if theme.is_null() { 
+        winuser::EndPaint(hwnd, &mut ps);
+        return Err(()); 
+    }
     
     let mut font_old = winuser::SendMessageW(hwnd, winuser::WM_GETFONT, 0, 0) as windef::HFONT;
     if !font_old.is_null() {
@@ -428,10 +429,10 @@ unsafe fn aerize(hwnd: windef::HWND) -> Result<(),()> {
     if winuser::InflateRect(&mut exclusion_rect, -1, -1 * (draw_rect.bottom - draw_rect.top)) < 0 { return Err(()) }
     
     let buff_paint = uxtheme::BeginBufferedPaint(hdc, &mut client_rect, uxtheme::BPBF_TOPDOWNDIB, &mut paint_params, &mut hdc_paint);
-    
     if hdc_paint.is_null() {
         common::log_error();
         uxtheme::CloseThemeData(theme);
+        winuser::EndPaint(hwnd, &mut ps);
         return Err(());
     }
     
@@ -442,10 +443,12 @@ unsafe fn aerize(hwnd: windef::HWND) -> Result<(),()> {
     
     if wingdi::PatBlt(hdc_paint, 0, 0, client_rect.right - client_rect.left, client_rect.bottom - client_rect.top, wingdi::BLACKNESS) < 0 {
         uxtheme::CloseThemeData(theme);
+        winuser::EndPaint(hwnd, &mut ps);
         return Err(());
     }
     if uxtheme::BufferedPaintSetAlpha(buff_paint, &mut ps.rcPaint, 0) != winerror::S_OK {
         uxtheme::CloseThemeData(theme);
+        winuser::EndPaint(hwnd, &mut ps);
         return Err(());
     }
     
@@ -453,6 +456,7 @@ unsafe fn aerize(hwnd: windef::HWND) -> Result<(),()> {
     let state = common::aero::state_from_button_state(style as u32, false, false, 0, part, false);
     
     let mut dtt_opts: uxtheme::DTTOPTS = mem::zeroed();
+    dtt_opts.dwSize = mem::size_of::<uxtheme::DTTOPTS>() as u32;
     dtt_opts.dwFlags = uxtheme::DTT_COMPOSITED | uxtheme::DTT_GLOWSIZE;
     dtt_opts.crText = wingdi::RGB(0xFF, 0xFF, 0xFF);
     dtt_opts.iGlowSize = common::aero::glow_size(ptr::null()).map_err(|e| {
@@ -480,6 +484,7 @@ unsafe fn aerize(hwnd: windef::HWND) -> Result<(),()> {
     let mut len = winuser::GetWindowTextLengthW(hwnd);
     if len < 0 {
         uxtheme::CloseThemeData(theme);
+        winuser::EndPaint(hwnd, &mut ps);
         return Err(());
     }
     
@@ -489,19 +494,22 @@ unsafe fn aerize(hwnd: windef::HWND) -> Result<(),()> {
     len = winuser::GetWindowTextW(hwnd, text.as_mut_slice().as_mut_ptr(), len);
     if len < 0 {
         uxtheme::CloseThemeData(theme);
+        winuser::EndPaint(hwnd, &mut ps);
         return Err(());
     }
     
-    let ix = draw_rect.right - draw_rect.left;
+    //let ix = draw_rect.right - draw_rect.left;
     draw_rect = client_rect.clone();
-    draw_rect.left += ix;
+    draw_rect.left += common::DEFAULT_PADDING; //ix; // title left offset
     winuser::DrawTextW(hdc_paint, text.as_mut_slice().as_mut_ptr(), -1,  &mut draw_rect, dw_flags | winuser::DT_CALCRECT);
     wingdi::PatBlt(hdc_paint, draw_rect.left, draw_rect.top, draw_rect.right - draw_rect.left + 3, draw_rect.bottom - draw_rect.top, wingdi::BLACKNESS);
     draw_rect.left += 1;
     draw_rect.right += 1;
     
     if uxtheme::DrawThemeTextEx(theme, hdc_paint, part, state, text.as_mut_slice().as_mut_ptr(), -1, dw_flags, &mut draw_rect, &mut dtt_opts) != winerror::S_OK {
+        common::log_error();
         uxtheme::CloseThemeData(theme);
+        winuser::EndPaint(hwnd, &mut ps);
         return Err(());
     }
     if !font_old.is_null() {

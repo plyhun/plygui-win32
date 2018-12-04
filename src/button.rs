@@ -210,10 +210,137 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             button.call_on_resize(width, height);
             return 0;
         }
+        #[cfg(feature = "prettier")]
+        winuser::WM_PAINT => {
+            if aerize(hwnd).is_ok() {
+                return 1;
+            }
+        }
         _ => {}
     }
 
     commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
+}
+
+#[cfg(feature = "prettier")]
+unsafe fn aerize(hwnd: windef::HWND) -> Result<(),()> {
+    let style = winuser::GetWindowLongPtrW(hwnd, winuser::GWL_STYLE);
+    
+    let mut ps: winuser::PAINTSTRUCT = mem::zeroed();
+    let hdc = winuser::BeginPaint(hwnd, &mut ps);
+    
+    if hdc.is_null() { return Err(()); }
+        
+    let mut client_rect = common::window_rect(hwnd)?;
+    let mut hdc_paint: windef::HDC = ptr::null_mut();
+    let mut paint_params: uxtheme::BP_PAINTPARAMS = mem::zeroed();
+    paint_params.cbSize = mem::size_of::<uxtheme::BP_PAINTPARAMS>() as u32;
+    paint_params.dwFlags = uxtheme::BPPF_ERASE;
+    
+    let theme = uxtheme::OpenThemeData(hwnd, WINDOW_CLASS.as_ptr());
+    if theme.is_null() { 
+        winuser::EndPaint(hwnd, &mut ps);
+        return Err(()); 
+    }
+    
+    let buff_paint = uxtheme::BeginBufferedPaint(hdc, &mut client_rect, uxtheme::BPBF_TOPDOWNDIB, &mut paint_params, &mut hdc_paint);
+    if hdc_paint.is_null() {
+        common::log_error();
+        uxtheme::CloseThemeData(theme);
+        winuser::EndPaint(hwnd, &mut ps);
+        return Err(());
+    }
+    
+     if wingdi::PatBlt(hdc_paint, 0, 0, client_rect.right - client_rect.left, client_rect.bottom - client_rect.top, wingdi::BLACKNESS) < 0 {
+        uxtheme::CloseThemeData(theme);
+        winuser::EndPaint(hwnd, &mut ps);
+        return Err(());
+    }
+    if uxtheme::BufferedPaintSetAlpha(buff_paint, &mut ps.rcPaint, 0) != winerror::S_OK {
+        uxtheme::CloseThemeData(theme);
+        winuser::EndPaint(hwnd, &mut ps);
+        return Err(());
+    }
+    
+    let check_state = winuser::SendMessageW(hwnd, winuser::BM_GETCHECK, 0, 0);
+    let mut rect = common::window_rect(hwnd)?;
+    let mut pt: windef::POINT = mem::zeroed();
+    winuser::GetCursorPos(&mut pt);
+    let hot = winuser::PtInRect(&rect, pt) > 0;
+    let focus = winuser::GetFocus() == hwnd;
+    let part_id = 1; // BP_PUSHBUTTON
+    
+    let state = common::aero::state_from_button_state(style as u32, hot, focus, check_state as usize, part_id, winuser::GetCapture() == hwnd);
+    let paint_rect = client_rect.clone();
+    
+    if uxtheme::DrawThemeBackground(theme, hdc_paint, part_id, state, &paint_rect, ptr::null_mut())!= winerror::S_OK {
+        uxtheme::CloseThemeData(theme);
+        winuser::EndPaint(hwnd, &mut ps);
+        return Err(());
+    }                        
+    if uxtheme::GetThemeBackgroundContentRect(theme, hdc_paint, part_id, state, &paint_rect, &mut rect) != winerror::S_OK {
+        uxtheme::CloseThemeData(theme);
+        winuser::EndPaint(hwnd, &mut ps);
+        return Err(());
+    }
+                            
+    let mut dtt_opts: uxtheme::DTTOPTS = mem::zeroed();
+    dtt_opts.dwSize = mem::size_of::<uxtheme::DTTOPTS>() as u32;
+    dtt_opts.dwFlags = uxtheme::DTT_COMPOSITED;
+    dtt_opts.crText = wingdi::RGB(0xFF, 0xFF, 0xFF);
+    dtt_opts.iGlowSize = common::aero::glow_size(ptr::null()).map_err(|e| {
+        uxtheme::CloseThemeData(theme);
+        e
+    })?;
+    
+    let mut font_old = winuser::SendMessageW(hwnd, winuser::WM_GETFONT, 0, 0) as windef::HFONT;
+    if !font_old.is_null() {
+        font_old = wingdi::SelectObject(hdc_paint, font_old as *mut c_void) as windef::HFONT;
+    }          
+
+    let mut len = winuser::GetWindowTextLengthW(hwnd);
+    if len < 0 {
+        uxtheme::CloseThemeData(theme);
+        winuser::EndPaint(hwnd, &mut ps);
+        return Err(());
+    }
+    
+    len += 5;
+    let mut text: Vec<u16> = Vec::with_capacity(len as usize);
+    
+    len = winuser::GetWindowTextW(hwnd, text.as_mut_slice().as_mut_ptr(), len);
+    if len < 0 {
+        uxtheme::CloseThemeData(theme);
+        winuser::EndPaint(hwnd, &mut ps);
+        return Err(());
+    }
+
+    let flags = winuser::DT_SINGLELINE | winuser::DT_CENTER | winuser::DT_VCENTER;
+    
+    if uxtheme::DrawThemeTextEx(theme, hdc_paint, part_id, state, text.as_mut_slice().as_mut_ptr(), -1, flags, &mut rect, &dtt_opts) != winerror::S_OK {
+        uxtheme::CloseThemeData(theme);
+        winuser::EndPaint(hwnd, &mut ps);
+        return Err(());
+    }
+
+    if focus {
+        let mut draw_rect = client_rect.clone();
+        if winuser::InflateRect(&mut draw_rect, -3, -3) < 0 {
+            uxtheme::CloseThemeData(theme);
+            winuser::EndPaint(hwnd, &mut ps);
+            return Err(());
+        }
+        winuser::DrawFocusRect(hdc_paint, &mut draw_rect);
+    }
+                                            
+    if !font_old.is_null() {
+        wingdi::SelectObject(hdc_paint, font_old as *mut c_void);
+    }
+    uxtheme::EndBufferedPaint(buff_paint, minwindef::TRUE);
+    uxtheme::CloseThemeData(theme);
+    winuser::EndPaint(hwnd, &mut ps);
+    
+    Ok(())
 }
 
 impl_all_defaults!(Button);

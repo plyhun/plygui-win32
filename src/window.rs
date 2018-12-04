@@ -272,8 +272,9 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
         }
         #[cfg(feature = "prettier")]
         winuser::WM_PAINT => {
-            common::aero::prettify(hwnd);
-            return 1;
+            if common::aero::prettify(hwnd).is_ok() {
+                return 1;
+            }
         }
         _ => {}
     }

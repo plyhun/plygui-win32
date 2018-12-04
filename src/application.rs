@@ -113,10 +113,10 @@ fn init_comctl() {
     }
 }
 
+#[cfg(feature = "prettier")]
 impl Drop for WindowsApplication {
     fn drop(&mut self) {
         unsafe {
-            #[cfg(feature = "prettier")]
             common::uxtheme::BufferedPaintUnInit();
         }
     }

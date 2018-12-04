@@ -3,7 +3,6 @@ use super::*;
 
 lazy_static! {
     pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
-    //pub static ref INSTANCE: winuser::HINSTANCE = unsafe { kernel32::GetModuleHandleW(ptr::null()) };
 }
 
 pub type LinearLayout = Member<Control<MultiContainer<WindowsLinearLayout>>>;
@@ -311,11 +310,11 @@ pub(crate) fn spawn() -> Box<controls::Control> {
 unsafe fn register_window_class() -> Vec<u16> {
     let class_name = OsStr::new("PlyguiWin32LinearLayout").encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
     let class = winuser::WNDCLASSW {
-        style: winuser::CS_DBLCLKS,
+        style: winuser::CS_DBLCLKS | winuser::CS_OWNDC,
         lpfnWndProc: Some(whandler),
         cbClsExtra: 0,
         cbWndExtra: 0,
-        hInstance: libloaderapi::GetModuleHandleW(ptr::null()),
+        hInstance: common::hinstance(),
         hIcon: winuser::LoadIconW(ptr::null_mut(), winuser::IDI_APPLICATION),
         hCursor: winuser::LoadCursorW(ptr::null_mut(), winuser::IDC_ARROW),
         hbrBackground: ptr::null_mut(),
@@ -370,8 +369,9 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
         }
         #[cfg(feature = "prettier")]
         winuser::WM_PAINT => {
-            common::aero::prettify(hwnd);
-            return 1;
+            if common::aero::aerize(hwnd, false).is_ok() {
+                return 1;
+            }
         }
         _ => {}
     }

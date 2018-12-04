@@ -53,7 +53,7 @@ impl Drop for Hfont {
 unsafe impl Sync for Hfont {}
 
 #[inline]
-fn hfont() -> windef::HFONT {
+pub fn hfont() -> windef::HFONT {
     *(*HFONT).as_ref()
 }
 lazy_static! {
@@ -326,12 +326,16 @@ pub fn member_base_from_hwnd<'a>(hwnd: windef::HWND) -> &'a mut MemberBase {
     unsafe { cast_hwnd(hwnd) }
 }
 
+#[inline]
+pub unsafe fn log_error() {
+    log_error_value(errhandlingapi::GetLastError())
+}
+
 #[cfg(not(debug_assertions))]
-pub unsafe fn log_error() {}
+pub unsafe fn log_error_value(error: u32) {}
 
 #[cfg(debug_assertions)]
-pub unsafe fn log_error() {
-    let error = errhandlingapi::GetLastError();
+pub unsafe fn log_error_value(error: u32) {
     if error == 0 {
         return;
     }
@@ -366,9 +370,14 @@ pub mod aero {
         let hdc = winuser::BeginPaint(hwnd, &mut ps);
         let margins = uxtheme::MARGINS { cxLeftWidth: -1, cxRightWidth: -1, cyBottomHeight: -1, cyTopHeight: -1}; 
         let mut enabled = minwindef::FALSE;
-        if !hdc.is_null() && winerror::SUCCEEDED(dwmapi::DwmIsCompositionEnabled(&mut enabled)) && winerror::SUCCEEDED(dwmapi::DwmExtendFrameIntoClientArea(hwnd, &margins)) {
-            let rclient = window_rect(hwnd)?;
-            wingdi::PatBlt(hdc, 0, 0, rclient.right - rclient.left, rclient.bottom - rclient.top, wingdi::BLACKNESS);
+        if !hdc.is_null() && winerror::SUCCEEDED(dwmapi::DwmIsCompositionEnabled(&mut enabled)) {
+            let error = dwmapi::DwmExtendFrameIntoClientArea(hwnd, &margins);
+            if winerror::SUCCEEDED(error) {
+                let rclient = window_rect(hwnd)?;
+                wingdi::PatBlt(hdc, 0, 0, rclient.right - rclient.left, rclient.bottom - rclient.top, wingdi::BLACKNESS);
+            } else {
+                log_error_value(error as u32);
+            }
         } else {
             log_error();
         }
@@ -494,5 +503,63 @@ pub mod aero {
             winerror::SUCCEEDED(uxtheme::CloseThemeData(theme));
         }    
         Ok(color)
+    }
+    
+    pub unsafe fn aerize(hwnd: windef::HWND, /*hdc: windef::HDC, rect: &mut windef::RECT,*/ draw_border: bool) -> Result<(),()> {
+        let mut ps: winuser::PAINTSTRUCT = mem::zeroed();
+        let hdc = winuser::BeginPaint(hwnd, &mut ps);
+        if hdc.is_null() { return Err(()); }
+        
+        let mut hdc_paint = ptr::null_mut();
+        if draw_border {
+            if winuser::InflateRect(&mut ps.rcPaint, 1, 1) < 0 { return Err(()) }
+        }
+        let buff_paint = uxtheme::BeginBufferedPaint(hdc, &mut ps.rcPaint, uxtheme::BPBF_TOPDOWNDIB, ptr::null_mut(), &mut hdc_paint);
+        if hdc_paint.is_null() {
+            log_error();
+            return Err(());
+        }
+    
+        let mut wrect = window_rect(hwnd)?;
+        
+        if wingdi::PatBlt(hdc_paint, 0, 0, wrect.right - wrect.left, wrect.bottom - wrect.top, wingdi::BLACKNESS) < 0 {
+            log_error();
+            return Err(());
+        }
+        if uxtheme::BufferedPaintSetAlpha(buff_paint, &mut wrect, 0) != winerror::S_OK {
+            log_error();
+            return Err(());
+        }
+        
+        if wingdi::PatBlt(hdc_paint, 0, 0, wrect.right - wrect.left, wrect.bottom - wrect.top, wingdi::WHITENESS) < 0 {
+            log_error();
+            return Err(());
+        }
+        
+        if draw_border {
+            if winuser::InflateRect(&mut ps.rcPaint, -1, -1) < 0  {
+                log_error();
+                return Err(());
+            }
+        }
+        // Tell the control to paint itself in our memory buffer
+        winuser::SendMessageW(hwnd, winuser::WM_PRINTCLIENT, hdc_paint as usize, (winuser::PRF_CLIENT|winuser::PRF_ERASEBKGND |winuser::PRF_NONCLIENT|winuser::PRF_CHECKVISIBLE) as isize);
+        
+        if draw_border {
+            if winuser::InflateRect(&mut ps.rcPaint, 1, 1) < 0 { return Err(()) }
+            if winuser::FrameRect(hdc_paint, &mut ps.rcPaint, wingdi::GetStockObject(wingdi::BLACK_BRUSH as i32) as windef::HBRUSH) < 0  {
+                log_error();
+                return Err(());
+            }
+        }
+
+        // Make every pixel opaque
+        if uxtheme::BufferedPaintSetAlpha(buff_paint, &mut ps.rcPaint, 0xFF) != winerror::S_OK  {
+            log_error();
+            return Err(());
+        }
+        uxtheme::EndBufferedPaint(buff_paint, minwindef::TRUE);
+        
+        Ok(())
     }
 }
