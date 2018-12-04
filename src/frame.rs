@@ -399,14 +399,15 @@ unsafe fn aerize(hwnd: windef::HWND) -> Result<(),()> {
     //let btn_style = minwindef::LOWORD(style as u32);
     //let btn_type = btn_style & 0xF;
     let mut client_rect = common::window_rect(hwnd)?;
+    let mut hdc_paint: windef::HDC = ptr::null_mut();
+    let mut paint_params: uxtheme::BP_PAINTPARAMS = mem::zeroed();
+    paint_params.cbSize = mem::size_of::<uxtheme::BP_PAINTPARAMS>() as u32;
+    paint_params.dwFlags = uxtheme::BPPF_ERASE;
+    let mut exclusion_rect = client_rect.clone();
+    
     let theme = uxtheme::OpenThemeData(hwnd, WINDOW_CLASS_GBOX.as_ptr());
     
     if theme.is_null() { return Err(()); }
-    
-    let mut hdc_paint: windef::HDC = ptr::null_mut();
-    let mut paint_params: uxtheme::BP_PAINTPARAMS = mem::zeroed();
-    paint_params.dwFlags = uxtheme::BPPF_ERASE;
-    let mut exclusion_rect = client_rect.clone();
     
     let mut font_old = winuser::SendMessageW(hwnd, winuser::WM_GETFONT, 0, 0) as windef::HFONT;
     if !font_old.is_null() {
