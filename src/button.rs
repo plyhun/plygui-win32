@@ -57,7 +57,7 @@ impl ButtonInner for WindowsButton {
 }
 
 impl ControlInner for WindowsButton {
-    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &controls::Container, x: i32, y: i32, pw: u16, ph: u16) {
+    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &dyn controls::Container, x: i32, y: i32, pw: u16, ph: u16) {
         let selfptr = member as *mut _ as *mut c_void;
         let (hwnd, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
@@ -79,21 +79,21 @@ impl ControlInner for WindowsButton {
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
     }
-    fn on_removed_from_container(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, _: &controls::Container) {
+    fn on_removed_from_container(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
         common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, Some(handler));
         self.base.hwnd = 0 as windef::HWND;
         self.base.subclass_id = 0;
     }
-    fn parent(&self) -> Option<&controls::Member> {
+    fn parent(&self) -> Option<&dyn controls::Member> {
         self.base.parent().map(|p| p.as_member())
     }
-    fn parent_mut(&mut self) -> Option<&mut controls::Member> {
+    fn parent_mut(&mut self) -> Option<&mut dyn controls::Member> {
         self.base.parent_mut().map(|p| p.as_member_mut())
     }
-    fn root(&self) -> Option<&controls::Member> {
+    fn root(&self) -> Option<&dyn controls::Member> {
         self.base.root().map(|p| p.as_member())
     }
-    fn root_mut(&mut self) -> Option<&mut controls::Member> {
+    fn root_mut(&mut self) -> Option<&mut dyn controls::Member> {
         self.base.root_mut().map(|p| p.as_member_mut())
     }
 
@@ -184,7 +184,7 @@ impl Drawable for WindowsButton {
 }
 
 #[allow(dead_code)]
-pub(crate) fn spawn() -> Box<controls::Control> {
+pub(crate) fn spawn() -> Box<dyn controls::Control> {
     Button::with_label("").into_control()
 }
 
@@ -197,7 +197,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
         winuser::WM_LBUTTONDOWN => {
             let button: &mut Button = mem::transmute(param);
             if let Some(ref mut cb) = button.as_inner_mut().as_inner_mut().h_left_clicked {
-                let mut button2: &mut Button = mem::transmute(param);
+                let button2: &mut Button = mem::transmute(param);
                 (cb.as_mut())(button2);
             }
             return 0;

@@ -12,7 +12,7 @@ pub type LinearLayout = Member<Control<MultiContainer<WindowsLinearLayout>>>;
 pub struct WindowsLinearLayout {
     base: WindowsControlBase<LinearLayout>,
     orientation: layout::Orientation,
-    children: Vec<Box<controls::Control>>,
+    children: Vec<Box<dyn controls::Control>>,
 }
 
 impl LinearLayoutInner for WindowsLinearLayout {
@@ -50,7 +50,7 @@ impl MultiContainerInner for WindowsLinearLayout {
     fn len(&self) -> usize {
         self.children.len()
     }
-    fn set_child_to(&mut self, base: &mut MemberBase, index: usize, child: Box<controls::Control>) -> Option<Box<controls::Control>> {
+    fn set_child_to(&mut self, base: &mut MemberBase, index: usize, child: Box<dyn controls::Control>) -> Option<Box<dyn controls::Control>> {
         let old = self.remove_child_from(base, index);
 
         self.children.insert(index, child);
@@ -67,7 +67,7 @@ impl MultiContainerInner for WindowsLinearLayout {
         }
         old
     }
-    fn remove_child_from(&mut self, _base: &mut MemberBase, index: usize) -> Option<Box<controls::Control>> {
+    fn remove_child_from(&mut self, _base: &mut MemberBase, index: usize) -> Option<Box<dyn controls::Control>> {
         if index < self.children.len() {
             let mut old = self.children.remove(index);
             if !self.base.hwnd.is_null() {
@@ -79,10 +79,10 @@ impl MultiContainerInner for WindowsLinearLayout {
             None
         }
     }
-    fn child_at(&self, index: usize) -> Option<&controls::Control> {
+    fn child_at(&self, index: usize) -> Option<&dyn controls::Control> {
         self.children.get(index).map(|c| c.as_ref())
     }
-    fn child_at_mut(&mut self, index: usize) -> Option<&mut controls::Control> {
+    fn child_at_mut(&mut self, index: usize) -> Option<&mut dyn controls::Control> {
         //self.children.get_mut(index).map(|c| c.as_mut()) //the anonymous lifetime #1 does not necessarily outlive the static lifetime
         if let Some(c) = self.children.get_mut(index) {
             Some(c.as_mut())
@@ -92,19 +92,19 @@ impl MultiContainerInner for WindowsLinearLayout {
     }
 }
 impl ControlInner for WindowsLinearLayout {
-    fn parent(&self) -> Option<&controls::Member> {
+    fn parent(&self) -> Option<&dyn controls::Member> {
         self.base.parent().map(|p| p.as_member())
     }
-    fn parent_mut(&mut self) -> Option<&mut controls::Member> {
+    fn parent_mut(&mut self) -> Option<&mut dyn controls::Member> {
         self.base.parent_mut().map(|p| p.as_member_mut())
     }
-    fn root(&self) -> Option<&controls::Member> {
+    fn root(&self) -> Option<&dyn controls::Member> {
         self.base.root().map(|p| p.as_member())
     }
-    fn root_mut(&mut self) -> Option<&mut controls::Member> {
+    fn root_mut(&mut self) -> Option<&mut dyn controls::Member> {
         self.base.root_mut().map(|p| p.as_member_mut())
     }
-    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &controls::Container, px: i32, py: i32, pw: u16, ph: u16) {
+    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &dyn controls::Container, px: i32, py: i32, pw: u16, ph: u16) {
         let selfptr = member as *mut _ as *mut c_void;
         let (width, height, _) = self.measure(member, control, pw, ph);
         let (hwnd, id) = unsafe {
@@ -144,7 +144,7 @@ impl ControlInner for WindowsLinearLayout {
             }
         }
     }
-    fn on_removed_from_container(&mut self, member: &mut MemberBase, _control: &mut ControlBase, _: &controls::Container) {
+    fn on_removed_from_container(&mut self, member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
         for ref mut child in self.children.as_mut_slice() {
             let self2: &mut LinearLayout = unsafe { utils::base_to_impl_mut(member) };
             child.on_removed_from_container(self2);
@@ -194,7 +194,7 @@ impl MemberInner for WindowsLinearLayout {
     }
 }
 impl ContainerInner for WindowsLinearLayout {
-    fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut controls::Control> {
+    fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut dyn controls::Control> {
         for child in self.children.as_mut_slice() {
             if child.as_member().id() == id_ {
                 return Some(child.as_mut());
@@ -208,7 +208,7 @@ impl ContainerInner for WindowsLinearLayout {
         }
         None
     }
-    fn find_control_by_id(&self, id_: ids::Id) -> Option<&controls::Control> {
+    fn find_control_by_id(&self, id_: ids::Id) -> Option<&dyn controls::Control> {
         for child in self.children.as_slice() {
             if child.as_member().id() == id_ {
                 return Some(child.as_ref());
@@ -304,7 +304,7 @@ impl Drawable for WindowsLinearLayout {
 }
 
 #[allow(dead_code)]
-pub(crate) fn spawn() -> Box<controls::Control> {
+pub(crate) fn spawn() -> Box<dyn controls::Control> {
     LinearLayout::with_orientation(layout::Orientation::Vertical).into_control()
 }
 
@@ -342,7 +342,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
 
             let mut width = lparam as u16;
             let mut height = (lparam >> 16) as u16;
-            let mut ll: &mut LinearLayout = mem::transmute(ww);
+            let ll: &mut LinearLayout = mem::transmute(ww);
             let o = ll.as_inner().as_inner().as_inner().orientation;
             let hp = DEFAULT_PADDING + DEFAULT_PADDING;
             let vp = DEFAULT_PADDING + DEFAULT_PADDING;

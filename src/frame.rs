@@ -14,7 +14,7 @@ pub struct WindowsFrame {
     hwnd_gbox: windef::HWND,
     label: String,
     label_padding: i32,
-    child: Option<Box<controls::Control>>,
+    child: Option<Box<dyn controls::Control>>,
 }
 
 impl FrameInner for WindowsFrame {
@@ -70,7 +70,7 @@ impl HasLabelInner for WindowsFrame {
 }
 
 impl SingleContainerInner for WindowsFrame {
-    fn set_child(&mut self, base: &mut MemberBase, child: Option<Box<controls::Control>>) -> Option<Box<controls::Control>> {
+    fn set_child(&mut self, base: &mut MemberBase, child: Option<Box<dyn controls::Control>>) -> Option<Box<dyn controls::Control>> {
         let mut old = self.child.take();
         if let Some(old) = old.as_mut() {
             if !self.base.hwnd.is_null() {
@@ -97,10 +97,10 @@ impl SingleContainerInner for WindowsFrame {
 
         old
     }
-    fn child(&self) -> Option<&controls::Control> {
+    fn child(&self) -> Option<&dyn controls::Control> {
         self.child.as_ref().map(|c| c.as_ref())
     }
-    fn child_mut(&mut self) -> Option<&mut controls::Control> {
+    fn child_mut(&mut self) -> Option<&mut dyn controls::Control> {
         if let Some(child) = self.child.as_mut() {
             Some(child.as_mut())
         } else {
@@ -110,7 +110,7 @@ impl SingleContainerInner for WindowsFrame {
 }
 
 impl ContainerInner for WindowsFrame {
-    fn find_control_by_id_mut(&mut self, id: ids::Id) -> Option<&mut controls::Control> {
+    fn find_control_by_id_mut(&mut self, id: ids::Id) -> Option<&mut dyn controls::Control> {
         if let Some(child) = self.child.as_mut() {
             if child.as_member().id() == id {
                 Some(child.as_mut())
@@ -123,7 +123,7 @@ impl ContainerInner for WindowsFrame {
             None
         }
     }
-    fn find_control_by_id(&self, id: ids::Id) -> Option<&controls::Control> {
+    fn find_control_by_id(&self, id: ids::Id) -> Option<&dyn controls::Control> {
         if let Some(child) = self.child.as_ref() {
             if child.as_member().id() == id {
                 Some(child.as_ref())
@@ -139,7 +139,7 @@ impl ContainerInner for WindowsFrame {
 }
 
 impl ControlInner for WindowsFrame {
-    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &controls::Container, px: i32, py: i32, pw: u16, ph: u16) {
+    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &dyn controls::Container, px: i32, py: i32, pw: u16, ph: u16) {
         let selfptr = member as *mut _ as *mut c_void;
         let (hwnd, hwnd_gbox, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
@@ -189,7 +189,7 @@ impl ControlInner for WindowsFrame {
             );
         }
     }
-    fn on_removed_from_container(&mut self, member: &mut MemberBase, _control: &mut ControlBase, _: &controls::Container) {
+    fn on_removed_from_container(&mut self, member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
         if let Some(ref mut child) = self.child {
             let self2: &mut Frame = unsafe { utils::base_to_impl_mut(member) };
             child.on_removed_from_container(self2);
@@ -201,16 +201,16 @@ impl ControlInner for WindowsFrame {
         self.base.subclass_id = 0;
     }
 
-    fn parent(&self) -> Option<&controls::Member> {
+    fn parent(&self) -> Option<&dyn controls::Member> {
         self.base.parent().map(|p| p.as_member())
     }
-    fn parent_mut(&mut self) -> Option<&mut controls::Member> {
+    fn parent_mut(&mut self) -> Option<&mut dyn controls::Member> {
         self.base.parent_mut().map(|p| p.as_member_mut())
     }
-    fn root(&self) -> Option<&controls::Member> {
+    fn root(&self) -> Option<&dyn controls::Member> {
         self.base.root().map(|p| p.as_member())
     }
-    fn root_mut(&mut self) -> Option<&mut controls::Member> {
+    fn root_mut(&mut self) -> Option<&mut dyn controls::Member> {
         self.base.root_mut().map(|p| p.as_member_mut())
     }
 
@@ -315,7 +315,7 @@ impl Drawable for WindowsFrame {
 }
 
 #[allow(dead_code)]
-pub(crate) fn spawn() -> Box<controls::Control> {
+pub(crate) fn spawn() -> Box<dyn controls::Control> {
     Frame::with_label("").into_control()
 }
 
@@ -360,9 +360,9 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
 
     match msg {
         winuser::WM_SIZE => {
-            let mut width = lparam as u16;
-            let mut height = (lparam >> 16) as u16;
-            let mut frame: &mut Frame = mem::transmute(ww);
+            let width = lparam as u16;
+            let height = (lparam >> 16) as u16;
+            let frame: &mut Frame = mem::transmute(ww);
             let label_padding = frame.as_inner().as_inner().as_inner().label_padding;
             let hp = DEFAULT_PADDING + DEFAULT_PADDING;
             let vp = DEFAULT_PADDING + DEFAULT_PADDING + label_padding;

@@ -8,7 +8,7 @@ lazy_static! {
 #[repr(C)]
 pub struct WindowsWindow {
     hwnd: windef::HWND,
-    child: Option<Box<controls::Control>>,
+    child: Option<Box<dyn controls::Control>>,
 }
 
 pub type Window = Member<SingleContainer<plygui_api::development::Window<WindowsWindow>>>;
@@ -140,7 +140,7 @@ impl WindowInner for WindowsWindow {
 }
 
 impl ContainerInner for WindowsWindow {
-    fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut controls::Control> {
+    fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut dyn controls::Control> {
         if let Some(child) = self.child.as_mut() {
             if let Some(c) = child.is_container_mut() {
                 return c.find_control_by_id_mut(id_);
@@ -148,7 +148,7 @@ impl ContainerInner for WindowsWindow {
         }
         None
     }
-    fn find_control_by_id(&self, id_: ids::Id) -> Option<&controls::Control> {
+    fn find_control_by_id(&self, id_: ids::Id) -> Option<&dyn controls::Control> {
         if let Some(child) = self.child.as_ref() {
             if let Some(c) = child.is_container() {
                 return c.find_control_by_id(id_);
@@ -159,7 +159,7 @@ impl ContainerInner for WindowsWindow {
 }
 
 impl SingleContainerInner for WindowsWindow {
-    fn set_child(&mut self, _: &mut MemberBase, mut child: Option<Box<controls::Control>>) -> Option<Box<controls::Control>> {
+    fn set_child(&mut self, _: &mut MemberBase, mut child: Option<Box<dyn controls::Control>>) -> Option<Box<dyn controls::Control>> {
         use plygui_api::controls::SingleContainer;
 
         let mut old = self.child.take();
@@ -178,10 +178,10 @@ impl SingleContainerInner for WindowsWindow {
 
         old
     }
-    fn child(&self) -> Option<&controls::Control> {
+    fn child(&self) -> Option<&dyn controls::Control> {
         self.child.as_ref().map(|c| c.as_ref())
     }
-    fn child_mut(&mut self) -> Option<&mut controls::Control> {
+    fn child_mut(&mut self) -> Option<&mut dyn controls::Control> {
         if let Some(child) = self.child.as_mut() {
             Some(child.as_mut())
         } else {
@@ -251,7 +251,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
         winuser::WM_SIZE => {
             let width = lparam as u16;
             let height = (lparam >> 16) as u16;
-            let mut w: &mut window::Window = mem::transmute(ww);
+            let w: &mut window::Window = mem::transmute(ww);
 
             w.as_inner_mut().as_inner_mut().as_inner_mut().redraw();
 
@@ -263,7 +263,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
         winuser::WM_DESTROY => {
             winuser::PostQuitMessage(0);
 
-            let mut w: &mut window::Window = mem::transmute(ww);
+            let w: &mut window::Window = mem::transmute(ww);
             w.as_inner_mut().as_inner_mut().as_inner_mut().hwnd = ptr::null_mut();
             return 0;
         }

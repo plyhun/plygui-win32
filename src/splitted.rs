@@ -20,8 +20,8 @@ pub struct WindowsSplitted {
     moving: bool,
     cursor: windef::HCURSOR,
 
-    first: Box<controls::Control>,
-    second: Box<controls::Control>,
+    first: Box<dyn controls::Control>,
+    second: Box<dyn controls::Control>,
 }
 
 impl WindowsSplitted {
@@ -92,7 +92,7 @@ impl WindowsSplitted {
 }
 
 impl SplittedInner for WindowsSplitted {
-    fn with_content(first: Box<controls::Control>, second: Box<controls::Control>, orientation: layout::Orientation) -> Box<Splitted> {
+    fn with_content(first: Box<dyn controls::Control>, second: Box<dyn controls::Control>, orientation: layout::Orientation) -> Box<Splitted> {
         let b = Box::new(Member::with_inner(
             Control::with_inner(
                 MultiContainer::with_inner(
@@ -122,16 +122,16 @@ impl SplittedInner for WindowsSplitted {
     fn splitter(&self) -> f32 {
         self.splitter
     }
-    fn first(&self) -> &controls::Control {
+    fn first(&self) -> &dyn controls::Control {
         self.first.as_ref()
     }
-    fn second(&self) -> &controls::Control {
+    fn second(&self) -> &dyn controls::Control {
         self.second.as_ref()
     }
-    fn first_mut(&mut self) -> &mut controls::Control {
+    fn first_mut(&mut self) -> &mut dyn controls::Control {
         self.first.as_mut()
     }
-    fn second_mut(&mut self) -> &mut controls::Control {
+    fn second_mut(&mut self) -> &mut dyn controls::Control {
         self.second.as_mut()
     }
 }
@@ -158,19 +158,19 @@ impl MemberInner for WindowsSplitted {
 }
 
 impl ControlInner for WindowsSplitted {
-    fn parent(&self) -> Option<&controls::Member> {
+    fn parent(&self) -> Option<&dyn controls::Member> {
         self.base.parent().map(|p| p.as_member())
     }
-    fn parent_mut(&mut self) -> Option<&mut controls::Member> {
+    fn parent_mut(&mut self) -> Option<&mut dyn controls::Member> {
         self.base.parent_mut().map(|p| p.as_member_mut())
     }
-    fn root(&self) -> Option<&controls::Member> {
+    fn root(&self) -> Option<&dyn controls::Member> {
         self.base.root().map(|p| p.as_member())
     }
-    fn root_mut(&mut self) -> Option<&mut controls::Member> {
+    fn root_mut(&mut self) -> Option<&mut dyn controls::Member> {
         self.base.root_mut().map(|p| p.as_member_mut())
     }
-    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &controls::Container, px: i32, py: i32, pw: u16, ph: u16) {
+    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &dyn controls::Container, px: i32, py: i32, pw: u16, ph: u16) {
         let selfptr = member as *mut _ as *mut c_void;
         let (width, height, _) = self.measure(member, control, pw, ph);
         let (hwnd, id) = unsafe {
@@ -211,7 +211,7 @@ impl ControlInner for WindowsSplitted {
             }
         }
     }
-    fn on_removed_from_container(&mut self, member: &mut MemberBase, _control: &mut ControlBase, _: &controls::Container) {
+    fn on_removed_from_container(&mut self, member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
         let self2: &mut Splitted = unsafe { utils::base_to_impl_mut(member) };
 
         self.first.on_removed_from_container(self2);
@@ -247,7 +247,7 @@ impl HasLayoutInner for WindowsSplitted {
 }
 
 impl ContainerInner for WindowsSplitted {
-    fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut controls::Control> {
+    fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut dyn controls::Control> {
         if self.first().as_member().id() == id_ {
             return Some(self.first_mut());
         }
@@ -271,7 +271,7 @@ impl ContainerInner for WindowsSplitted {
 
         None
     }
-    fn find_control_by_id(&self, id_: ids::Id) -> Option<&controls::Control> {
+    fn find_control_by_id(&self, id_: ids::Id) -> Option<&dyn controls::Control> {
         if self.first().as_member().id() == id_ {
             return Some(self.first());
         }
@@ -300,7 +300,7 @@ impl MultiContainerInner for WindowsSplitted {
     fn len(&self) -> usize {
         2
     }
-    fn set_child_to(&mut self, _: &mut MemberBase, index: usize, mut child: Box<controls::Control>) -> Option<Box<controls::Control>> {
+    fn set_child_to(&mut self, _: &mut MemberBase, index: usize, mut child: Box<dyn controls::Control>) -> Option<Box<dyn controls::Control>> {
         match index {
             0 => {
                 if !self.base.hwnd.is_null() {
@@ -340,17 +340,17 @@ impl MultiContainerInner for WindowsSplitted {
 
         Some(child)
     }
-    fn remove_child_from(&mut self, _: &mut MemberBase, _: usize) -> Option<Box<controls::Control>> {
+    fn remove_child_from(&mut self, _: &mut MemberBase, _: usize) -> Option<Box<dyn controls::Control>> {
         None
     }
-    fn child_at(&self, index: usize) -> Option<&controls::Control> {
+    fn child_at(&self, index: usize) -> Option<&dyn controls::Control> {
         match index {
             0 => Some(self.first()),
             1 => Some(self.second()),
             _ => None,
         }
     }
-    fn child_at_mut(&mut self, index: usize) -> Option<&mut controls::Control> {
+    fn child_at_mut(&mut self, index: usize) -> Option<&mut dyn controls::Control> {
         match index {
             0 => Some(self.first_mut()),
             1 => Some(self.second_mut()),
@@ -448,7 +448,7 @@ impl Drawable for WindowsSplitted {
 }
 
 #[allow(dead_code)]
-pub(crate) fn spawn() -> Box<controls::Control> {
+pub(crate) fn spawn() -> Box<dyn controls::Control> {
     Splitted::with_content(super::text::spawn(), super::text::spawn(), layout::Orientation::Vertical).into_control()
 }
 
@@ -485,9 +485,9 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
     }
     match msg {
         winuser::WM_SIZE | common::WM_UPDATE_INNER => {
-            let mut width = lparam as u16;
-            let mut height = (lparam >> 16) as u16;
-            let mut ll: &mut Splitted = mem::transmute(ww);
+            let width = lparam as u16;
+            let height = (lparam >> 16) as u16;
+            let ll: &mut Splitted = mem::transmute(ww);
             {
                 ll.set_skip_draw(true);
                 {
@@ -506,11 +506,11 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             return 0;
         }
         winuser::WM_MOUSEMOVE => {
-            let mut x = lparam as u16;
-            let mut y = (lparam >> 16) as u16;
+            let x = lparam as u16;
+            let y = (lparam >> 16) as u16;
             let mut updated = false;
 
-            let mut ll: &mut Splitted = mem::transmute(ww);
+            let ll: &mut Splitted = mem::transmute(ww);
             let (width, height) = ll.size();
 
             match ll.layout_orientation() {
@@ -543,7 +543,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             return 0;
         }
         winuser::WM_LBUTTONDOWN => {
-            let mut ll: &mut Splitted = mem::transmute(ww);
+            let ll: &mut Splitted = mem::transmute(ww);
 
             winuser::SetCursor(ll.as_inner_mut().as_inner_mut().as_inner_mut().cursor);
             ll.as_inner_mut().as_inner_mut().as_inner_mut().moving = true;
@@ -551,7 +551,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             return 0;
         }
         winuser::WM_LBUTTONUP => {
-            let mut ll: &mut Splitted = mem::transmute(ww);
+            let ll: &mut Splitted = mem::transmute(ww);
 
             winuser::ReleaseCapture();
             ll.as_inner_mut().as_inner_mut().as_inner_mut().moving = false;
