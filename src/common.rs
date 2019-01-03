@@ -258,10 +258,10 @@ pub unsafe fn create_control_hwnd(
     };
     let os_control_name = OsStr::new(control_name).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
     let hwnd = winuser::CreateWindowExW(
-        ex_style,
+        ex_style | winuser::WS_EX_NOPARENTNOTIFY,
         class_name,
         os_control_name.as_ptr(),
-        style | winuser::WS_CHILD | winuser::WS_VISIBLE,
+        style | winuser::WS_CHILDWINDOW | winuser::WS_VISIBLE,
         x,
         y,
         w,
@@ -531,11 +531,6 @@ pub mod aero {
             return Err(());
         }
         
-        if wingdi::PatBlt(hdc_paint, 0, 0, wrect.right - wrect.left, wrect.bottom - wrect.top, wingdi::WHITENESS) < 0 {
-            log_error();
-            return Err(());
-        }
-        
         if draw_border {
             if winuser::InflateRect(&mut ps.rcPaint, -1, -1) < 0  {
                 log_error();
@@ -553,11 +548,6 @@ pub mod aero {
             }
         }
 
-        // Make every pixel opaque
-        if uxtheme::BufferedPaintSetAlpha(buff_paint, &mut ps.rcPaint, 0xFF) != winerror::S_OK  {
-            log_error();
-            return Err(());
-        }
         uxtheme::EndBufferedPaint(buff_paint, minwindef::TRUE);
         
         Ok(())

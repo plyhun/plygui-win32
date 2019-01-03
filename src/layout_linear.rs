@@ -367,12 +367,6 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             ll.call_on_resize(width, height);
             return 0;
         }
-        #[cfg(feature = "prettier")]
-        winuser::WM_PAINT => {
-            if common::aero::aerize(hwnd, false).is_ok() {
-                return 1;
-            }
-        }
         _ => {}
     }
 
