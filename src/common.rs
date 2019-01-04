@@ -261,7 +261,7 @@ pub unsafe fn create_control_hwnd(
         ex_style | winuser::WS_EX_NOPARENTNOTIFY,
         class_name,
         os_control_name.as_ptr(),
-        style | winuser::WS_CHILDWINDOW | winuser::WS_VISIBLE,
+        style | winuser::WS_CHILD | winuser::WS_VISIBLE,
         x,
         y,
         w,

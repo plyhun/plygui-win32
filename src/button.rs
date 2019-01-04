@@ -266,6 +266,7 @@ unsafe fn aerize(hwnd: windef::HWND) -> Result<(),()> {
     let mut rect = common::window_rect(hwnd)?;
     let mut pt: windef::POINT = mem::zeroed();
     winuser::GetCursorPos(&mut pt);
+    winuser::ScreenToClient(hwnd, &mut pt);
     let hot = winuser::PtInRect(&rect, pt) > 0;
     let focus = winuser::GetFocus() == hwnd;
     let part_id = 1; // BP_PUSHBUTTON
