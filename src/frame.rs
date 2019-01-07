@@ -4,7 +4,8 @@ use super::*;
 const CLASS_ID: &str = "Button";
 
 lazy_static! {
-    pub static ref WINDOW_CLASS: Vec<u16> = OsStr::new(CLASS_ID).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+    pub static ref WINDOW_CLASS_GBOX: Vec<u16> = OsStr::new(CLASS_ID).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+    pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
 }
 
 pub type Frame = Member<Control<SingleContainer<WindowsFrame>>>;
@@ -12,6 +13,7 @@ pub type Frame = Member<Control<SingleContainer<WindowsFrame>>>;
 #[repr(C)]
 pub struct WindowsFrame {
     base: common::WindowsControlBase<Frame>,
+    hwnd_gbox: windef::HWND,
     label: String,
     label_padding: i32,
     child: Option<Box<controls::Control>>,
@@ -25,6 +27,7 @@ impl FrameInner for WindowsFrame {
                     WindowsFrame {
                         base: common::WindowsControlBase::new(),
                         child: None,
+                        hwnd_gbox: 0 as windef::HWND,
                         label: label.to_owned(),
                         label_padding: 0,
                     },
@@ -42,6 +45,7 @@ impl HasLayoutInner for WindowsFrame {
     fn on_layout_changed(&mut self, _base: &mut MemberBase) {
         let hwnd = self.base.hwnd;
         if !hwnd.is_null() {
+            unsafe { winuser::RedrawWindow(self.hwnd_gbox, ptr::null_mut(), ptr::null_mut(), winuser::RDW_INVALIDATE | winuser::RDW_UPDATENOW) };
             self.base.invalidate();
         }
     }
@@ -139,10 +143,10 @@ impl ContainerInner for WindowsFrame {
 impl ControlInner for WindowsFrame {
     fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &controls::Container, px: i32, py: i32, pw: u16, ph: u16) {
         let selfptr = member as *mut _ as *mut c_void;
-        let (hwnd, id) = unsafe {
+        let (hwnd, hwnd_gbox, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
             let (width, height, _) = self.measure(member, control, pw, ph);
-            common::create_control_hwnd(
+            let (hwnd, id) = common::create_control_hwnd(
                 px,
                 py + self.label_padding,
                 width as i32,
@@ -150,13 +154,30 @@ impl ControlInner for WindowsFrame {
                 self.base.hwnd,
                 winuser::WS_EX_CONTROLPARENT,
                 WINDOW_CLASS.as_ptr(),
-                self.label.as_str(),
-                winuser::BS_GROUPBOX | winuser::WS_VISIBLE,
+                "",
+                0,
                 selfptr,
-                Some(handler),
-            )
+                None,
+            );
+            let hwnd_gbox = winuser::CreateWindowExW(
+                0,
+                WINDOW_CLASS_GBOX.as_ptr(),
+                OsStr::new(self.label.as_str()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>().as_ptr(),
+                winuser::BS_GROUPBOX | winuser::WS_CHILD | winuser::WS_VISIBLE,
+                px,
+                py,
+                width as i32,
+                height as i32,
+                self.base.hwnd,
+                ptr::null_mut(),
+                common::hinstance(),
+                ptr::null_mut(),
+            );
+            common::set_default_font(hwnd_gbox);
+            (hwnd, hwnd_gbox, id)
         };
         self.base.hwnd = hwnd;
+        self.hwnd_gbox = hwnd_gbox;
         self.base.subclass_id = id;
         self.base.coords = Some((px, py));
         if let Some(ref mut child) = self.child {
@@ -175,8 +196,10 @@ impl ControlInner for WindowsFrame {
             let self2: &mut Frame = unsafe { utils::base_to_impl_mut(member) };
             child.on_removed_from_container(self2);
         }
+        common::destroy_hwnd(self.hwnd_gbox, 0, None);
         common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, None);
         self.base.hwnd = 0 as windef::HWND;
+        self.hwnd_gbox = 0 as windef::HWND;
         self.base.subclass_id = 0;
     }
 
@@ -232,6 +255,7 @@ impl Drawable for WindowsFrame {
         if let Some((x, y)) = self.base.coords {
             unsafe {
                 winuser::SetWindowPos(self.base.hwnd, ptr::null_mut(), x, y + self.label_padding, self.base.measured_size.0 as i32, self.base.measured_size.1 as i32 - self.label_padding, 0);
+                winuser::SetWindowPos(self.hwnd_gbox, ptr::null_mut(), x, y, self.base.measured_size.0 as i32, self.base.measured_size.1 as i32, 0);
             }
             if let Some(ref mut child) = self.child {
                 child.draw(Some((DEFAULT_PADDING, DEFAULT_PADDING)));
@@ -287,6 +311,7 @@ impl Drawable for WindowsFrame {
         (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
     }
     fn invalidate(&mut self, _member: &mut MemberBase, _control: &mut ControlBase) {
+        unsafe { winuser::RedrawWindow(self.hwnd_gbox, ptr::null_mut(), ptr::null_mut(), winuser::RDW_INVALIDATE | winuser::RDW_UPDATENOW) };
         self.base.invalidate();
     }
 }
@@ -305,11 +330,36 @@ fn update_label_size(label: &str, hwnd: windef::HWND) -> i32 {
     label_size.cy as i32 / 2
 }
 
-unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
+unsafe fn register_window_class() -> Vec<u16> {
+    let class_name = OsStr::new("PlyguiWin32Frame").encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+    let class = winuser::WNDCLASSEXW {
+        cbSize: mem::size_of::<winuser::WNDCLASSEXW>() as minwindef::UINT,
+        style: 0,
+        lpfnWndProc: Some(whandler),
+        cbClsExtra: 0,
+        cbWndExtra: 0,
+        hInstance: common::hinstance(),
+        hIcon: winuser::LoadIconW(ptr::null_mut(), winuser::IDI_APPLICATION),
+        hCursor: winuser::LoadCursorW(ptr::null_mut(), winuser::IDC_ARROW),
+        hbrBackground: ptr::null_mut(),
+        lpszMenuName: ptr::null(),
+        lpszClassName: class_name.as_ptr(),
+        hIconSm: ptr::null_mut(),
+    };
+    winuser::RegisterClassExW(&class);
+    class_name
+}
+
+unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
     let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
-        winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as isize);
+        if winuser::WM_CREATE == msg {
+            let cs: &mut winuser::CREATESTRUCTW = mem::transmute(lparam);
+            winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, cs.lpCreateParams as isize);
+        }
+        return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }
+
     match msg {
         winuser::WM_SIZE => {
             let mut width = lparam as u16;
@@ -328,7 +378,8 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
         }
         #[cfg(feature = "prettier")]
         winuser::WM_PAINT => {
-            if common::aero::aerize(hwnd, false).is_ok() && aerize(hwnd).is_ok() {
+            let mut frame: &mut Frame = mem::transmute(ww);
+            if aerize(frame.as_inner_mut().as_inner_mut().as_inner_mut().hwnd_gbox).is_ok() {
                 return 1;
             }
         }
@@ -353,7 +404,7 @@ unsafe fn aerize(hwnd: windef::HWND) -> Result<(),()> {
     paint_params.dwFlags = uxtheme::BPPF_ERASE;
     let mut exclusion_rect = client_rect.clone();
     
-    let theme = uxtheme::OpenThemeData(hwnd, WINDOW_CLASS.as_ptr());
+    let theme = uxtheme::OpenThemeData(hwnd, WINDOW_CLASS_GBOX.as_ptr());
     if theme.is_null() { 
         winuser::EndPaint(hwnd, &mut ps);
         return Err(()); 
@@ -368,7 +419,7 @@ unsafe fn aerize(hwnd: windef::HWND) -> Result<(),()> {
     let dw_flags = winuser::DT_SINGLELINE;
     
     // Reusing WINDOW_CLASS_GBOX for getting text height, because it has a capital letter
-    winuser::DrawTextW(hdc, WINDOW_CLASS.as_ptr(), -1, &mut draw_rect, dw_flags | winuser::DT_CALCRECT);
+    winuser::DrawTextW(hdc, WINDOW_CLASS_GBOX.as_ptr(), -1, &mut draw_rect, dw_flags | winuser::DT_CALCRECT);
     
     if !font_old.is_null() {
         wingdi::SelectObject(hdc, font_old as *mut c_void);
