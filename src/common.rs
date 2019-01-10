@@ -5,6 +5,7 @@ pub use winapi::ctypes::c_void;
 pub use winapi::shared::minwindef;
 pub use winapi::shared::ntdef;
 pub use winapi::shared::windef;
+pub use winapi::shared::winerror;
 pub use winapi::um::commctrl;
 pub use winapi::um::errhandlingapi;
 pub use winapi::um::libloaderapi;
@@ -211,10 +212,14 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
         if self.hwnd.is_null() {
             self.measured_size
         } else {
-            let rect = unsafe { window_rect(self.hwnd) };
-            ((rect.right - rect.left) as u16, (rect.bottom - rect.top) as u16)
+            size_hwnd(self.hwnd)
         }
     }
+}
+
+pub fn size_hwnd(hwnd: windef::HWND) -> (u16, u16) {
+    let rect = unsafe { window_rect(hwnd) };
+    ((rect.right - rect.left) as u16, (rect.bottom - rect.top) as u16)
 }
 
 pub unsafe fn get_class_name_by_hwnd(hwnd: windef::HWND) -> Vec<u16> {

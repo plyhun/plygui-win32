@@ -18,23 +18,34 @@ impl HasLabelInner for WindowsAlert {
     }
     fn set_label(&mut self, _base: &mut MemberBase, label: &str) {
         self.label = label.into();
-        let hwnd = self.base.hwnd;
-        if !hwnd.is_null() {
+        if !self.hwnd.is_null() {
             let control_name = OsStr::new(&self.label).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
             unsafe {
-                winuser::SetWindowTextW(self.base.hwnd, control_name.as_ptr());
+                winuser::SetWindowTextW(self.hwnd, control_name.as_ptr());
             }
-            self.base.invalidate();
         }
     }
 }
 
 impl AlertInner for WindowsAlert {
-	fn with_text(text: &str, severity: types::AlertSeverity) -> Box<Member<Self>> {
+	fn with_text(text: &str, severity: types::AlertSeverity, parent: Option<&controls::Member>) -> Box<Member<Self>> {
+		let text_u16 = OsStr::new(text).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+		let mut cfg: commctrl::TASKDIALOGCONFIG = unsafe { mem::zeroed() };
+		cfg.cbSize = mem::size_of::<commctrl::TASKDIALOGCONFIG>() as u32;
+		cfg.hwndParent = if let Some(parent) = parent { unsafe { parent.native_id() as windef::HWND } } else { 0 as windef::HWND };
+		cfg.hInstance = common::hinstance();
+		cfg.pfCallback = Some(dialog_proc);
+		cfg.pszWindowTitle = text_u16.as_ptr();
+		
+		unsafe {
+			if winerror::S_OK != commctrl::TaskDialogIndirect(&cfg, ptr::null_mut(), ptr::null_mut(), ptr::null_mut()) {
+				common::log_error();
+			}
+		}
 		let a: Box<Alert> = Box::new(Member::with_inner(
             WindowsAlert {
-	            hwnd: unsafe {  },
-	            text: text,
+	            hwnd: 0 as windef::HWND,
+	            label: text.into(),
             },
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
@@ -49,12 +60,14 @@ impl MemberInner for WindowsAlert {
     type Id = common::Hwnd;
 
     fn size(&self) -> (u16, u16) {
-        self.size_inner()
+        common::size_hwnd(self.hwnd)
     }
 
     fn on_set_visibility(&mut self, base: &mut MemberBase) {
-        unsafe {
-            winuser::ShowAlert(self.hwnd, if base.visibility == types::Visibility::Visible { winuser::SW_SHOW } else { winuser::SW_HIDE });
+        if !self.hwnd.is_null() {
+            unsafe {
+                winuser::ShowWindow(self.hwnd, if base.visibility == types::Visibility::Visible { winuser::SW_SHOW } else { winuser::SW_HIDE });
+            }
         }
     }
 
@@ -65,9 +78,27 @@ impl MemberInner for WindowsAlert {
 
 impl Drop for WindowsAlert {
     fn drop(&mut self) {
-        let self2 = common::member_from_hwnd::<Alert>(self.hwnd);
         destroy_hwnd(self.hwnd, 0, None);
     }
+}
+
+unsafe extern "system" fn  dialog_proc(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, param: isize) -> i32 {
+	let mut lr = 0;
+	
+    match msg {
+		winuser::WM_CLOSE => {
+			lr = winuser::EndDialog(hwnd, 0);
+		}
+	    /*winuser::WM_COMMAND => {
+	    	match minwindef::LOWORD(wparam as u32)	{	
+				winuser::IDC_EXIT => winuser::EndDialog(hwnd, 0),
+				_ => {}
+			}
+		}*/
+	    _ => {}
+    }
+
+	lr
 }
 
 impl_all_defaults!(Alert);

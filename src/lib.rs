@@ -46,5 +46,6 @@ pub mod prelude {
         pub use crate::splitted::Splitted;
         pub use crate::window::Window;
         pub use crate::text::Text;
+        pub use crate::alert::Alert;
     }
 }
