@@ -10,8 +10,6 @@ extern crate lazy_static;
 #[macro_use]
 extern crate plygui_api;
 
-use winapi;
-
 #[macro_use]
 pub mod common;
 
@@ -22,6 +20,7 @@ mod layout_linear;
 mod splitted;
 mod window;
 mod text;
+mod alert;
 
 #[cfg(feature = "markup")]
 pub fn register_members(registry: &mut plygui_api::markup::MarkupRegistry) {
