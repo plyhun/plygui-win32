@@ -5,12 +5,10 @@ use super::*;
 pub struct WindowsAlert {
     hwnd: windef::HWND,
     label: String,
+    text: String,
 }
 
 pub type Alert = Member<WindowsAlert>;
-
-impl WindowsAlert {
-   }
 
 impl HasLabelInner for WindowsAlert {
     fn label<'a>(&'a self) -> Cow<'a, str> {
@@ -28,32 +26,41 @@ impl HasLabelInner for WindowsAlert {
 }
 
 impl AlertInner for WindowsAlert {
-	fn with_text(text: &str, severity: types::AlertSeverity, parent: Option<&controls::Member>) -> Box<Member<Self>> {
-		let text_u16 = OsStr::new(text).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
-		let mut cfg: commctrl::TASKDIALOGCONFIG = unsafe { mem::zeroed() };
-		cfg.cbSize = mem::size_of::<commctrl::TASKDIALOGCONFIG>() as u32;
-		cfg.hwndParent = if let Some(parent) = parent { unsafe { parent.native_id() as windef::HWND } } else { 0 as windef::HWND };
-		cfg.hInstance = common::hinstance();
-		cfg.pfCallback = Some(dialog_proc);
-		cfg.pszWindowTitle = text_u16.as_ptr();
-		
-		unsafe {
-			if winerror::S_OK != commctrl::TaskDialogIndirect(&cfg, ptr::null_mut(), ptr::null_mut(), ptr::null_mut()) {
-				common::log_error();
-			}
-		}
-		let a: Box<Alert> = Box::new(Member::with_inner(
+    fn with_text(label: &str, text: &str, severity: types::AlertSeverity, parent: Option<&controls::Member>) -> Box<Member<Self>> {
+        let label_u16 = OsStr::new(label).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+        let text_u16 = OsStr::new(text).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+        let mut cfg: commctrl::TASKDIALOGCONFIG = unsafe { mem::zeroed() };
+        cfg.cbSize = mem::size_of::<commctrl::TASKDIALOGCONFIG>() as u32;
+        cfg.hwndParent = if let Some(parent) = parent { unsafe { parent.native_id() as windef::HWND } } else { 0 as windef::HWND };
+        cfg.hInstance = common::hinstance();
+        cfg.pfCallback = Some(dialog_proc);
+        cfg.pszWindowTitle = label_u16.as_ptr();
+        cfg.pszMainInstruction = text_u16.as_ptr();
+        unsafe { 
+            *cfg.u1.pszMainIcon_mut() = match severity {
+                types::AlertSeverity::Info => commctrl::TD_INFORMATION_ICON,
+                types::AlertSeverity::Alert => commctrl::TD_ERROR_ICON,
+            };
+        }
+        
+        unsafe {
+            if winerror::S_OK != commctrl::TaskDialogIndirect(&cfg, ptr::null_mut(), ptr::null_mut(), ptr::null_mut()) {
+                common::log_error();
+            }
+        }
+        let a: Box<Alert> = Box::new(Member::with_inner(
             WindowsAlert {
-	            hwnd: 0 as windef::HWND,
-	            label: text.into(),
+                hwnd: 0 as windef::HWND,
+                label: label.into(),
+                text: text.into(),
             },
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
         a
-	}
-	fn severity(&self) -> types::AlertSeverity {
-		types::AlertSeverity::Alert
-	}
+    }
+    fn severity(&self) -> types::AlertSeverity {
+        types::AlertSeverity::Alert
+    }
 }
 
 impl MemberInner for WindowsAlert {
@@ -82,23 +89,25 @@ impl Drop for WindowsAlert {
     }
 }
 
-unsafe extern "system" fn  dialog_proc(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, param: isize) -> i32 {
-	let mut lr = 0;
-	
+unsafe extern "system" fn dialog_proc(hwnd: windef::HWND, msg: minwindef::UINT, _wparam: minwindef::WPARAM, _lparam: minwindef::LPARAM, _param: isize) -> i32 {
+    let mut lr = 0;
+    
     match msg {
-		winuser::WM_CLOSE => {
-			lr = winuser::EndDialog(hwnd, 0);
-		}
-	    /*winuser::WM_COMMAND => {
-	    	match minwindef::LOWORD(wparam as u32)	{	
-				winuser::IDC_EXIT => winuser::EndDialog(hwnd, 0),
-				_ => {}
-			}
-		}*/
-	    _ => {}
+        winuser::WM_CLOSE => {
+            lr = winuser::EndDialog(hwnd, 0);
+        }
+        /*winuser::WM_COMMAND => {
+            match minwindef::LOWORD(wparam as u32)    {    
+                winuser::IDC_WAIT => {
+                    winuser::EndDialog(hwnd, 0);
+                },
+                _ => {}
+            }
+        }*/
+        _ => {}
     }
 
-	lr
+    lr
 }
 
 impl_all_defaults!(Alert);
