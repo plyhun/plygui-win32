@@ -87,8 +87,8 @@ impl SingleContainerInner for WindowsFrame {
                 if let Some(new) = self.child.as_mut() {
                     new.as_mut().on_added_to_container(
                         self.base.as_outer_mut(),
-                        DEFAULT_PADDING,
-                        DEFAULT_PADDING,
+                        0,
+                        0,
                         cmp::max(0, w as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16,
                         cmp::max(0, h as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16,
                     );
@@ -146,19 +146,6 @@ impl ControlInner for WindowsFrame {
         let (hwnd, hwnd_gbox, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
             let (width, height, _) = self.measure(member, control, pw, ph);
-            let (hwnd, id) = common::create_control_hwnd(
-                px,
-                py + self.label_padding,
-                width as i32,
-                height as i32 - self.label_padding,
-                self.base.hwnd,
-                winuser::WS_EX_CONTROLPARENT,
-                WINDOW_CLASS.as_ptr(),
-                "",
-                0,
-                selfptr,
-                None,
-            );
             let hwnd_gbox = winuser::CreateWindowExW(
                 0,
                 WINDOW_CLASS_GBOX.as_ptr(),
@@ -174,6 +161,19 @@ impl ControlInner for WindowsFrame {
                 ptr::null_mut(),
             );
             common::set_default_font(hwnd_gbox);
+            let (hwnd, id) = common::create_control_hwnd(
+                px + DEFAULT_PADDING,
+                py + self.label_padding + DEFAULT_PADDING,
+                width as i32 - DEFAULT_PADDING - DEFAULT_PADDING,
+                height as i32 - self.label_padding - DEFAULT_PADDING - DEFAULT_PADDING,
+                self.base.hwnd,
+                winuser::WS_EX_CONTROLPARENT,
+                WINDOW_CLASS.as_ptr(),
+                "",
+                0,
+                selfptr,
+                None,
+            );
             (hwnd, hwnd_gbox, id)
         };
         self.base.hwnd = hwnd;
@@ -184,8 +184,8 @@ impl ControlInner for WindowsFrame {
             let self2: &mut Frame = unsafe { utils::base_to_impl_mut(member) };
             child.on_added_to_container(
                 self2,
-                DEFAULT_PADDING,
-                DEFAULT_PADDING,
+                0,
+                0,
                 cmp::max(0, self.base.measured_size.0 as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16,
                 cmp::max(0, self.base.measured_size.1 as i32 - DEFAULT_PADDING - DEFAULT_PADDING - self.label_padding) as u16,
             );
@@ -254,11 +254,11 @@ impl Drawable for WindowsFrame {
         }
         if let Some((x, y)) = self.base.coords {
             unsafe {
-                winuser::SetWindowPos(self.base.hwnd, ptr::null_mut(), x, y + self.label_padding, self.base.measured_size.0 as i32, self.base.measured_size.1 as i32 - self.label_padding, 0);
+                winuser::SetWindowPos(self.base.hwnd, ptr::null_mut(), x + DEFAULT_PADDING, y + DEFAULT_PADDING + self.label_padding, self.base.measured_size.0 as i32 - DEFAULT_PADDING - DEFAULT_PADDING, self.base.measured_size.1 as i32 - self.label_padding - DEFAULT_PADDING - DEFAULT_PADDING, 0);
                 winuser::SetWindowPos(self.hwnd_gbox, ptr::null_mut(), x, y, self.base.measured_size.0 as i32, self.base.measured_size.1 as i32, 0);
             }
             if let Some(ref mut child) = self.child {
-                child.draw(Some((DEFAULT_PADDING, DEFAULT_PADDING)));
+                child.draw(Some((0, 0)));
             }
         }
     }
@@ -365,13 +365,10 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             let mut width = lparam as u16;
             let mut height = (lparam >> 16) as u16;
             let mut frame: &mut Frame = mem::transmute(ww);
-            let label_padding = frame.as_inner().as_inner().as_inner().label_padding;
-            let hp = DEFAULT_PADDING + DEFAULT_PADDING;
-            let vp = DEFAULT_PADDING + DEFAULT_PADDING + label_padding;
-
+            
             if let Some(ref mut child) = frame.as_inner_mut().as_inner_mut().as_inner_mut().child {
-                child.measure(cmp::max(0, width as i32 - hp) as u16, cmp::max(0, height as i32 - vp) as u16);
-                child.draw(Some((DEFAULT_PADDING, DEFAULT_PADDING)));
+                child.measure(cmp::max(0, width as i32) as u16, cmp::max(0, height as i32) as u16);
+                child.draw(Some((0, 0)));
             }
             frame.call_on_resize(width, height);
             return 0;
@@ -379,7 +376,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
         #[cfg(feature = "prettier")]
         winuser::WM_PAINT => {
             let mut frame: &mut Frame = mem::transmute(ww);
-            if aerize(frame.as_inner_mut().as_inner_mut().as_inner_mut().hwnd_gbox).is_ok() {
+            if aerize(frame.as_inner_mut().as_inner_mut().as_inner_mut().hwnd_gbox).is_ok() && common::aero::aerize(hwnd, true).is_ok() {
                 return 1;
             }
         }
@@ -426,7 +423,12 @@ unsafe fn aerize(hwnd: windef::HWND) -> Result<(),()> {
         //font_old = ptr::null_mut();
     }
     
-    if winuser::InflateRect(&mut exclusion_rect, -1, -1 * (draw_rect.bottom - draw_rect.top)) < 0 { return Err(()) }
+    if winuser::InflateRect(&mut exclusion_rect, -1, -1 * (draw_rect.bottom - draw_rect.top)) < 0 { 
+        common::log_error();
+        uxtheme::CloseThemeData(theme);
+        winuser::EndPaint(hwnd, &mut ps);
+        return Err(()); 
+    }
     
     let buff_paint = uxtheme::BeginBufferedPaint(hdc, &mut client_rect, uxtheme::BPBF_TOPDOWNDIB, &mut paint_params, &mut hdc_paint);
     if hdc_paint.is_null() {
