@@ -26,9 +26,14 @@ impl HasLabelInner for WindowsAlert {
 }
 
 impl AlertInner for WindowsAlert {
-    fn with_text(label: &str, text: &str, severity: types::AlertSeverity, parent: Option<&controls::Member>) -> Box<Member<Self>> {
-        let label_u16 = OsStr::new(label).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
-        let text_u16 = OsStr::new(text).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+    fn with_content(content: types::TextContent, severity: types::AlertSeverity, parent: Option<&controls::Member>) -> Box<Member<Self>> {
+    	let (label, text) = match content {
+    		types::TextContent::Plain(text) => (String::new(/* TODO app name here? */), text),
+    		types::TextContent::LabelDescription(label, description) => (label, description),
+    	};
+    	
+        let label_u16 = OsStr::new(&label).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+        let text_u16 = OsStr::new(&text).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
         let mut cfg: commctrl::TASKDIALOGCONFIG = unsafe { mem::zeroed() };
         cfg.cbSize = mem::size_of::<commctrl::TASKDIALOGCONFIG>() as u32;
         cfg.hwndParent = if let Some(parent) = parent { unsafe { parent.native_id() as windef::HWND } } else { 0 as windef::HWND };
@@ -41,9 +46,6 @@ impl AlertInner for WindowsAlert {
                 types::AlertSeverity::Info => commctrl::TD_INFORMATION_ICON,
                 types::AlertSeverity::Alert => commctrl::TD_ERROR_ICON,
             };
-        }
-        
-        unsafe {
             if winerror::S_OK != commctrl::TaskDialogIndirect(&cfg, ptr::null_mut(), ptr::null_mut(), ptr::null_mut()) {
                 common::log_error();
             }
@@ -51,8 +53,8 @@ impl AlertInner for WindowsAlert {
         let a: Box<Alert> = Box::new(Member::with_inner(
             WindowsAlert {
                 hwnd: 0 as windef::HWND,
-                label: label.into(),
-                text: text.into(),
+                label: label,
+                text: text,
             },
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
