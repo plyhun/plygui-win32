@@ -279,6 +279,10 @@ pub unsafe fn create_control_hwnd(
     (hwnd, subclass_id as usize)
 }
 
+pub fn str_to_wchar(a: &str) -> Vec<u16> {
+	OsStr::new(a).encode_wide().chain(Some(0).into_iter()).collect()
+}
+
 #[inline]
 pub unsafe fn set_default_font(hwnd: windef::HWND) {
     winuser::SendMessageW(hwnd, winuser::WM_SETFONT, hfont() as usize, minwindef::TRUE as isize);
