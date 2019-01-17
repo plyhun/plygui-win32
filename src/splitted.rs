@@ -144,13 +144,7 @@ impl MemberInner for WindowsSplitted {
     }
 
     fn on_set_visibility(&mut self, base: &mut MemberBase) {
-        let hwnd = self.base.hwnd;
-        if !hwnd.is_null() {
-            unsafe {
-                winuser::ShowWindow(self.base.hwnd, if base.visibility == types::Visibility::Visible { winuser::SW_SHOW } else { winuser::SW_HIDE });
-            }
-            self.base.invalidate();
-        }
+        self.base.on_set_visibility(base);
     }
     unsafe fn native_id(&self) -> Self::Id {
         self.base.hwnd.into()

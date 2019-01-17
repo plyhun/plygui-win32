@@ -235,6 +235,7 @@ impl MemberInner for WindowsFrame {
         let hwnd = self.base.hwnd;
         if !hwnd.is_null() {
             unsafe {
+                winuser::ShowWindow(self.hwnd_gbox, if base.visibility == types::Visibility::Visible { winuser::SW_SHOW } else { winuser::SW_HIDE });
                 winuser::ShowWindow(self.base.hwnd, if base.visibility == types::Visibility::Visible { winuser::SW_SHOW } else { winuser::SW_HIDE });
             }
             self.on_layout_changed(base);

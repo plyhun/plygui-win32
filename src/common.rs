@@ -215,6 +215,14 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
             size_hwnd(self.hwnd)
         }
     }
+    pub fn on_set_visibility(&mut self, base: &mut MemberBase) {
+        if !self.hwnd.is_null() {
+            unsafe {
+                winuser::ShowWindow(self.hwnd, if base.visibility == types::Visibility::Visible { winuser::SW_SHOW } else { winuser::SW_HIDE });
+            }
+            self.invalidate();
+        }
+    }
 }
 
 pub fn size_hwnd(hwnd: windef::HWND) -> (u16, u16) {
