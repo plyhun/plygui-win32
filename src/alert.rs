@@ -88,6 +88,7 @@ impl AlertInner for WindowsAlert {
         unsafe { 
             *cfg.u1.pszMainIcon_mut() = match severity {
                 types::AlertSeverity::Info => commctrl::TD_INFORMATION_ICON,
+                types::AlertSeverity::Warning => commctrl::TD_WARNING_ICON,
                 types::AlertSeverity::Alert => commctrl::TD_ERROR_ICON,
             };
             if winerror::S_OK != commctrl::TaskDialogIndirect(&cfg, ptr::null_mut(), ptr::null_mut(), ptr::null_mut()) {
