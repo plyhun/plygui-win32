@@ -9,6 +9,7 @@ lazy_static! {
 pub struct WindowsWindow {
     hwnd: windef::HWND,
     child: Option<Box<dyn controls::Control>>,
+    on_close: Option<callbacks::Action>,
 }
 
 pub type Window = Member<SingleContainer<plygui_api::development::Window<WindowsWindow>>>;
@@ -108,7 +109,17 @@ impl WindowInner for WindowsWindow {
             let window_name = OsStr::new(title).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
 
             let mut w: Box<Window> = Box::new(Member::with_inner(
-                SingleContainer::with_inner(plygui_api::development::Window::with_inner(WindowsWindow { hwnd: 0 as windef::HWND, child: None }, ()), ()),
+                SingleContainer::with_inner(
+                    plygui_api::development::Window::with_inner(
+                        WindowsWindow {
+                            hwnd: 0 as windef::HWND,
+                            child: None,
+                            on_close: None,
+                        },
+                        (),
+                    ),
+                    (),
+                ),
                 MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
             ));
 
@@ -187,6 +198,13 @@ impl SingleContainerInner for WindowsWindow {
         } else {
             None
         }
+    }
+}
+
+impl CloseableInner for WindowsWindow {
+    fn close(&mut self, with_callbacks: bool) {}
+    fn on_close(&mut self, callback: Option<callbacks::Action>) {
+        self.on_close = callback;
     }
 }
 
