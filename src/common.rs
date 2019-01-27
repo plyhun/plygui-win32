@@ -2,54 +2,54 @@ pub use plygui_api::development::*;
 pub use plygui_api::{callbacks, controls, defaults, ids, layout, types, utils};
 
 pub use winapi::ctypes::c_void;
+pub use winapi::shared::basetsd;
 pub use winapi::shared::minwindef;
 pub use winapi::shared::ntdef;
 pub use winapi::shared::windef;
 pub use winapi::shared::winerror;
-pub use winapi::shared::basetsd;
 pub use winapi::um::commctrl;
 pub use winapi::um::errhandlingapi;
-pub use winapi::um::stringapiset;
 pub use winapi::um::libloaderapi;
+pub use winapi::um::stringapiset;
 pub use winapi::um::winbase;
 pub use winapi::um::wingdi;
-pub use winapi::um::winuser;
 pub use winapi::um::winnls;
+pub use winapi::um::winuser;
 
 pub use std::borrow::Cow;
-pub use std::ffi::{CString, OsStr, IntoStringError};
+pub use std::ffi::{CString, IntoStringError, OsStr};
 pub use std::marker::PhantomData;
 pub use std::os::windows::ffi::OsStrExt;
-pub use std::{cmp, mem, ptr, str, ops, sync::mpsc};
+pub use std::{cmp, mem, ops, ptr, str, sync::mpsc};
 
 pub const DEFAULT_PADDING: i32 = 6;
 pub const WM_UPDATE_INNER: u32 = winuser::WM_APP + 1;
 
 pub type WndHandler = unsafe extern "system" fn(windef::HWND, msg: minwindef::UINT, minwindef::WPARAM, minwindef::LPARAM, usize, usize) -> isize;
-pub type WndProc = unsafe extern "system" fn (hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT;
+pub type WndProc = unsafe extern "system" fn(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT;
 
 #[derive(Debug, Clone)]
 pub struct Hfont(windef::HFONT);
 
 impl From<windef::HFONT> for Hfont {
-	fn from(a: windef::HFONT) -> Self {
-		Hfont(a)
-	}
+    fn from(a: windef::HFONT) -> Self {
+        Hfont(a)
+    }
 }
 impl AsRef<windef::HFONT> for Hfont {
-	fn as_ref(&self) -> &windef::HFONT {
-		&self.0
-	}
+    fn as_ref(&self) -> &windef::HFONT {
+        &self.0
+    }
 }
 impl Drop for Hfont {
-	fn drop(&mut self) {
-		unsafe {
-			if wingdi::DeleteObject(self.0 as *mut c_void) == minwindef::FALSE {
-				log_error();
-				panic!("Could not delete HFONT {:?}", self.0);
-			}
-		}
-	}
+    fn drop(&mut self) {
+        unsafe {
+            if wingdi::DeleteObject(self.0 as *mut c_void) == minwindef::FALSE {
+                log_error();
+                panic!("Could not delete HFONT {:?}", self.0);
+            }
+        }
+    }
 }
 unsafe impl Sync for Hfont {}
 
@@ -185,7 +185,7 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
         let parent_hwnd = self.parent_hwnd();
         let this = self.as_outer_mut();
         if this.is_skip_draw() {
-           return; 
+            return;
         }
         if let Some(parent_hwnd) = parent_hwnd {
             let mparent = member_base_from_hwnd(parent_hwnd);
@@ -259,8 +259,8 @@ pub unsafe fn create_control_hwnd(
         style |= winuser::WS_GROUP;
     }
     let subclass_id = {
-        use std::hash::Hasher;
         use std::collections::hash_map::DefaultHasher;
+        use std::hash::Hasher;
 
         let mut hasher = DefaultHasher::new();
         hasher.write_usize(class_name as usize);
@@ -291,7 +291,7 @@ pub unsafe fn create_control_hwnd(
 }
 
 pub fn str_to_wchar(a: &str) -> Vec<u16> {
-	OsStr::new(a).encode_wide().chain(Some(0).into_iter()).collect()
+    OsStr::new(a).encode_wide().chain(Some(0).into_iter()).collect()
 }
 
 #[inline]

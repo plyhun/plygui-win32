@@ -293,15 +293,15 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             return 0;
         }
         winuser::WM_CLOSE => {
-        	let w: &mut window::Window = mem::transmute(ww);
-        	if !w.as_inner_mut().as_inner_mut().as_inner_mut().skip_callbacks {
-            	if let Some(ref mut on_close) = w.as_inner_mut().as_inner_mut().as_inner_mut().on_close {
-            		let w2: &mut window::Window = mem::transmute(ww);
-            		if !(on_close.as_mut())(w2) {
-            			return 0;
-            		}
-            	}
-        	}
+            let w: &mut window::Window = mem::transmute(ww);
+            if !w.as_inner_mut().as_inner_mut().as_inner_mut().skip_callbacks {
+                if let Some(ref mut on_close) = w.as_inner_mut().as_inner_mut().as_inner_mut().on_close {
+                    let w2: &mut window::Window = mem::transmute(ww);
+                    if !(on_close.as_mut())(w2) {
+                        return 0;
+                    }
+                }
+            }
         }
         _ => {}
     }
