@@ -10,6 +10,7 @@ pub struct WindowsWindow {
     hwnd: windef::HWND,
     child: Option<Box<dyn controls::Control>>,
     on_close: Option<callbacks::Action>,
+    skip_callbacks: bool,
 }
 
 pub type Window = Member<SingleContainer<plygui_api::development::Window<WindowsWindow>>>;
@@ -115,6 +116,7 @@ impl WindowInner for WindowsWindow {
                             hwnd: 0 as windef::HWND,
                             child: None,
                             on_close: None,
+                            skip_callbacks: false,
                         },
                         (),
                     ),
@@ -202,7 +204,12 @@ impl SingleContainerInner for WindowsWindow {
 }
 
 impl CloseableInner for WindowsWindow {
-    fn close(&mut self, with_callbacks: bool) {}
+    fn close(&mut self, skip_callbacks: bool) {
+        self.skip_callbacks = skip_callbacks;
+        unsafe {
+            winuser::CloseWindow(self.hwnd); // TODO process error
+        }
+    }
     fn on_close(&mut self, callback: Option<callbacks::Action>) {
         self.on_close = callback;
     }
@@ -287,11 +294,13 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
         }
         winuser::WM_CLOSE => {
         	let w: &mut window::Window = mem::transmute(ww);
-        	if let Some(ref mut on_close) = w.as_inner_mut().as_inner_mut().as_inner_mut().on_close {
-        		let w2: &mut window::Window = mem::transmute(ww);
-        		if !(on_close.as_mut())(w2) {
-        			return 0;
-        		}
+        	if !w.as_inner_mut().as_inner_mut().as_inner_mut().skip_callbacks {
+            	if let Some(ref mut on_close) = w.as_inner_mut().as_inner_mut().as_inner_mut().on_close {
+            		let w2: &mut window::Window = mem::transmute(ww);
+            		if !(on_close.as_mut())(w2) {
+            			return 0;
+            		}
+            	}
         	}
         }
         _ => {}

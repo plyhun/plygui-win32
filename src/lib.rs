@@ -20,7 +20,7 @@ mod layout_linear;
 mod splitted;
 mod window;
 mod text;
-mod alert;
+mod message;
 
 #[cfg(feature = "markup")]
 pub fn register_members(registry: &mut plygui_api::markup::MarkupRegistry) {
@@ -46,6 +46,6 @@ pub mod prelude {
         pub use crate::splitted::Splitted;
         pub use crate::window::Window;
         pub use crate::text::Text;
-        pub use crate::alert::Alert;
+        pub use crate::message::Message;
     }
 }
