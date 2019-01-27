@@ -18,18 +18,20 @@ pub struct WindowsApplication {
 
 pub type Application = ::plygui_api::development::Application<WindowsApplication>;
 
-impl ApplicationInner for WindowsApplication {
-    fn with_name(name: &str) -> Box<Application> {
+impl NewApplication<WindowsApplication> for WindowsApplication {
+    fn init_with_name(name: &str) -> Box<Application> {
         init_comctl();
-        let a = Box::new(Application::with_inner(
+        Box::new(Application::with_inner(
             WindowsApplication {
                 name: name.into(),
                 windows: Vec::with_capacity(1),
             },
             (),
-        ));
-        a
+        ))
     }
+}
+
+impl ApplicationInner for WindowsApplication {
     fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::WindowMenu) -> Box<dyn controls::Window> {
         let mut w = window::WindowsWindow::with_params(title, size, menu);
         unsafe {
