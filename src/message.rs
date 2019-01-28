@@ -30,8 +30,6 @@ pub struct WindowsMessage {
     text: String,
     cfg: commctrl::TASKDIALOGCONFIG,
     actions: Vec<WindowsMessageAction>,
-    on_close: Option<callbacks::Action>,
-    skip_callbacks: bool,
 }
 
 pub type Message = Member<WindowsMessage>;
@@ -51,18 +49,6 @@ impl HasLabelInner for WindowsMessage {
     }
 }
 
-impl CloseableInner for WindowsMessage {
-    fn close(&mut self, skip_callbacks: bool) {
-        self.skip_callbacks = skip_callbacks;
-        unsafe {
-            winuser::CloseWindow(self.hwnd); // TODO process error
-        }
-    }
-    fn on_close(&mut self, callback: Option<callbacks::Action>) {
-        self.on_close = callback;
-    }
-}
-
 impl MessageInner for WindowsMessage {
     fn with_actions(content: types::TextContent, severity: types::MessageSeverity, actions: Vec<(String, callbacks::Action)>, parent: Option<&controls::Member>) -> Box<Member<Self>> {
     	let (label, text) = match content {
@@ -76,8 +62,6 @@ impl MessageInner for WindowsMessage {
                 label: label,
                 text: text,
                 actions: actions.into_iter().map(|a| a.into()).collect(),
-                on_close: None,
-                skip_callbacks: false,
             },
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
@@ -170,21 +154,14 @@ unsafe extern "system" fn dialog_proc(hwnd: windef::HWND, msg: minwindef::UINT, 
             lr = winuser::EndDialog(hwnd, 0);
         },
         winuser::WM_DESTROY => {
-        	if !alert.as_inner_mut().skip_callbacks {
-        	    let alert2: &mut Message = mem::transmute(param);
-            	match alert.as_inner_mut().actions.iter_mut().find(|a| a.id == wparam as i32) {
-            	    Some(a) => {
-            	        if !(a.cb.as_mut())(alert2) {
-            			    return 0;
-            			}
-            	    },
-            	    None => {}
-            	}
-            	if let Some(ref mut on_close) = alert.as_inner_mut().on_close {
-            		if !(on_close.as_mut())(alert2) {
-            			return 0;
-            		}
-            	}
+        	let alert2: &mut Message = mem::transmute(param);
+        	match alert.as_inner_mut().actions.iter_mut().find(|a| a.id == wparam as i32) {
+        	    Some(a) => {
+        	        if !(a.cb.as_mut())(alert2) {
+        			    return 0;
+        			}
+        	    },
+        	    None => {}
         	}
         }
         _ => {}
