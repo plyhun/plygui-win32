@@ -81,7 +81,7 @@ impl MessageInner for WindowsMessage {
         }
         a
     }
-    fn start(&mut self) -> Result<String, ()> {
+    fn start(mut self) -> Result<String, ()> {
         let label_u16 = common::str_to_wchar(&self.label);
         let text_u16 = common::str_to_wchar(&self.text);
         
