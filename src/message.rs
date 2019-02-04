@@ -65,7 +65,12 @@ impl MessageInner for WindowsMessage {
             },
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
-        
+        /*
+        if let types::TextContent::Plain(_) = content {
+            let label = { &*a.base().app.upgrade().unwrap().get() }.label().clone();
+            a.as_inner_mut().label = label;
+        }
+        */
         a.as_inner_mut().cfg.cbSize = mem::size_of::<commctrl::TASKDIALOGCONFIG>() as u32;
         a.as_inner_mut().cfg.hwndParent = if let Some(parent) = parent { unsafe { parent.native_id() as windef::HWND } } else { 0 as windef::HWND };
         a.as_inner_mut().cfg.hInstance = common::hinstance();

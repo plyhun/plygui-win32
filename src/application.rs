@@ -32,7 +32,7 @@ impl NewApplication<WindowsApplication> for WindowsApplication {
 }
 
 impl ApplicationInner for WindowsApplication {
-    fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::WindowMenu) -> Box<dyn controls::Window> {
+    fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::Menu) -> Box<dyn controls::Window> {
         let mut w = window::WindowsWindow::with_params(title, size, menu);
         unsafe {
             use plygui_api::controls::SingleContainer;
@@ -50,6 +50,9 @@ impl ApplicationInner for WindowsApplication {
             );
         }
         w
+    }
+    fn new_tray(&mut self, title: &str, menu: types::Menu) -> Box<dyn controls::Tray> {
+        unimplemented!()
     }
     fn name<'a>(&'a self) -> Cow<'a, str> {
         Cow::Borrowed(self.name.as_str())

@@ -21,6 +21,7 @@ mod splitted;
 mod window;
 mod text;
 mod message;
+mod tray;
 
 #[cfg(feature = "markup")]
 pub fn register_members(registry: &mut plygui_api::markup::MarkupRegistry) {
@@ -47,5 +48,6 @@ pub mod prelude {
         pub use crate::window::Window;
         pub use crate::text::Text;
         pub use crate::message::Message;
+        pub use crate::tray::Tray;
     }
 }
