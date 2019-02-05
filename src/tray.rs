@@ -33,7 +33,7 @@ impl CloseableInner for WindowsTray {
     fn close(&mut self, skip_callbacks: bool) {
         self.skip_callbacks = skip_callbacks;
         unsafe {
-            if shellapi::Shell_NotifyIconW(shellapi::NIM_DELETE, &mut self.cfg) = minwindef::FALSE {
+            if shellapi::Shell_NotifyIconW(shellapi::NIM_DELETE, &mut self.cfg) == minwindef::FALSE {
                 common::log_error();
             }
         }
@@ -44,7 +44,9 @@ impl CloseableInner for WindowsTray {
 }
 
 impl TrayInner for WindowsTray {
-    fn with_params(title: &str, menu: types::Menu) -> Box<Member<Self>> {
+    fn with_params(title: &str, _menu: types::Menu) -> Box<Member<Self>> {
+        use plygui_api::controls::Member as OuterMember;
+        
         let mut t = Box::new(Member::with_inner(WindowsTray {
                 hwnd: 0 as windef::HWND,    
                 label: title.into(),    
@@ -55,7 +57,23 @@ impl TrayInner for WindowsTray {
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut)
         ));
         
-        
+        t.as_inner_mut().cfg.cbSize = mem::size_of::<shellapi::NOTIFYICONDATAW>() as u32;
+        t.as_inner_mut().cfg.uID = unsafe { t.id().into_raw() as u32 }; 
+        //t.as_inner_mut().cfg.uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE | NIF_SHOWTIP | NIF_GUID;
+        //t.as_inner_mut().cfg.guidItem = __uuidof(PrinterIcon);
+        //t.as_inner_mut().cfg.uCallbackMessage = WMAPP_NOTIFYCALLBACK;
+        //LoadIconMetric(g_hInst, MAKEINTRESOURCE(IDI_NOTIFICATIONICON), LIM_SMALL, &nid.hIcon);
+        //LoadString(g_hInst, IDS_TOOLTIP, nid.szTip, ARRAYSIZE(nid.szTip));
+        unsafe {
+            if shellapi::Shell_NotifyIconW(shellapi::NIM_ADD, &mut t.as_inner_mut().cfg) == minwindef::FALSE {
+                common::log_error();
+            }
+            *t.as_inner_mut().cfg.u.uVersion_mut() = shellapi::NOTIFYICON_VERSION_4;
+            if shellapi::Shell_NotifyIconW(shellapi::NIM_SETVERSION, &mut t.as_inner_mut().cfg) == minwindef::FALSE {
+                common::log_error();
+            }
+        }
+    
         t
     }
 }
@@ -84,22 +102,6 @@ impl Drop for WindowsTray {
     fn drop(&mut self) {
         destroy_hwnd(self.hwnd, 0, None);
     }
-}
-
-unsafe extern "system" fn dialog_proc(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, _lparam: minwindef::LPARAM, param: isize) -> i32 {
-    let mut lr = 0;
-    
-    let alert: &mut Tray = mem::transmute(param);
-    if alert.as_inner_mut().hwnd.is_null() {
-    	alert.as_inner_mut().hwnd = hwnd;
-    }
-    match msg {
-        winuser::WM_CLOSE => {
-            lr = winuser::EndDialog(hwnd, 0);
-        },
-        _ => {}
-    }
-    lr
 }
 
 impl_all_defaults!(Tray);

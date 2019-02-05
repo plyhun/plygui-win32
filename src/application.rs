@@ -1,19 +1,25 @@
 use super::*;
+use super::common::*;
 
 use std::borrow::Cow;
 use std::{mem, thread};
 
 use plygui_api::controls;
-use plygui_api::development::*;
 use plygui_api::ids::Id;
 use plygui_api::types;
 
 use winapi::shared::windef;
 use winapi::um::commctrl;
 
+lazy_static! {
+    pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
+}
+
 pub struct WindowsApplication {
+    root: windef::HWND,
     name: String,
     windows: Vec<windef::HWND>,
+    trays: Vec<ids::Id>,
 }
 
 pub type Application = ::plygui_api::development::Application<WindowsApplication>;
@@ -21,13 +27,36 @@ pub type Application = ::plygui_api::development::Application<WindowsApplication
 impl NewApplication<WindowsApplication> for WindowsApplication {
     fn init_with_name(name: &str) -> Box<Application> {
         init_comctl();
-        Box::new(Application::with_inner(
+        
+        let mut a = Box::new(Application::with_inner(
             WindowsApplication {
                 name: name.into(),
                 windows: Vec::with_capacity(1),
+                trays: Vec::with_capacity(0),
+                root: 0 as windef::HWND,
             },
             (),
-        ))
+        ));
+        
+        let name = OsStr::new(a.as_inner().name.as_str()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+        let hwnd = unsafe { 
+            winuser::CreateWindowExW(
+                0,
+                WINDOW_CLASS.as_ptr(),
+                name.as_ptr() as ntdef::LPCWSTR,
+                0,
+                winuser::CW_USEDEFAULT,
+                winuser::CW_USEDEFAULT,
+                1,
+                1,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                hinstance(),
+                a.as_mut() as *mut _ as *mut c_void,
+            ) 
+        };
+        a.as_inner_mut().root = hwnd;
+        a
     }
 }
 
@@ -52,7 +81,11 @@ impl ApplicationInner for WindowsApplication {
         w
     }
     fn new_tray(&mut self, title: &str, menu: types::Menu) -> Box<dyn controls::Tray> {
-        unimplemented!()
+        use plygui_api::controls::Member;
+        
+        let tray = tray::WindowsTray::with_params(title, menu);
+        self.trays.push(tray.id());
+        tray
     }
     fn name<'a>(&'a self) -> Cow<'a, str> {
         Cow::Borrowed(self.name.as_str())
@@ -93,6 +126,45 @@ impl ApplicationInner for WindowsApplication {
 
         None
     }
+}
+
+impl Drop for WindowsApplication {
+    fn drop(&mut self) {
+        destroy_hwnd(self.root, 0, None);
+    }
+}
+
+unsafe fn register_window_class() -> Vec<u16> {
+    let class_name = OsStr::new("PlyguiWin32Application").encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+
+    let class = winuser::WNDCLASSEXW {
+        cbSize: mem::size_of::<winuser::WNDCLASSEXW>() as minwindef::UINT,
+        style: winuser::CS_DBLCLKS,
+        lpfnWndProc: Some(handler),
+        cbClsExtra: 0,
+        cbWndExtra: 0,
+        hInstance: libloaderapi::GetModuleHandleW(ptr::null()),
+        hIcon: ptr::null_mut(),
+        hCursor: ptr::null_mut(),
+        hbrBackground: ptr::null_mut(),
+        lpszMenuName: ptr::null(),
+        lpszClassName: class_name.as_ptr(),
+        hIconSm: ptr::null_mut(),
+    };
+    winuser::RegisterClassExW(&class);
+    class_name
+}
+
+unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
+    let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
+    if ww == 0 {
+        if winuser::WM_CREATE == msg {
+            let cs: &mut winuser::CREATESTRUCTW = mem::transmute(lparam);
+            winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, cs.lpCreateParams as isize);
+        }
+        //return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
+    }
+    winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
 fn start_window(hwnd: windef::HWND) {
