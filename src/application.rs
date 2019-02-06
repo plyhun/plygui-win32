@@ -16,7 +16,7 @@ lazy_static! {
 }
 
 pub struct WindowsApplication {
-    root: windef::HWND,
+    pub(crate) root: windef::HWND,
     name: String,
     windows: Vec<windef::HWND>,
     trays: Vec<ids::Id>,
@@ -24,13 +24,13 @@ pub struct WindowsApplication {
 
 pub type Application = ::plygui_api::development::Application<WindowsApplication>;
 
-impl NewApplication<WindowsApplication> for WindowsApplication {
-    fn init_with_name(name: &str) -> Box<Application> {
+impl ApplicationInner for WindowsApplication {
+    fn get() -> Box<Application> {
         init_comctl();
         
         let mut a = Box::new(Application::with_inner(
             WindowsApplication {
-                name: name.into(),
+                name: String::new(), //name.into(), // TODO later
                 windows: Vec::with_capacity(1),
                 trays: Vec::with_capacity(0),
                 root: 0 as windef::HWND,
@@ -58,9 +58,6 @@ impl NewApplication<WindowsApplication> for WindowsApplication {
         a.as_inner_mut().root = hwnd;
         a
     }
-}
-
-impl ApplicationInner for WindowsApplication {
     fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::Menu) -> Box<dyn controls::Window> {
         let mut w = window::WindowsWindow::with_params(title, size, menu);
         unsafe {
