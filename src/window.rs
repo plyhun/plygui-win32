@@ -8,6 +8,7 @@ lazy_static! {
 #[repr(C)]
 pub struct WindowsWindow {
     hwnd: windef::HWND,
+    msg: winuser::MSG,
     child: Option<Box<dyn controls::Control>>,
     on_close: Option<callbacks::Action>,
     skip_callbacks: bool,
@@ -17,33 +18,34 @@ pub type Window = Member<SingleContainer<plygui_api::development::Window<Windows
 
 impl WindowsWindow {
     pub(crate) fn start(&mut self) {
-        let mut frame_callbacks;
-        {
-            let mut msg: winuser::MSG = unsafe { mem::zeroed() };
-            while unsafe { winuser::GetMessageW(&mut msg, ptr::null_mut(), 0, 0) } > 0 {
-                unsafe {
-                    winuser::TranslateMessage(&mut msg);
-                    winuser::DispatchMessageW(&mut msg);
-                }
-
-                frame_callbacks = 0;
-                while !self.hwnd.is_null() && frame_callbacks < defaults::MAX_FRAME_CALLBACKS {
-                    let w = member_from_hwnd::<Window>(self.hwnd).as_inner_mut().as_inner_mut().base_mut();
-                    match w.queue().try_recv() {
-                        Ok(mut cmd) => {
-                            if (cmd.as_mut())(member_from_hwnd::<Window>(self.hwnd)) {
-                                let _ = w.sender().send(cmd);
-                            }
-                            frame_callbacks += 1;
+        while self.dispatch() > 0 {}
+    }
+    pub(crate) fn dispatch(&mut self) -> i32 {
+        let ret = unsafe { winuser::GetMessageW(&mut self.msg, ptr::null_mut(), 0, 0) };
+        if ret > 0 { 
+            unsafe {
+                winuser::TranslateMessage(&mut self.msg);
+                winuser::DispatchMessageW(&mut self.msg);
+            }
+    
+            let mut frame_callbacks = 0;
+            while !self.hwnd.is_null() && frame_callbacks < defaults::MAX_FRAME_CALLBACKS {
+                let w = member_from_hwnd::<Window>(self.hwnd).as_inner_mut().as_inner_mut().base_mut();
+                match w.queue().try_recv() {
+                    Ok(mut cmd) => {
+                        if (cmd.as_mut())(member_from_hwnd::<Window>(self.hwnd)) {
+                            let _ = w.sender().send(cmd);
                         }
-                        Err(e) => match e {
-                            mpsc::TryRecvError::Empty => break,
-                            mpsc::TryRecvError::Disconnected => unreachable!(),
-                        },
+                        frame_callbacks += 1;
                     }
+                    Err(e) => match e {
+                        mpsc::TryRecvError::Empty => break,
+                        mpsc::TryRecvError::Disconnected => unreachable!(),
+                    },
                 }
             }
         }
+        ret
     }
     fn size_inner(&self) -> (u16, u16) {
         let rect = unsafe { window_rect(self.hwnd) };
@@ -114,6 +116,7 @@ impl WindowInner for WindowsWindow {
                     plygui_api::development::Window::with_inner(
                         WindowsWindow {
                             hwnd: 0 as windef::HWND,
+                            msg: mem::zeroed(),
                             child: None,
                             on_close: None,
                             skip_callbacks: false,
@@ -176,16 +179,18 @@ impl SingleContainerInner for WindowsWindow {
         use plygui_api::controls::SingleContainer;
 
         let mut old = self.child.take();
-        if let Some(old) = old.as_mut() {
-            let outer_self: &mut window::Window = common::member_from_hwnd::<Window>(self.hwnd);
-            let outer_self = outer_self.as_single_container_mut().as_container_mut();
-            old.on_removed_from_container(outer_self);
-        }
-        if let Some(new) = child.as_mut() {
-            let outer_self: &mut window::Window = common::member_from_hwnd::<Window>(self.hwnd);
-            let outer_self = outer_self.as_single_container_mut().as_container_mut();
-            let size = self.size_inner();
-            new.on_added_to_container(outer_self, 0, 0, size.0, size.1)
+        if !self.hwnd.is_null() {
+            if let Some(old) = old.as_mut() {
+                let outer_self: &mut window::Window = common::member_from_hwnd::<Window>(self.hwnd);
+                let outer_self = outer_self.as_single_container_mut().as_container_mut();
+                old.on_removed_from_container(outer_self);
+            }
+            if let Some(new) = child.as_mut() {
+                let outer_self: &mut window::Window = common::member_from_hwnd::<Window>(self.hwnd);
+                let outer_self = outer_self.as_single_container_mut().as_container_mut();
+                let size = self.size_inner();
+                new.on_added_to_container(outer_self, 0, 0, size.0, size.1)
+            }
         }
         self.child = child;
 

@@ -1,9 +1,6 @@
 use super::*;
 use super::common::*;
 
-use std::borrow::Cow;
-use std::{mem, thread};
-
 use plygui_api::controls;
 use plygui_api::ids::Id;
 use plygui_api::types;
@@ -58,22 +55,15 @@ impl ApplicationInner for WindowsApplication {
         a.as_inner_mut().root = hwnd;
         a
     }
+    fn native_id(&self) -> usize {
+        self.root as usize
+    }
     fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::Menu) -> Box<dyn controls::Window> {
-        let mut w = window::WindowsWindow::with_params(title, size, menu);
+        let w = window::WindowsWindow::with_params(title, size, menu);
         unsafe {
-            use plygui_api::controls::SingleContainer;
+            use plygui_api::controls::Member;
 
-            self.windows.push(
-                w.as_single_container_mut()
-                    .as_container_mut()
-                    .as_member_mut()
-                    .as_any_mut()
-                    .downcast_mut::<window::Window>()
-                    .unwrap()
-                    .as_inner_mut()
-                    .native_id()
-                    .into(),
-            );
+            self.windows.push(w.native_id() as windef::HWND);
         }
         w
     }
@@ -88,11 +78,27 @@ impl ApplicationInner for WindowsApplication {
         Cow::Borrowed(self.name.as_str())
     }
     fn start(&mut self) {
-        for i in (0..self.windows.len()).rev() {
-            if i > 0 {
-                thread::spawn(move || {});
-            } else {
-                start_window(self.windows[i]);
+        //for i in (0..self.windows.len()).rev() {
+            /*let mut hwnd = AtomicPtr::new(self.windows[i].clone());
+            thread::spawn(move ||
+                { start_window(*hwnd.get_mut()); }
+            );*/
+            //start_window(self.windows[i]);
+        //}
+        
+        let mut msg: winuser::MSG = unsafe { mem::zeroed() };
+        while unsafe { winuser::GetMessageW(&mut msg, ptr::null_mut(), 0, 0) } > 0 {
+            unsafe {
+                winuser::TranslateMessage(&mut msg);
+                winuser::DispatchMessageW(&mut msg);
+            }
+            let mut i = 0;
+            while i < self.windows.len() {
+                if dispatch_window(self.windows[i]) <= 0 {
+                    self.windows.remove(i);
+                } else {
+                    i += 1;
+                }
             }
         }
     }
@@ -167,6 +173,10 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
 fn start_window(hwnd: windef::HWND) {
     let w: &mut window::Window = common::member_from_hwnd::<window::Window>(hwnd);
     w.as_inner_mut().as_inner_mut().as_inner_mut().start();
+}
+fn dispatch_window(hwnd: windef::HWND) -> i32 {
+    let w: &mut window::Window = common::member_from_hwnd::<window::Window>(hwnd);
+    w.as_inner_mut().as_inner_mut().as_inner_mut().dispatch()
 }
 
 fn init_comctl() {

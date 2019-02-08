@@ -318,7 +318,7 @@ pub unsafe fn window_rect(hwnd: windef::HWND) -> windef::RECT {
 }
 
 #[inline]
-unsafe fn cast_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T
+pub(crate) unsafe fn cast_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T
 where
     T: Sized,
 {

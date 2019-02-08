@@ -57,14 +57,17 @@ impl TrayInner for WindowsTray {
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut)
         ));
         
-        let app = super::application::WindowsApplication::get();
+        let app = super::application::Application::get();
         let tip_size = t.as_inner_mut().cfg.szTip.len();
         let title = OsStr::new(t.as_inner().label.as_str()).encode_wide().take(tip_size - 1).chain(Some(0).into_iter()).collect::<Vec<_>>();
         
-        t.as_inner_mut().cfg.hWnd = app.as_inner().root.into();
+        t.as_inner_mut().cfg.hWnd = app.native_id() as windef::HWND;
         t.as_inner_mut().cfg.cbSize = mem::size_of::<shellapi::NOTIFYICONDATAW>() as u32;
         t.as_inner_mut().cfg.uID = unsafe { t.id().into_raw() as u32 }; 
-        t.as_inner_mut().cfg.hIcon = unsafe { winuser::GetClassLongW(app.as_inner().root.into(), winuser::GCL_HICON) as windef::HICON };        
+        //t.as_inner_mut().cfg.hIcon = unsafe { winuser::GetClassLongW(app.as_inner().root.into(), winuser::GCL_HICON) as windef::HICON };
+        
+        unsafe { commctrl::LoadIconMetric(ptr::null_mut(), winuser::MAKEINTRESOURCEW(32512), commctrl::LIM_SMALL as i32, &mut t.as_inner_mut().cfg.hIcon); }
+        
         t.as_inner_mut().cfg.uFlags = shellapi::NIF_ICON | shellapi::NIF_TIP | shellapi::NIF_MESSAGE | shellapi::NIF_SHOWTIP;
         t.as_inner_mut().cfg.uCallbackMessage = 12345678;
         t.as_inner_mut().cfg.szTip[..title.len()].clone_from_slice(title.as_slice());
