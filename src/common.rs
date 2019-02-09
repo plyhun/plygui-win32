@@ -172,10 +172,10 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
         }
     }
     pub fn as_outer(&self) -> &T {
-        member_from_hwnd::<T>(self.hwnd)
+        member_from_hwnd::<T>(self.hwnd).unwrap()
     }
     pub fn as_outer_mut(&self) -> &mut T {
-        member_from_hwnd::<T>(self.hwnd)
+        member_from_hwnd::<T>(self.hwnd).unwrap()
     }
     pub fn invalidate(&mut self) {
         let parent_hwnd = self.parent_hwnd();
@@ -184,16 +184,17 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
             return;
         }
         if let Some(parent_hwnd) = parent_hwnd {
-            let mparent = member_base_from_hwnd(parent_hwnd);
-            let (pw, ph) = mparent.as_member().is_has_size().unwrap().size();
-            let (_, _, changed) = this.measure(pw, ph);
-
-            if let Some(cparent) = mparent.as_member_mut().is_control_mut() {
-                if changed && !cparent.is_skip_draw() {
-                    cparent.invalidate();
+            if let Some(mparent) = member_base_from_hwnd(parent_hwnd) {
+                let (pw, ph) = mparent.as_member().is_has_size().unwrap().size();
+                let (_, _, changed) = this.measure(pw, ph);
+    
+                if let Some(cparent) = mparent.as_member_mut().is_control_mut() {
+                    if changed && !cparent.is_skip_draw() {
+                        cparent.invalidate();
+                    }
+                } else {
+                    this.draw(None);
                 }
-            } else {
-                this.draw(None);
             }
         }
     }
@@ -319,22 +320,26 @@ pub unsafe fn window_rect(hwnd: windef::HWND) -> windef::RECT {
 }
 
 #[inline]
-pub(crate) unsafe fn cast_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T
+pub(crate) unsafe fn cast_hwnd<'a, T>(hwnd: windef::HWND) -> Option<&'a mut T>
 where
     T: Sized,
 {
     let hwnd_ptr = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
-    mem::transmute(hwnd_ptr as *mut c_void)
+    if hwnd_ptr == 0 {
+        None
+    } else {
+        Some(mem::transmute(hwnd_ptr as *mut c_void))
+    }
 }
 #[inline]
-pub fn member_from_hwnd<'a, T>(hwnd: windef::HWND) -> &'a mut T
+pub fn member_from_hwnd<'a, T>(hwnd: windef::HWND) -> Option<&'a mut T>
 where
     T: Sized + controls::Member,
 {
     unsafe { cast_hwnd(hwnd) }
 }
 #[inline]
-pub fn member_base_from_hwnd<'a>(hwnd: windef::HWND) -> &'a mut MemberBase {
+pub fn member_base_from_hwnd<'a>(hwnd: windef::HWND) -> Option<&'a mut MemberBase> {
     unsafe { cast_hwnd(hwnd) }
 }
 

@@ -27,18 +27,20 @@ impl WindowsWindow {
     
             let mut frame_callbacks = 0;
             while !self.hwnd.is_null() && frame_callbacks < defaults::MAX_FRAME_CALLBACKS {
-                let w = member_from_hwnd::<Window>(self.hwnd).as_inner_mut().as_inner_mut().base_mut();
-                match w.queue().try_recv() {
-                    Ok(mut cmd) => {
-                        if (cmd.as_mut())(member_from_hwnd::<Window>(self.hwnd)) {
-                            let _ = w.sender().send(cmd);
+                if let Some(w) = member_from_hwnd::<Window>(self.hwnd) {
+                    let w = w.as_inner_mut().as_inner_mut().base_mut();
+                    match w.queue().try_recv() {
+                        Ok(mut cmd) => {
+                            if (cmd.as_mut())(member_from_hwnd::<Window>(self.hwnd).unwrap()) {
+                                let _ = w.sender().send(cmd);
+                            }
+                            frame_callbacks += 1;
                         }
-                        frame_callbacks += 1;
+                        Err(e) => match e {
+                            mpsc::TryRecvError::Empty => break,
+                            mpsc::TryRecvError::Disconnected => unreachable!(),
+                        },
                     }
-                    Err(e) => match e {
-                        mpsc::TryRecvError::Empty => break,
-                        mpsc::TryRecvError::Disconnected => unreachable!(),
-                    },
                 }
             }
         }
@@ -159,10 +161,12 @@ impl WindowInner for WindowsWindow {
         }
     }
     fn on_frame(&mut self, cb: callbacks::OnFrame) {
-        let _ = member_from_hwnd::<Window>(self.hwnd).as_inner_mut().as_inner_mut().base_mut().sender().send(cb);
+        if let Some(window) = member_from_hwnd::<Window>(self.hwnd) {
+            let _ = window.as_inner_mut().as_inner_mut().base_mut().sender().send(cb);
+        }
     }
     fn on_frame_async_feeder(&mut self) -> callbacks::AsyncFeeder<callbacks::OnFrame> {
-        member_from_hwnd::<Window>(self.hwnd).as_inner_mut().as_inner_mut().base_mut().sender().clone().into()
+        member_from_hwnd::<Window>(self.hwnd).unwrap().as_inner_mut().as_inner_mut().base_mut().sender().clone().into()
     }
     fn size(&self) -> (u16, u16) {
         common::size_hwnd(self.hwnd)
@@ -196,14 +200,12 @@ impl SingleContainerInner for WindowsWindow {
         use plygui_api::controls::SingleContainer;
 
         let mut old = self.child.take();
-        if !self.hwnd.is_null() {
+        if let Some(outer_self) = common::member_from_hwnd::<Window>(self.hwnd) {
             if let Some(old) = old.as_mut() {
-                let outer_self: &mut window::Window = common::member_from_hwnd::<Window>(self.hwnd);
                 let outer_self = outer_self.as_single_container_mut().as_container_mut();
                 old.on_removed_from_container(outer_self);
             }
             if let Some(new) = child.as_mut() {
-                let outer_self: &mut window::Window = common::member_from_hwnd::<Window>(self.hwnd);
                 let outer_self = outer_self.as_single_container_mut().as_container_mut();
                 let size = self.size_inner();
                 new.on_added_to_container(outer_self, 0, 0, size.0, size.1)
@@ -247,8 +249,9 @@ impl MemberInner for WindowsWindow {}
 
 impl Drop for WindowsWindow {
     fn drop(&mut self) {
-        let self2 = common::member_from_hwnd::<Window>(self.hwnd);
-        self.set_child(self2.base_mut(), None);
+        if let Some(self2) = common::member_from_hwnd::<Window>(self.hwnd) {
+            self.set_child(self2.base_mut(), None);
+        }
         destroy_hwnd(self.hwnd, 0, None);
     }
 }
@@ -298,11 +301,9 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             return 0;
         }
         winuser::WM_DESTROY => {
-            winuser::PostQuitMessage(0);
-
             let w: &mut window::Window = mem::transmute(ww);
             w.as_inner_mut().as_inner_mut().as_inner_mut().hwnd = ptr::null_mut();
-            return 0;
+            //return 0;
         }
         winuser::WM_CLOSE => {
             let w: &mut window::Window = mem::transmute(ww);

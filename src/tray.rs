@@ -31,6 +31,11 @@ impl HasLabelInner for WindowsTray {
 impl CloseableInner for WindowsTray {
     fn close(&mut self, skip_callbacks: bool) {
         self.skip_callbacks = skip_callbacks;
+        
+        let mut app = application::Application::get();
+        let app = app.as_any_mut().downcast_mut::<application::Application>().unwrap();
+        app.as_inner_mut().remove_tray(unsafe {ids::Id::from_raw(self.cfg.uID as usize)});
+        
         unsafe {
             if shellapi::Shell_NotifyIconW(shellapi::NIM_DELETE, &mut self.cfg) == minwindef::FALSE {
                 common::log_error();

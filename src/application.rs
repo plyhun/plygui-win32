@@ -21,6 +21,12 @@ pub struct WindowsApplication {
 
 pub type Application = ::plygui_api::development::Application<WindowsApplication>;
 
+impl WindowsApplication {
+    pub(crate) fn remove_tray(&mut self, id: ids::Id) {
+        self.trays.retain(|i| *i == id);
+    } 
+}
+
 impl ApplicationInner for WindowsApplication {
     fn get() -> Box<Application> {
         init_comctl();
@@ -75,21 +81,15 @@ impl ApplicationInner for WindowsApplication {
         Cow::Borrowed(self.name.as_str())
     }
     fn start(&mut self) {
-        //for i in (0..self.windows.len()).rev() {
-            /*let mut hwnd = AtomicPtr::new(self.windows[i].clone());
-            thread::spawn(move ||
-                { start_window(*hwnd.get_mut()); }
-            );*/
-            //start_window(self.windows[i]);
-        //}
-        
         let mut msg: winuser::MSG = unsafe { mem::zeroed() };
+        let mut i;
         while unsafe { winuser::GetMessageW(&mut msg, ptr::null_mut(), 0, 0) } > 0 {
             unsafe {
                 winuser::TranslateMessage(&mut msg);
                 winuser::DispatchMessageW(&mut msg);
             }
-            let mut i = 0;
+            
+            i = 0;
             while i < self.windows.len() {
                 if dispatch_window(self.windows[i]) <= 0 {
                     self.windows.remove(i);
@@ -97,17 +97,21 @@ impl ApplicationInner for WindowsApplication {
                     i += 1;
                 }
             }
+            if self.windows.len() < 1 && self.trays.len() < 1 {
+                unsafe { winuser::DestroyWindow(self.root); }
+            }
         }
     }
     fn find_member_by_id_mut(&mut self, id: Id) -> Option<&mut dyn controls::Member> {
         use plygui_api::controls::{Container, Member, SingleContainer};
 
         for window in self.windows.as_mut_slice() {
-            let window: &mut window::Window = common::member_from_hwnd::<window::Window>(*window);
-            if window.id() == id {
-                return Some(window.as_single_container_mut().as_container_mut().as_member_mut());
-            } else {
-                return window.find_control_by_id_mut(id).map(|control| control.as_member_mut());
+            if let Some(window) = common::member_from_hwnd::<window::Window>(*window) {
+                if window.id() == id {
+                    return Some(window.as_single_container_mut().as_container_mut().as_member_mut());
+                } else {
+                    return window.find_control_by_id_mut(id).map(|control| control.as_member_mut());
+                }
             }
         }
         None
@@ -116,14 +120,14 @@ impl ApplicationInner for WindowsApplication {
         use plygui_api::controls::{Container, Member, SingleContainer};
 
         for window in self.windows.as_slice() {
-            let window: &mut window::Window = common::member_from_hwnd::<window::Window>(*window);
-            if window.id() == id {
-                return Some(window.as_single_container().as_container().as_member());
-            } else {
-                return window.find_control_by_id_mut(id).map(|control| control.as_member());
+            if let Some(window) = common::member_from_hwnd::<window::Window>(*window) {
+                if window.id() == id {
+                    return Some(window.as_single_container().as_container().as_member());
+                } else {
+                    return window.find_control_by_id_mut(id).map(|control| control.as_member());
+                }
             }
         }
-
         None
     }
 }
@@ -172,12 +176,22 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
         }
         //return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }
+    match msg {
+        winuser::WM_DESTROY => {
+            winuser::PostQuitMessage(0);
+        }
+        _ => {}
+    } 
+    
     winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
 fn dispatch_window(hwnd: windef::HWND) -> i32 {
-    let w: &mut window::Window = common::member_from_hwnd::<window::Window>(hwnd);
-    w.as_inner_mut().as_inner_mut().as_inner_mut().dispatch()
+    if let Some(w) = common::member_from_hwnd::<window::Window>(hwnd) {
+        w.as_inner_mut().as_inner_mut().as_inner_mut().dispatch()
+    } else {
+        -1
+    }
 }
 
 fn init_comctl() {
