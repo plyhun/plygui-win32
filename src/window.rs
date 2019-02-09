@@ -17,9 +17,6 @@ pub struct WindowsWindow {
 pub type Window = Member<SingleContainer<plygui_api::development::Window<WindowsWindow>>>;
 
 impl WindowsWindow {
-    pub(crate) fn start(&mut self) {
-        while self.dispatch() > 0 {}
-    }
     pub(crate) fn dispatch(&mut self) -> i32 {
         let ret = unsafe { winuser::GetMessageW(&mut self.msg, ptr::null_mut(), 0, 0) };
         if ret > 0 { 
@@ -77,6 +74,20 @@ impl HasLabelInner for WindowsWindow {
                 winuser::SetWindowTextW(self.hwnd, control_name.as_ptr());
             }
         }
+    }
+}
+
+impl HasVisibilityInner for WindowsWindow {
+    fn on_visibility_set(&mut self, _base: &mut MemberBase, value: types::Visibility) -> bool {
+        unsafe {
+            winuser::ShowWindow(self.hwnd, if value == types::Visibility::Visible { winuser::SW_SHOW } else { winuser::SW_HIDE });
+        }
+        true
+    }
+}
+impl HasSizeInner for WindowsWindow {
+    fn on_size_set(&mut self, _base: &mut MemberBase, value: (u16, u16)) -> bool {
+        common::draw(self.hwnd, Some(common::pos_hwnd(self.hwnd)), value)
     }
 }
 
@@ -147,11 +158,17 @@ impl WindowInner for WindowsWindow {
             w
         }
     }
-    fn on_frame(&mut self, cb: callbacks::Frame) {
+    fn on_frame(&mut self, cb: callbacks::OnFrame) {
         let _ = member_from_hwnd::<Window>(self.hwnd).as_inner_mut().as_inner_mut().base_mut().sender().send(cb);
     }
-    fn on_frame_async_feeder(&mut self) -> callbacks::AsyncFeeder<callbacks::Frame> {
+    fn on_frame_async_feeder(&mut self) -> callbacks::AsyncFeeder<callbacks::OnFrame> {
         member_from_hwnd::<Window>(self.hwnd).as_inner_mut().as_inner_mut().base_mut().sender().clone().into()
+    }
+    fn size(&self) -> (u16, u16) {
+        common::size_hwnd(self.hwnd)
+    }
+    fn position(&self) -> (i32, i32) {
+        common::pos_hwnd(self.hwnd)
     }
 }
 
@@ -219,24 +236,14 @@ impl CloseableInner for WindowsWindow {
         self.on_close = callback;
     }
 }
-
-impl MemberInner for WindowsWindow {
+impl HasNativeIdInner for WindowsWindow {
     type Id = common::Hwnd;
-
-    fn size(&self) -> (u16, u16) {
-        self.size_inner()
-    }
-
-    fn on_set_visibility(&mut self, base: &mut MemberBase) {
-        unsafe {
-            winuser::ShowWindow(self.hwnd, if base.visibility == types::Visibility::Visible { winuser::SW_SHOW } else { winuser::SW_HIDE });
-        }
-    }
-
+    
     unsafe fn native_id(&self) -> Self::Id {
         self.hwnd.into()
     }
 }
+impl MemberInner for WindowsWindow {}
 
 impl Drop for WindowsWindow {
     fn drop(&mut self) {
@@ -287,7 +294,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
 
             winuser::InvalidateRect(w.as_inner().as_inner().as_inner().hwnd, ptr::null_mut(), minwindef::TRUE);
 
-            w.call_on_resize(width, height);
+            w.call_on_size(width, height);
             return 0;
         }
         winuser::WM_DESTROY => {

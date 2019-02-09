@@ -5,7 +5,6 @@ use winapi::um::shellapi;
 
 #[repr(C)]
 pub struct WindowsTray {
-    hwnd: windef::HWND,
     label: String,
     cfg: shellapi::NOTIFYICONDATAW,
     on_close: Option<callbacks::Action>,
@@ -20,10 +19,10 @@ impl HasLabelInner for WindowsTray {
     }
     fn set_label(&mut self, _base: &mut MemberBase, label: &str) {
         self.label = label.into();
-        if !self.hwnd.is_null() {
+        if !self.cfg.hWnd.is_null() {
             let control_name = common::str_to_wchar(&self.label);
             unsafe {
-                winuser::SetWindowTextW(self.hwnd, control_name.as_ptr());
+                winuser::SetWindowTextW(self.cfg.hWnd, control_name.as_ptr());
             }
         }
     }
@@ -48,7 +47,6 @@ impl TrayInner for WindowsTray {
         use plygui_api::controls::Member as OuterMember;
         
         let mut t = Box::new(Member::with_inner(WindowsTray {
-                hwnd: 0 as windef::HWND,    
                 label: title.into(),    
                 cfg: unsafe { mem::zeroed() },
                 on_close: None,
@@ -61,7 +59,7 @@ impl TrayInner for WindowsTray {
         let tip_size = t.as_inner_mut().cfg.szTip.len();
         let title = OsStr::new(t.as_inner().label.as_str()).encode_wide().take(tip_size - 1).chain(Some(0).into_iter()).collect::<Vec<_>>();
         
-        t.as_inner_mut().cfg.hWnd = app.native_id() as windef::HWND;
+        t.as_inner_mut().cfg.hWnd = unsafe { app.native_id() as windef::HWND };
         t.as_inner_mut().cfg.cbSize = mem::size_of::<shellapi::NOTIFYICONDATAW>() as u32;
         t.as_inner_mut().cfg.uID = unsafe { t.id().into_raw() as u32 }; 
         //t.as_inner_mut().cfg.hIcon = unsafe { winuser::GetClassLongW(app.as_inner().root.into(), winuser::GCL_HICON) as windef::HICON };
@@ -85,29 +83,23 @@ impl TrayInner for WindowsTray {
     }
 }
 
-impl MemberInner for WindowsTray {
+impl HasNativeIdInner for WindowsTray {
     type Id = common::Hwnd;
 
-    fn size(&self) -> (u16, u16) {
-        common::size_hwnd(self.hwnd)
-    }
-
-    fn on_set_visibility(&mut self, base: &mut MemberBase) {
-        if !self.hwnd.is_null() {
-            unsafe {
-                winuser::ShowWindow(self.hwnd, if base.visibility == types::Visibility::Visible { winuser::SW_SHOW } else { winuser::SW_HIDE });
-            }
-        }
-    }
-
     unsafe fn native_id(&self) -> Self::Id {
-        self.hwnd.into()
+        self.cfg.hWnd.into()
     }
 }
 
+impl MemberInner for WindowsTray {}
+
 impl Drop for WindowsTray {
     fn drop(&mut self) {
-        destroy_hwnd(self.hwnd, 0, None);
+        unsafe {
+            if shellapi::Shell_NotifyIconW(shellapi::NIM_DELETE, &mut self.cfg) == minwindef::FALSE {
+                common::log_error();
+            }
+        }
     }
 }
 

@@ -55,7 +55,7 @@ impl MultiContainerInner for WindowsLinearLayout {
 
         self.children.insert(index, child);
         if !self.base.hwnd.is_null() {
-            let (w, h) = self.size();
+            let (w, h) = base.as_any().downcast_ref::<LinearLayout>().unwrap().as_inner().base().measured;
             self.children.get_mut(index).unwrap().on_added_to_container(
                 self.base.as_outer_mut(),
                 w as i32 - DEFAULT_PADDING,
@@ -125,7 +125,7 @@ impl ControlInner for WindowsLinearLayout {
         };
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
-        self.base.coords = Some((px as i32, py as i32));
+        control.coords = Some((px as i32, py as i32));
         let mut x = DEFAULT_PADDING;
         let mut y = DEFAULT_PADDING;
         for ref mut child in self.children.as_mut_slice() {
@@ -173,20 +173,33 @@ impl HasLayoutInner for WindowsLinearLayout {
         layout::BoundarySize::AllTheSame(DEFAULT_PADDING)
     }
 }
-impl MemberInner for WindowsLinearLayout {
+impl HasNativeIdInner for WindowsLinearLayout {
     type Id = common::Hwnd;
 
-    fn size(&self) -> (u16, u16) {
-        self.base.size()
-    }
-
-    fn on_set_visibility(&mut self, base: &mut MemberBase) {
-        self.base.on_set_visibility(base);
-    }
     unsafe fn native_id(&self) -> Self::Id {
         self.base.hwnd.into()
     }
 }
+impl MemberInner for WindowsLinearLayout {}
+
+impl HasSizeInner for WindowsLinearLayout {
+    fn on_size_set(&mut self, base: &mut MemberBase, (width, height): (u16, u16)) -> bool {
+        use plygui_api::controls::HasLayout;
+        
+        let this = base.as_any_mut().downcast_mut::<LinearLayout>().unwrap();
+        this.set_layout_width(layout::Size::Exact(width));
+        this.set_layout_width(layout::Size::Exact(height));
+        self.base.invalidate();
+        true
+    }
+}
+
+impl HasVisibilityInner for WindowsLinearLayout {
+    fn on_visibility_set(&mut self, _base: &mut MemberBase, value: types::Visibility) -> bool {
+        self.base.on_set_visibility(value)
+    }
+}
+
 impl ContainerInner for WindowsLinearLayout {
     fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut dyn controls::Control> {
         for child in self.children.as_mut_slice() {
@@ -219,8 +232,11 @@ impl ContainerInner for WindowsLinearLayout {
 }
 
 impl Drawable for WindowsLinearLayout {
-    fn draw(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, coords: Option<(i32, i32)>) {
-        self.base.draw(coords);
+    fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase, coords: Option<(i32, i32)>) {
+        if coords.is_some() {
+            control.coords = coords;
+        }
+        self.base.draw(control.coords, control.measured);
         let mut x = DEFAULT_PADDING;
         let mut y = DEFAULT_PADDING;
         for ref mut child in self.children.as_mut_slice() {
@@ -232,14 +248,14 @@ impl Drawable for WindowsLinearLayout {
             }
         }
     }
-    fn measure(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+    fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
         use std::cmp::max;
 
         let orientation = self.orientation;
-        let old_size = self.base.measured_size;
+        let old_size = control.measured;
         let hp = DEFAULT_PADDING + DEFAULT_PADDING;
         let vp = DEFAULT_PADDING + DEFAULT_PADDING;
-        self.base.measured_size = match member.visibility {
+        control.measured = match control.visibility {
             types::Visibility::Gone => (0, 0),
             _ => {
                 let mut measured = false;
@@ -290,7 +306,7 @@ impl Drawable for WindowsLinearLayout {
                 (w, h)
             }
         };
-        (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
+        (control.measured.0, control.measured.1, control.measured != old_size)
     }
     fn invalidate(&mut self, _member: &mut MemberBase, _control: &mut ControlBase) {
         self.base.invalidate()
@@ -359,7 +375,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
                 }
             }
 
-            ll.call_on_resize(width, height);
+            ll.call_on_size(width, height);
             return 0;
         }
         _ => {}

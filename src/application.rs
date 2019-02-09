@@ -55,14 +55,11 @@ impl ApplicationInner for WindowsApplication {
         a.as_inner_mut().root = hwnd;
         a
     }
-    fn native_id(&self) -> usize {
-        self.root as usize
-    }
     fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::Menu) -> Box<dyn controls::Window> {
         let w = window::WindowsWindow::with_params(title, size, menu);
         unsafe {
-            use plygui_api::controls::Member;
-
+            use plygui_api::controls::HasNativeId;
+            
             self.windows.push(w.native_id() as windef::HWND);
         }
         w
@@ -131,6 +128,14 @@ impl ApplicationInner for WindowsApplication {
     }
 }
 
+impl HasNativeIdInner for WindowsApplication {
+    type Id = common::Hwnd;
+
+    unsafe fn native_id(&self) -> Self::Id {
+        self.root.into()
+    }
+}
+
 impl Drop for WindowsApplication {
     fn drop(&mut self) {
         destroy_hwnd(self.root, 0, None);
@@ -170,10 +175,6 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
     winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
-fn start_window(hwnd: windef::HWND) {
-    let w: &mut window::Window = common::member_from_hwnd::<window::Window>(hwnd);
-    w.as_inner_mut().as_inner_mut().as_inner_mut().start();
-}
 fn dispatch_window(hwnd: windef::HWND) -> i32 {
     let w: &mut window::Window = common::member_from_hwnd::<window::Window>(hwnd);
     w.as_inner_mut().as_inner_mut().as_inner_mut().dispatch()

@@ -107,29 +107,44 @@ impl HasLayoutInner for WindowsText {
     }
 }
 
-impl MemberInner for WindowsText {
+impl HasSizeInner for WindowsText {
+    fn on_size_set(&mut self, base: &mut MemberBase, (width, height): (u16, u16)) -> bool {
+        use plygui_api::controls::HasLayout;
+        
+        let this = base.as_any_mut().downcast_mut::<Text>().unwrap();
+        this.set_layout_width(layout::Size::Exact(width));
+        this.set_layout_width(layout::Size::Exact(height));
+        self.base.invalidate();
+        true
+    }
+}
+impl HasVisibilityInner for WindowsText {
+    fn on_visibility_set(&mut self, _base: &mut MemberBase, value: types::Visibility) -> bool {
+        self.base.on_set_visibility(value)
+    }
+}
+
+impl HasNativeIdInner for WindowsText {
     type Id = common::Hwnd;
 
-    fn size(&self) -> (u16, u16) {
-        self.base.size()
-    }
-
-    fn on_set_visibility(&mut self, base: &mut MemberBase) {
-        self.base.on_set_visibility(base);
-    }
     unsafe fn native_id(&self) -> Self::Id {
         self.base.hwnd.into()
     }
 }
 
-impl Drawable for WindowsText {
-    fn draw(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, coords: Option<(i32, i32)>) {
-        self.base.draw(coords);
-    }
-    fn measure(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
-        let old_size = self.base.measured_size;
+impl MemberInner for WindowsText {}
 
-        self.base.measured_size = match member.visibility {
+impl Drawable for WindowsText {
+    fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase, coords: Option<(i32, i32)>) {
+        if coords.is_some() {
+            control.coords = coords;
+        }
+        self.base.draw(control.coords, control.measured);
+    }
+    fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+        let old_size = control.measured;
+
+        control.measured = match control.visibility {
             types::Visibility::Gone => (0, 0),
             _ => {
                 let mut label_size: windef::SIZE = unsafe { mem::zeroed() };
@@ -162,7 +177,7 @@ impl Drawable for WindowsText {
                 (cmp::max(0, w) as u16, cmp::max(0, h) as u16)
             }
         };
-        (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
+        (control.measured.0, control.measured.1, control.measured != old_size)
     }
     fn invalidate(&mut self, _member: &mut MemberBase, _control: &mut ControlBase) {
         self.base.invalidate()
@@ -185,7 +200,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             let height = (lparam >> 16) as u16;
 
             let text: &mut Text = mem::transmute(param);
-            text.call_on_resize(width, height);
+            text.call_on_size(width, height);
             return 0;
         }
         _ => {}

@@ -81,7 +81,7 @@ impl SingleContainerInner for WindowsFrame {
 
         if self.child.is_some() {
             if !self.base.hwnd.is_null() {
-                let (w, h) = self.size();
+                let (w, h) = base.as_any().downcast_ref::<Frame>().unwrap().as_inner().base().measured;
                 if let Some(new) = self.child.as_mut() {
                     new.as_mut().on_added_to_container(
                         self.base.as_outer_mut(),
@@ -177,15 +177,15 @@ impl ControlInner for WindowsFrame {
         self.base.hwnd = hwnd;
         self.hwnd_gbox = hwnd_gbox;
         self.base.subclass_id = id;
-        self.base.coords = Some((px, py));
+        control.coords = Some((px, py));
         if let Some(ref mut child) = self.child {
             let self2: &mut Frame = unsafe { utils::base_to_impl_mut(member) };
             child.on_added_to_container(
                 self2,
                 DEFAULT_PADDING,
                 DEFAULT_PADDING,
-                cmp::max(0, self.base.measured_size.0 as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16,
-                cmp::max(0, self.base.measured_size.1 as i32 - DEFAULT_PADDING - DEFAULT_PADDING - self.label_padding) as u16,
+                cmp::max(0, control.measured.0 as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16,
+                cmp::max(0, control.measured.1 as i32 - DEFAULT_PADDING - DEFAULT_PADDING - self.label_padding) as u16,
             );
         }
     }
@@ -224,10 +224,43 @@ impl ControlInner for WindowsFrame {
     }
 }
 
-impl MemberInner for WindowsFrame {
+impl HasNativeIdInner for WindowsFrame {
     type Id = common::Hwnd;
 
-    fn size(&self) -> (u16, u16) {
+    unsafe fn native_id(&self) -> Self::Id {
+        self.base.hwnd.into()
+    }
+}
+
+impl HasSizeInner for WindowsFrame {
+    fn on_size_set(&mut self, base: &mut MemberBase, (width, height): (u16, u16)) -> bool {
+        use plygui_api::controls::HasLayout;
+        
+        let this = base.as_any_mut().downcast_mut::<Frame>().unwrap();
+        this.set_layout_width(layout::Size::Exact(width));
+        this.set_layout_width(layout::Size::Exact(height));
+        self.base.invalidate();
+        true
+    }
+}
+impl HasVisibilityInner for WindowsFrame {
+    fn on_visibility_set(&mut self, base: &mut MemberBase, visibility: types::Visibility) -> bool {
+        let hwnd = self.base.hwnd;
+        if !hwnd.is_null() {
+            unsafe {
+                winuser::ShowWindow(self.hwnd_gbox, if visibility == types::Visibility::Visible { winuser::SW_SHOW } else { winuser::SW_HIDE });
+                winuser::ShowWindow(self.base.hwnd, if visibility == types::Visibility::Visible { winuser::SW_SHOW } else { winuser::SW_HIDE });
+            }
+            self.on_layout_changed(base);
+            true
+        } else {
+            false
+        }
+    }
+}
+
+impl MemberInner for WindowsFrame {
+    /*fn size(&self) -> (u16, u16) {
         self.base.size()
     }
 
@@ -241,33 +274,31 @@ impl MemberInner for WindowsFrame {
             self.on_layout_changed(base);
         }
     }
-    unsafe fn native_id(&self) -> Self::Id {
-        self.base.hwnd.into()
-    }
+    */
 }
 
 impl Drawable for WindowsFrame {
-    fn draw(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, coords: Option<(i32, i32)>) {
+    fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase, coords: Option<(i32, i32)>) {
         if coords.is_some() {
-            self.base.coords = coords;
+            control.coords = coords;
         }
-        if let Some((x, y)) = self.base.coords {
+        if let Some((x, y)) = control.coords {
             unsafe {
-                winuser::SetWindowPos(self.base.hwnd, ptr::null_mut(), x, y + self.label_padding, self.base.measured_size.0 as i32, self.base.measured_size.1 as i32 - self.label_padding, 0);
-                winuser::SetWindowPos(self.hwnd_gbox, ptr::null_mut(), x, y, self.base.measured_size.0 as i32, self.base.measured_size.1 as i32, 0);
+                winuser::SetWindowPos(self.base.hwnd, ptr::null_mut(), x, y + self.label_padding, control.measured.0 as i32, control.measured.1 as i32 - self.label_padding, 0);
+                winuser::SetWindowPos(self.hwnd_gbox, ptr::null_mut(), x, y, control.measured.0 as i32, control.measured.1 as i32, 0);
             }
             if let Some(ref mut child) = self.child {
                 child.draw(Some((DEFAULT_PADDING, DEFAULT_PADDING)));
             }
         }
     }
-    fn measure(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+    fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
         use std::cmp::max;
 
-        let old_size = self.base.measured_size;
+        let old_size = control.measured;
         let hp = DEFAULT_PADDING + DEFAULT_PADDING;
         let vp = DEFAULT_PADDING + DEFAULT_PADDING;
-        self.base.measured_size = match member.visibility {
+        control.measured = match control.visibility {
             types::Visibility::Gone => (0, 0),
             _ => {
                 let mut measured = false;
@@ -307,7 +338,7 @@ impl Drawable for WindowsFrame {
                 (w, h)
             }
         };
-        (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
+        (control.measured.0, control.measured.1, control.measured != old_size)
     }
     fn invalidate(&mut self, _member: &mut MemberBase, _control: &mut ControlBase) {
         unsafe { winuser::RedrawWindow(self.hwnd_gbox, ptr::null_mut(), ptr::null_mut(), winuser::RDW_INVALIDATE | winuser::RDW_UPDATENOW) };
@@ -372,7 +403,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
                 child.measure(cmp::max(0, width as i32 - hp) as u16, cmp::max(0, height as i32 - vp) as u16);
                 child.draw(Some((DEFAULT_PADDING, DEFAULT_PADDING)));
             }
-            frame.call_on_resize(width, height);
+            frame.call_on_size(width, height);
             return 0;
         }
         _ => {}

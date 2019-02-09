@@ -25,8 +25,8 @@ pub struct WindowsSplitted {
 }
 
 impl WindowsSplitted {
-    fn children_sizes(&self) -> (u16, u16) {
-        let (w, h) = self.size();
+    fn children_sizes(&self, base: &ControlBase) -> (u16, u16) {
+        let (w, h) = base.measured;
         let target = match self.orientation {
             layout::Orientation::Horizontal => w,
             layout::Orientation::Vertical => h,
@@ -70,14 +70,14 @@ impl WindowsSplitted {
             )
         };
     }
-    fn update_children_layout(&mut self) {
+    fn update_children_layout(&mut self, base: &ControlBase) {
         if self.base.hwnd.is_null() {
             return;
         }
 
         let orientation = self.orientation;
-        let (first_size, second_size) = self.children_sizes();
-        let (width, height) = self.size();
+        let (first_size, second_size) = self.children_sizes(base);
+        let (width, height) = base.measured;
         for (size, child) in [(first_size, self.first.as_mut()), (second_size, self.second.as_mut())].iter_mut() {
             match orientation {
                 layout::Orientation::Horizontal => {
@@ -136,20 +136,32 @@ impl SplittedInner for WindowsSplitted {
     }
 }
 
-impl MemberInner for WindowsSplitted {
+impl HasNativeIdInner for WindowsSplitted {
     type Id = common::Hwnd;
 
-    fn size(&self) -> (u16, u16) {
-        self.base.size()
-    }
-
-    fn on_set_visibility(&mut self, base: &mut MemberBase) {
-        self.base.on_set_visibility(base);
-    }
     unsafe fn native_id(&self) -> Self::Id {
         self.base.hwnd.into()
     }
 }
+
+impl HasSizeInner for WindowsSplitted {
+    fn on_size_set(&mut self, base: &mut MemberBase, (width, height): (u16, u16)) -> bool {
+        use plygui_api::controls::HasLayout;
+        
+        let this = base.as_any_mut().downcast_mut::<Splitted>().unwrap();
+        this.set_layout_width(layout::Size::Exact(width));
+        this.set_layout_width(layout::Size::Exact(height));
+        self.base.invalidate();
+        true
+    }
+}
+impl HasVisibilityInner for WindowsSplitted {
+    fn on_visibility_set(&mut self, _base: &mut MemberBase, value: types::Visibility) -> bool {
+        self.base.on_set_visibility(value)
+    }
+}
+
+impl MemberInner for WindowsSplitted {}
 
 impl ControlInner for WindowsSplitted {
     fn parent(&self) -> Option<&dyn controls::Member> {
@@ -185,12 +197,12 @@ impl ControlInner for WindowsSplitted {
         };
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
-        self.base.coords = Some((px as i32, py as i32));
+        control.coords = Some((px as i32, py as i32));
         self.reload_cursor();
         //self.update_children_layout();
 
         let self2: &mut Splitted = unsafe { mem::transmute(selfptr) };
-        let (first_size, second_size) = self.children_sizes();
+        let (first_size, second_size) = self.children_sizes(control);
 
         match self.orientation {
             layout::Orientation::Horizontal => {
@@ -367,19 +379,22 @@ impl HasOrientationInner for WindowsSplitted {
 }
 
 impl Drawable for WindowsSplitted {
-    fn draw(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, coords: Option<(i32, i32)>) {
-        self.base.draw(coords);
+    fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase, coords: Option<(i32, i32)>) {
+        if coords.is_some() {
+            control.coords = coords;
+        }
+        self.base.draw(control.coords, control.measured);
         self.draw_children();
     }
-    fn measure(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+    fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
         use std::cmp::max;
 
         let orientation = self.orientation;
-        let old_size = self.base.measured_size;
+        let old_size = control.measured;
         let hp = DEFAULT_PADDING + DEFAULT_PADDING + if orientation == layout::Orientation::Horizontal { DEFAULT_BOUND } else { 0 };
         let vp = DEFAULT_PADDING + DEFAULT_PADDING + if orientation == layout::Orientation::Vertical { DEFAULT_BOUND } else { 0 };
-        let (first_size, second_size) = self.children_sizes();
-        self.base.measured_size = match member.visibility {
+        let (first_size, second_size) = self.children_sizes(control);
+        control.measured = match control.visibility {
             types::Visibility::Gone => (0, 0),
             _ => {
                 let mut measured = false;
@@ -434,7 +449,7 @@ impl Drawable for WindowsSplitted {
                 (w, h)
             }
         };
-        (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
+        (control.measured.0, control.measured.1, control.measured != old_size)
     }
     fn invalidate(&mut self, _member: &mut MemberBase, _control: &mut ControlBase) {
         self.base.invalidate()
@@ -467,7 +482,7 @@ unsafe fn register_window_class() -> Vec<u16> {
 }
 
 unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
-    use plygui_api::controls::{HasOrientation, Member};
+    use plygui_api::controls::HasOrientation;
 
     let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
@@ -485,15 +500,16 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             {
                 ll.set_skip_draw(true);
                 {
+                    let base = mem::transmute::<isize, &Splitted>(ww).as_inner().base();
                     let ll = ll.as_inner_mut().as_inner_mut().as_inner_mut();
-                    ll.update_children_layout();
+                    ll.update_children_layout(base);
                     ll.draw_children();
                 }
                 ll.set_skip_draw(false);
             }
 
             if msg != common::WM_UPDATE_INNER {
-                ll.call_on_resize(width, height);
+                ll.call_on_size(width, height);
             } else {
                 winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::TRUE);
             }
@@ -505,11 +521,11 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             let mut updated = false;
 
             let ll: &mut Splitted = mem::transmute(ww);
-            let (width, height) = ll.size();
+            let (width, height) = ll.as_inner().base().measured;
 
             match ll.layout_orientation() {
                 layout::Orientation::Horizontal => {
-                    if x > DEFAULT_BOUND as u16 && x < (width - DEFAULT_BOUND as u16) {
+                    if width >= DEFAULT_BOUND as u16 && x > DEFAULT_BOUND as u16 && x < (width - DEFAULT_BOUND as u16) {
                         winuser::SetCursor(ll.as_inner_mut().as_inner_mut().as_inner_mut().cursor);
 
                         if wparam == winuser::MK_LBUTTON && true {
@@ -519,7 +535,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
                     }
                 }
                 layout::Orientation::Vertical => {
-                    if y > DEFAULT_BOUND as u16 && y < (height - DEFAULT_BOUND as u16) {
+                    if height >= DEFAULT_BOUND as u16 && y > DEFAULT_BOUND as u16 && y < (height - DEFAULT_BOUND as u16) {
                         winuser::SetCursor(ll.as_inner_mut().as_inner_mut().as_inner_mut().cursor);
 
                         if wparam == winuser::MK_LBUTTON && ll.as_inner_mut().as_inner_mut().as_inner_mut().moving {

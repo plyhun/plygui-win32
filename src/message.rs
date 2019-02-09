@@ -121,25 +121,15 @@ impl MessageInner for WindowsMessage {
     }
 }
 
-impl MemberInner for WindowsMessage {
+impl HasNativeIdInner for WindowsMessage {
     type Id = common::Hwnd;
-
-    fn size(&self) -> (u16, u16) {
-        common::size_hwnd(self.hwnd)
-    }
-
-    fn on_set_visibility(&mut self, base: &mut MemberBase) {
-        if !self.hwnd.is_null() {
-            unsafe {
-                winuser::ShowWindow(self.hwnd, if base.visibility == types::Visibility::Visible { winuser::SW_SHOW } else { winuser::SW_HIDE });
-            }
-        }
-    }
 
     unsafe fn native_id(&self) -> Self::Id {
         self.hwnd.into()
     }
 }
+
+impl MemberInner for WindowsMessage {}
 
 impl Drop for WindowsMessage {
     fn drop(&mut self) {

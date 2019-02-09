@@ -13,7 +13,7 @@ pub type Button = Member<Control<WindowsButton>>;
 pub struct WindowsButton {
     base: common::WindowsControlBase<Button>,
     label: String,
-    h_left_clicked: Option<callbacks::Click>,
+    h_left_clicked: Option<callbacks::OnClick>,
 }
 
 impl HasLabelInner for WindowsButton {
@@ -34,7 +34,7 @@ impl HasLabelInner for WindowsButton {
 }
 
 impl ClickableInner for WindowsButton {
-    fn on_click(&mut self, handle: Option<callbacks::Click>) {
+    fn on_click(&mut self, handle: Option<callbacks::OnClick>) {
         self.h_left_clicked = handle;
     }
 }
@@ -102,7 +102,7 @@ impl ControlInner for WindowsButton {
         use plygui_api::markup::MEMBER_TYPE_BUTTON;
         fill_from_markup_base!(self, member, markup, registry, Button, [MEMBER_TYPE_BUTTON]);
         fill_from_markup_label!(self, member, markup);
-        fill_from_markup_callbacks!(self, markup, registry, [on_click => plygui_api::callbacks::Click]);
+        fill_from_markup_callbacks!(self, markup, registry, [on_click => plygui_api::callbacks::OnClick]);
     }
 }
 
@@ -115,29 +115,45 @@ impl HasLayoutInner for WindowsButton {
     }
 }
 
-impl MemberInner for WindowsButton {
+impl HasNativeIdInner for WindowsButton {
     type Id = common::Hwnd;
 
-    fn size(&self) -> (u16, u16) {
-        self.base.size()
-    }
-
-    fn on_set_visibility(&mut self, base: &mut MemberBase) {
-        self.base.on_set_visibility(base);
-    }
     unsafe fn native_id(&self) -> Self::Id {
         self.base.hwnd.into()
     }
 }
 
-impl Drawable for WindowsButton {
-    fn draw(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, coords: Option<(i32, i32)>) {
-        self.base.draw(coords);
+impl HasSizeInner for WindowsButton {
+    fn on_size_set(&mut self, base: &mut MemberBase, (width, height): (u16, u16)) -> bool {
+        use plygui_api::controls::HasLayout;
+        
+        let this = base.as_any_mut().downcast_mut::<Button>().unwrap();
+        this.set_layout_width(layout::Size::Exact(width));
+        this.set_layout_width(layout::Size::Exact(height));
+        self.base.invalidate();
+        true
     }
-    fn measure(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
-        let old_size = self.base.measured_size;
+}
 
-        self.base.measured_size = match member.visibility {
+impl HasVisibilityInner for WindowsButton {
+    fn on_visibility_set(&mut self, _base: &mut MemberBase, value: types::Visibility) -> bool {
+        self.base.on_set_visibility(value)
+    }
+}
+
+impl MemberInner for WindowsButton {}
+
+impl Drawable for WindowsButton {
+    fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase, coords: Option<(i32, i32)>) {
+        if coords.is_some() {
+            control.coords = coords;
+        }
+        self.base.draw(control.coords, control.measured);
+    }
+    fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+        let old_size = control.measured;
+
+        control.measured = match control.visibility {
             types::Visibility::Gone => (0, 0),
             _ => {
                 let mut label_size: windef::SIZE = unsafe { mem::zeroed() };
@@ -170,7 +186,7 @@ impl Drawable for WindowsButton {
                 (cmp::max(0, w) as u16, cmp::max(0, h) as u16)
             }
         };
-        (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
+        (control.measured.0, control.measured.1, control.measured != old_size)
     }
     fn invalidate(&mut self, _member: &mut MemberBase, _control: &mut ControlBase) {
         self.base.invalidate()
@@ -201,7 +217,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             let height = (lparam >> 16) as u16;
 
             let button: &mut Button = mem::transmute(param);
-            button.call_on_resize(width, height);
+            button.call_on_size(width, height);
             return 0;
         }
         _ => {}

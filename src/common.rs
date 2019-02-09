@@ -105,8 +105,6 @@ impl NativeId for Hwnd {}
 pub struct WindowsControlBase<T: controls::Control + Sized> {
     pub hwnd: windef::HWND,
     pub subclass_id: usize,
-    pub coords: Option<(i32, i32)>,
-    pub measured_size: (u16, u16),
     _marker: PhantomData<T>,
 }
 
@@ -115,8 +113,6 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
         WindowsControlBase {
             hwnd: 0 as windef::HWND,
             subclass_id: 0,
-            measured_size: (0, 0),
-            coords: None,
             _marker: PhantomData,
         }
     }
@@ -189,7 +185,7 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
         }
         if let Some(parent_hwnd) = parent_hwnd {
             let mparent = member_base_from_hwnd(parent_hwnd);
-            let (pw, ph) = mparent.as_member().size();
+            let (pw, ph) = mparent.as_member().is_has_size().unwrap().size();
             let (_, _, changed) = this.measure(pw, ph);
 
             if let Some(cparent) = mparent.as_member_mut().is_control_mut() {
@@ -201,29 +197,18 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
             }
         }
     }
-    pub fn draw(&mut self, coords: Option<(i32, i32)>) {
-        if coords.is_some() {
-            self.coords = coords;
-        }
-        if let Some((x, y)) = self.coords {
-            unsafe {
-                winuser::SetWindowPos(self.hwnd, ptr::null_mut(), x, y, self.measured_size.0 as i32, self.measured_size.1 as i32, 0);
-            }
-        }
+    pub fn draw(&mut self, coords: Option<(i32, i32)>, (width, height): (u16, u16)) -> bool {
+        draw(self.hwnd, coords, (width, height))
     }
-    pub fn size(&self) -> (u16, u16) {
-        if self.hwnd.is_null() {
-            self.measured_size
-        } else {
-            size_hwnd(self.hwnd)
-        }
-    }
-    pub fn on_set_visibility(&mut self, base: &mut MemberBase) {
+    pub fn on_set_visibility(&mut self, visibility: types::Visibility) -> bool {
         if !self.hwnd.is_null() {
             unsafe {
-                winuser::ShowWindow(self.hwnd, if base.visibility == types::Visibility::Visible { winuser::SW_SHOW } else { winuser::SW_HIDE });
+                winuser::ShowWindow(self.hwnd, if visibility == types::Visibility::Visible { winuser::SW_SHOW } else { winuser::SW_HIDE });
             }
             self.invalidate();
+            true
+        } else {
+            false
         }
     }
 }
@@ -231,6 +216,10 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
 pub fn size_hwnd(hwnd: windef::HWND) -> (u16, u16) {
     let rect = unsafe { window_rect(hwnd) };
     ((rect.right - rect.left) as u16, (rect.bottom - rect.top) as u16)
+}
+pub fn pos_hwnd(hwnd: windef::HWND) -> (i32, i32) {
+    let rect = unsafe { window_rect(hwnd) };
+    (rect.left as i32, rect.top as i32)
 }
 
 pub unsafe fn get_class_name_by_hwnd(hwnd: windef::HWND) -> Vec<u16> {
@@ -307,6 +296,18 @@ pub fn destroy_hwnd(hwnd: windef::HWND, subclass_id: usize, handler: Option<unsa
         if winuser::DestroyWindow(hwnd) == 0 && winuser::IsWindow(hwnd) > 0 {
             log_error();
         }
+    }
+}
+
+#[inline]
+pub fn draw(hwnd: windef::HWND, coords: Option<(i32, i32)>, (width, height): (u16, u16)) -> bool {
+    if let Some((x, y)) = coords {
+        unsafe {
+            winuser::SetWindowPos(hwnd, ptr::null_mut(), x, y, width as i32, height as i32, 0);
+        }
+        true
+    } else {
+        false
     }
 }
 
