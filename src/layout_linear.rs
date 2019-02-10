@@ -237,7 +237,7 @@ impl Drawable for WindowsLinearLayout {
             control.coords = coords;
         }
         self.base.draw(control.coords, control.measured);
-        let mut x = DEFAULT_PADDING;
+        /*let mut x = DEFAULT_PADDING;
         let mut y = DEFAULT_PADDING;
         for ref mut child in self.children.as_mut_slice() {
             child.draw(Some((x, y)));
@@ -246,7 +246,7 @@ impl Drawable for WindowsLinearLayout {
                 layout::Orientation::Horizontal => x += xx as i32,
                 layout::Orientation::Vertical => y += yy as i32,
             }
-        }
+        }*/
     }
     fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
         use std::cmp::max;

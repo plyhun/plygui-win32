@@ -287,9 +287,9 @@ impl Drawable for WindowsFrame {
                 winuser::SetWindowPos(self.base.hwnd, ptr::null_mut(), x, y + self.label_padding, control.measured.0 as i32, control.measured.1 as i32 - self.label_padding, 0);
                 winuser::SetWindowPos(self.hwnd_gbox, ptr::null_mut(), x, y, control.measured.0 as i32, control.measured.1 as i32, 0);
             }
-            if let Some(ref mut child) = self.child {
+            /*if let Some(ref mut child) = self.child {
                 child.draw(Some((DEFAULT_PADDING, DEFAULT_PADDING)));
-            }
+            }*/
         }
     }
     fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {

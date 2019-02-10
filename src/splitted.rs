@@ -384,7 +384,7 @@ impl Drawable for WindowsSplitted {
             control.coords = coords;
         }
         self.base.draw(control.coords, control.measured);
-        self.draw_children();
+        //self.draw_children();
     }
     fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
         use std::cmp::max;
