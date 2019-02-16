@@ -379,10 +379,7 @@ impl HasOrientationInner for WindowsSplitted {
 }
 
 impl Drawable for WindowsSplitted {
-    fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase, coords: Option<(i32, i32)>) {
-        if coords.is_some() {
-            control.coords = coords;
-        }
+    fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase) {
         self.base.draw(control.coords, control.measured);
         //self.draw_children();
     }

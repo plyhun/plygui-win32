@@ -232,10 +232,7 @@ impl ContainerInner for WindowsLinearLayout {
 }
 
 impl Drawable for WindowsLinearLayout {
-    fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase, coords: Option<(i32, i32)>) {
-        if coords.is_some() {
-            control.coords = coords;
-        }
+    fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase) {
         self.base.draw(control.coords, control.measured);
         /*let mut x = DEFAULT_PADDING;
         let mut y = DEFAULT_PADDING;

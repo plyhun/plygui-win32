@@ -278,10 +278,7 @@ impl MemberInner for WindowsFrame {
 }
 
 impl Drawable for WindowsFrame {
-    fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase, coords: Option<(i32, i32)>) {
-        if coords.is_some() {
-            control.coords = coords;
-        }
+    fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase) {
         if let Some((x, y)) = control.coords {
             unsafe {
                 winuser::SetWindowPos(self.base.hwnd, ptr::null_mut(), x, y + self.label_padding, control.measured.0 as i32, control.measured.1 as i32 - self.label_padding, 0);
