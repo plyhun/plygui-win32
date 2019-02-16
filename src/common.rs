@@ -178,6 +178,9 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
         member_from_hwnd::<T>(self.hwnd).unwrap()
     }
     pub fn invalidate(&mut self) {
+        if self.hwnd.is_null() {
+            return;
+        }
         let parent_hwnd = self.parent_hwnd();
         let this = self.as_outer_mut();
         if this.is_skip_draw() {

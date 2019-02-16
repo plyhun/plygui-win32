@@ -100,10 +100,7 @@ impl ControlInner for WindowsText {
 
 impl HasLayoutInner for WindowsText {
     fn on_layout_changed(&mut self, _base: &mut MemberBase) {
-        let hwnd = self.base.hwnd;
-        if !hwnd.is_null() {
-            self.base.invalidate();
-        }
+        self.base.invalidate();
     }
 }
 

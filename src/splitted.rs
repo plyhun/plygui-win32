@@ -241,11 +241,7 @@ impl ControlInner for WindowsSplitted {
 impl HasLayoutInner for WindowsSplitted {
     fn on_layout_changed(&mut self, _base: &mut MemberBase) {
         //self.update_children_layout();
-
-        let hwnd = self.base.hwnd;
-        if !hwnd.is_null() {
-            self.base.invalidate();
-        }
+        self.base.invalidate();
     }
     fn layout_margin(&self, _member: &MemberBase) -> layout::BoundarySize {
         layout::BoundarySize::AllTheSame(DEFAULT_PADDING)

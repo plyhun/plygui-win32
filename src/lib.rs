@@ -22,13 +22,14 @@ mod window;
 mod text;
 mod message;
 mod tray;
+mod image;
 
 #[cfg(feature = "markup")]
 pub fn register_members(registry: &mut plygui_api::markup::MarkupRegistry) {
     registry.register_member(plygui_api::markup::MEMBER_TYPE_BUTTON.into(), button::spawn).unwrap();
     registry.register_member(plygui_api::markup::MEMBER_TYPE_LINEAR_LAYOUT.into(), layout_linear::spawn).unwrap();
     registry.register_member(plygui_api::markup::MEMBER_TYPE_FRAME.into(), frame::spawn).unwrap();
-    //registry.register_member(plygui_api::markup::MEMBER_TYPE_SPLITTED.into(), splitted::spawn).unwrap();
+    registry.register_member(plygui_api::markup::MEMBER_TYPE_SPLITTED.into(), splitted::spawn).unwrap();
 }
 
 pub mod prelude {
@@ -49,5 +50,6 @@ pub mod prelude {
         pub use crate::text::Text;
         pub use crate::message::Message;
         pub use crate::tray::Tray;
+        pub use crate::image::Image;
     }
 }
