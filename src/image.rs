@@ -190,14 +190,18 @@ impl Drawable for WindowsImage {
                     layout::Size::MatchParent => w,
                     layout::Size::Exact(w) => w,
                     layout::Size::WrapContent => {
-                        42 as u16 // TODO min_width
+                        let mut bm: wingdi::BITMAP = unsafe { mem::zeroed() }; 
+                        unsafe { wingdi::GetObjectW(self.bmp as *mut c_void, mem::size_of::<wingdi::BITMAP>() as i32, &mut bm as *mut _ as *mut c_void); }
+                        bm.bmWidth as u16
                     }
                 };
                 let h = match control.layout.height {
                     layout::Size::MatchParent => h,
                     layout::Size::Exact(h) => h,
                     layout::Size::WrapContent => {
-                        42 as u16 // TODO min_height
+                        let mut bm: wingdi::BITMAP = unsafe { mem::zeroed() }; 
+                        unsafe { wingdi::GetObjectW(self.bmp as *mut c_void, mem::size_of::<wingdi::BITMAP>() as i32, &mut bm as *mut _ as *mut c_void); }
+                        bm.bmHeight as u16
                     }
                 };
                 (cmp::max(0, w as i32) as u16, cmp::max(0, h as i32) as u16)
