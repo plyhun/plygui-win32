@@ -48,7 +48,7 @@ impl CloseableInner for WindowsTray {
 }
 
 impl TrayInner for WindowsTray {
-    fn with_params(title: &str, _menu: types::Menu) -> Box<Member<Self>> {
+    fn with_params(title: &str, menu: types::Menu) -> Box<Member<Self>> {
         use plygui_api::controls::Member as OuterMember;
         
         let mut t = Box::new(Member::with_inner(WindowsTray {

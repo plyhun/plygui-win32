@@ -190,7 +190,7 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
             if let Some(mparent) = member_base_from_hwnd(parent_hwnd) {
                 let (pw, ph) = mparent.as_member().is_has_size().unwrap().size();
                 let (_, _, changed) = this.measure(pw, ph);
-    
+
                 if let Some(cparent) = mparent.as_member_mut().is_control_mut() {
                     if changed && !cparent.is_skip_draw() {
                         cparent.invalidate();
@@ -283,8 +283,8 @@ pub unsafe fn create_control_hwnd(
     (hwnd, subclass_id as usize)
 }
 
-pub fn str_to_wchar(a: &str) -> Vec<u16> {
-    OsStr::new(a).encode_wide().chain(Some(0).into_iter()).collect()
+pub fn str_to_wchar<S: AsRef<str>>(a: S) -> Vec<u16> {
+    OsStr::new(a.as_ref()).encode_wide().chain(Some(0).into_iter()).collect()
 }
 
 #[inline]
@@ -344,6 +344,40 @@ where
 #[inline]
 pub fn member_base_from_hwnd<'a>(hwnd: windef::HWND) -> Option<&'a mut MemberBase> {
     unsafe { cast_hwnd(hwnd) }
+}
+
+pub unsafe fn make_menu(menu: windef::HMENU, mut items: Vec<types::MenuItem>, storage: &mut Vec<callbacks::Action>) {
+    for item in items.drain(..) {
+        match item {
+            types::MenuItem::Action(label, action, role) => {
+                let label = str_to_wchar(label);
+                let id = storage.len();
+                storage.push(action);
+                match role {
+                    types::MenuItemRole::None => {
+                        winuser::AppendMenuW(menu, winuser::MF_STRING, id, label.as_ptr());
+                    }
+                    types::MenuItemRole::Options => {}
+                    types::MenuItemRole::Help => {}
+                }
+            }
+            types::MenuItem::Sub(label, items, role) => {
+                let label = str_to_wchar(label);
+                let submenu = winuser::CreateMenu();
+                make_menu(submenu, items, storage);
+                match role {
+                    types::MenuItemRole::None => {
+                        winuser::AppendMenuW(menu, winuser::MF_POPUP, submenu as usize, label.as_ptr());
+                    }
+                    types::MenuItemRole::Options => {}
+                    types::MenuItemRole::Help => {}
+                }
+            }
+            types::MenuItem::Delimiter => {
+                winuser::AppendMenuW(menu, winuser::MF_SEPARATOR, 0, ptr::null_mut());
+            }
+        }
+    }
 }
 
 #[cfg(not(debug_assertions))]
