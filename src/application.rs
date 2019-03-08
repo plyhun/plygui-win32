@@ -180,6 +180,34 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
         winuser::WM_DESTROY => {
             winuser::PostQuitMessage(0);
         }
+        
+        winuser::WM_APP...0xBFFF => {
+        	use plygui_api::controls::Application;
+        	
+	        let evt = minwindef::LOWORD(lparam as u32);
+            let id = minwindef::HIWORD(lparam as u32);
+            
+            let w: &mut application::Application = mem::transmute(ww);
+            let w2: &mut application::Application = mem::transmute(ww);
+            
+            let tray = if let Some(tray) = w.as_inner_mut().trays.iter().find(|tid| tid.into_raw() as u16 == id) {
+	            tray
+            } else {
+	            return 0;
+            };
+            
+            match evt as u32 {
+            	winuser::WM_COMMAND => {
+            		println!("{:?}", (id, w.name()));
+		            /*if let Some(a) = w.as_inner_mut().as_inner_mut().as_inner_mut().menu.get_mut(id as usize) {
+		                (a.as_mut())(w2);
+		            }*/
+		            
+		        }
+            	_ => {}
+            }
+        }
+        
         _ => {}
     } 
     

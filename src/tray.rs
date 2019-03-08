@@ -7,6 +7,7 @@ use winapi::um::shellapi;
 pub struct WindowsTray {
     label: String,
     cfg: shellapi::NOTIFYICONDATAW,
+    menu: Vec<callbacks::Action>,
     on_close: Option<callbacks::Action>,
     skip_callbacks: bool,
 }
@@ -54,6 +55,7 @@ impl TrayInner for WindowsTray {
         let mut t = Box::new(Member::with_inner(WindowsTray {
                 label: title.into(),    
                 cfg: unsafe { mem::zeroed() },
+                menu: if menu.is_some() { Vec::new() } else { vec![] },
                 on_close: None,
                 skip_callbacks: false,
             }, 
@@ -72,7 +74,7 @@ impl TrayInner for WindowsTray {
         unsafe { commctrl::LoadIconMetric(ptr::null_mut(), winuser::MAKEINTRESOURCEW(32512), commctrl::LIM_SMALL as i32, &mut t.as_inner_mut().cfg.hIcon); }
         
         t.as_inner_mut().cfg.uFlags = shellapi::NIF_ICON | shellapi::NIF_TIP | shellapi::NIF_MESSAGE | shellapi::NIF_SHOWTIP;
-        t.as_inner_mut().cfg.uCallbackMessage = 12345678;
+        t.as_inner_mut().cfg.uCallbackMessage = 0xbaba;
         t.as_inner_mut().cfg.szTip[..title.len()].clone_from_slice(title.as_slice());
         unsafe {
             if shellapi::Shell_NotifyIconW(shellapi::NIM_ADD, &mut t.as_inner_mut().cfg) == minwindef::FALSE {
@@ -81,6 +83,13 @@ impl TrayInner for WindowsTray {
             *t.as_inner_mut().cfg.u.uVersion_mut() = shellapi::NOTIFYICON_VERSION_4;
             if shellapi::Shell_NotifyIconW(shellapi::NIM_SETVERSION, &mut t.as_inner_mut().cfg) == minwindef::FALSE {
                 common::log_error();
+            }
+        }
+        if let Some(items) = menu {
+            unsafe {
+            	let menu = winuser::CreateMenu();
+	            common::make_menu(menu, items, &mut t.as_inner_mut().menu);
+	            winuser::SetMenu(app.native_id() as windef::HWND, menu);
             }
         }
     
