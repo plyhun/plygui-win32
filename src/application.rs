@@ -16,14 +16,14 @@ pub struct WindowsApplication {
     pub(crate) root: windef::HWND,
     name: String,
     windows: Vec<windef::HWND>,
-    trays: Vec<ids::Id>,
+    trays: Vec<(ids::Id, *mut crate::tray::Tray)>,
 }
 
 pub type Application = ::plygui_api::development::Application<WindowsApplication>;
 
 impl WindowsApplication {
     pub(crate) fn remove_tray(&mut self, id: ids::Id) {
-        self.trays.retain(|i| *i == id);
+        self.trays.retain(|(i,_)| *i == id);
     } 
 }
 
@@ -73,8 +73,8 @@ impl ApplicationInner for WindowsApplication {
     fn new_tray(&mut self, title: &str, menu: types::Menu) -> Box<dyn controls::Tray> {
         use plygui_api::controls::Member;
         
-        let tray = tray::WindowsTray::with_params(title, menu);
-        self.trays.push(tray.id());
+        let mut tray = tray::WindowsTray::with_params(title, menu);
+        self.trays.push((tray.id(), tray.as_mut() as *mut crate::tray::Tray));
         tray
     }
     fn name<'a>(&'a self) -> Cow<'a, str> {
@@ -142,6 +142,11 @@ impl HasNativeIdInner for WindowsApplication {
 
 impl Drop for WindowsApplication {
     fn drop(&mut self) {
+        for w in self.windows.drain(..) {
+            destroy_hwnd(w, 0, None);
+        }
+        for _ in self.trays.drain(..) {
+        }
         destroy_hwnd(self.root, 0, None);
     }
 }
@@ -180,38 +185,52 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
         winuser::WM_DESTROY => {
             winuser::PostQuitMessage(0);
         }
-        
-        winuser::WM_APP...0xBFFF => {
-        	use plygui_api::controls::Application;
-        	
-	        let evt = minwindef::LOWORD(lparam as u32);
+        winuser::WM_MENUSELECT => {
+            //let flags = minwindef::HIWORD(wparam as u32);
+            
+            let w: &mut application::Application = mem::transmute(ww);
+            let tray = if let Some(tray) = w.as_inner_mut().trays.iter().find(|(_,tray)| (&mut **tray).as_inner_mut().is_menu_shown() ) {
+	            &mut *tray.1
+            } else {
+	            return 0;
+            };
+            
+            if lparam == 0 {
+                let w2: &mut application::Application = mem::transmute(ww); 
+            
+                let tray2 = if let Some(tray) = w2.as_inner_mut().trays.iter().find(|(_,tray)| (&mut **tray).as_inner_mut().is_menu_shown() ) {
+    	            &mut *tray.1
+                } else {
+                    return 0;
+                };
+                tray.as_inner_mut().run_menu(tray2);
+            } else {
+                let item = minwindef::LOWORD(wparam as u32);
+                tray.as_inner_mut().select_menu(item as usize);
+            }
+        }
+        crate::tray::MESSAGE => {
+        	let evt = minwindef::LOWORD(lparam as u32);
             let id = minwindef::HIWORD(lparam as u32);
             
             let w: &mut application::Application = mem::transmute(ww);
-            let w2: &mut application::Application = mem::transmute(ww);
             
-            let tray = if let Some(tray) = w.as_inner_mut().trays.iter().find(|tid| tid.into_raw() as u16 == id) {
-	            tray
+            let tray = if let Some(tray) = w.as_inner_mut().trays.iter().find(|(tid,_)| tid.into_raw() as u16 == id) {
+	            &mut *tray.1
             } else {
 	            return 0;
             };
             
             match evt as u32 {
-            	winuser::WM_COMMAND => {
-            		println!("{:?}", (id, w.name()));
-		            /*if let Some(a) = w.as_inner_mut().as_inner_mut().as_inner_mut().menu.get_mut(id as usize) {
-		                (a.as_mut())(w2);
-		            }*/
-		            
+            	winuser::WM_CONTEXTMENU => {
+            		tray.as_inner_mut().toggle_menu();		            
 		        }
             	_ => {}
             }
         }
-        
         _ => {}
-    } 
-    
-    winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
+    }
+    return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
 }
 
 fn dispatch_window(hwnd: windef::HWND) -> i32 {

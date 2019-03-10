@@ -3,16 +3,58 @@ use super::*;
 
 use winapi::um::shellapi;
 
+pub const MESSAGE: u32 = 0xbaba;
+
 #[repr(C)]
 pub struct WindowsTray {
     label: String,
     cfg: shellapi::NOTIFYICONDATAW,
-    menu: Vec<callbacks::Action>,
+    menu: (windef::HMENU, Vec<callbacks::Action>, isize),
     on_close: Option<callbacks::Action>,
     skip_callbacks: bool,
 }
 
 pub type Tray = Member<WindowsTray>;
+
+impl WindowsTray {
+    pub(crate) fn toggle_menu(&mut self) {
+        if !self.menu.0.is_null() {
+		    unsafe {
+		        let hwnd = application::Application::get().native_id() as windef::HWND;
+    		    if self.menu.2 > -2 {
+    		        self.menu.2 = -2;
+		            winuser::SendMessageW(hwnd, winuser::WM_CANCELMODE, 0, 0);
+		        } else {
+		            self.menu.2 = -1;
+		            let mut click_point = mem::zeroed();
+        		    winuser::GetCursorPos(&mut click_point);
+        		    winuser::TrackPopupMenu(
+                        self.menu.0, 
+                        winuser::TPM_LEFTALIGN|winuser::TPM_LEFTBUTTON|winuser::TPM_BOTTOMALIGN,
+                        click_point.x, click_point.y,
+                        0,
+                        hwnd,
+                        ptr::null_mut()
+                    );
+		        }
+		    }
+        }
+    }
+    pub(crate) fn is_menu_shown(&self) -> bool {
+        self.menu.2 > -2
+    }
+    pub(crate) fn select_menu(&mut self, id: usize) {
+        self.menu.2 = id as isize;
+    }
+    pub(crate) fn run_menu(&mut self, this: &mut Tray) {
+        if self.menu.2 > -1 {
+            if let Some(a) = self.menu.1.get_mut(self.menu.2 as usize) {
+                (a.as_mut())(this);
+            }
+        }
+        self.menu.2 = -2;
+    } 
+}
 
 impl HasLabelInner for WindowsTray {
     fn label<'a>(&'a self) -> Cow<'a, str> {
@@ -55,7 +97,7 @@ impl TrayInner for WindowsTray {
         let mut t = Box::new(Member::with_inner(WindowsTray {
                 label: title.into(),    
                 cfg: unsafe { mem::zeroed() },
-                menu: if menu.is_some() { Vec::new() } else { vec![] },
+                menu: ( ptr::null_mut(), if menu.is_some() { Vec::new() } else { vec![] }, -2 ),
                 on_close: None,
                 skip_callbacks: false,
             }, 
@@ -74,7 +116,7 @@ impl TrayInner for WindowsTray {
         unsafe { commctrl::LoadIconMetric(ptr::null_mut(), winuser::MAKEINTRESOURCEW(32512), commctrl::LIM_SMALL as i32, &mut t.as_inner_mut().cfg.hIcon); }
         
         t.as_inner_mut().cfg.uFlags = shellapi::NIF_ICON | shellapi::NIF_TIP | shellapi::NIF_MESSAGE | shellapi::NIF_SHOWTIP;
-        t.as_inner_mut().cfg.uCallbackMessage = 0xbaba;
+        t.as_inner_mut().cfg.uCallbackMessage = MESSAGE;
         t.as_inner_mut().cfg.szTip[..title.len()].clone_from_slice(title.as_slice());
         unsafe {
             if shellapi::Shell_NotifyIconW(shellapi::NIM_ADD, &mut t.as_inner_mut().cfg) == minwindef::FALSE {
@@ -87,9 +129,9 @@ impl TrayInner for WindowsTray {
         }
         if let Some(items) = menu {
             unsafe {
-            	let menu = winuser::CreateMenu();
-	            common::make_menu(menu, items, &mut t.as_inner_mut().menu);
-	            winuser::SetMenu(app.native_id() as windef::HWND, menu);
+            	let menu = winuser::CreatePopupMenu();
+	            common::make_menu(menu, items, &mut t.as_inner_mut().menu.1);
+	            t.as_inner_mut().menu.0 = menu;
             }
         }
     
@@ -110,6 +152,9 @@ impl MemberInner for WindowsTray {}
 impl Drop for WindowsTray {
     fn drop(&mut self) {
         unsafe {
+            if !self.menu.0.is_null() {
+                winuser::DeleteMenu(self.menu.0, 0, 0);
+            }
             if shellapi::Shell_NotifyIconW(shellapi::NIM_DELETE, &mut self.cfg) == minwindef::FALSE {
                 common::log_error();
             }
