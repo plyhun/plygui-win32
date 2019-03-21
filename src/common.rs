@@ -346,31 +346,66 @@ pub fn member_base_from_hwnd<'a>(hwnd: windef::HWND) -> Option<&'a mut MemberBas
     unsafe { cast_hwnd(hwnd) }
 }
 
+
+
 pub unsafe fn make_menu(menu: windef::HMENU, mut items: Vec<types::MenuItem>, storage: &mut Vec<callbacks::Action>) {
+	let mut options = Vec::new();
+	let mut help = Vec::new();
+	
+	let append_item = |menu, label, action, storage: &mut Vec<callbacks::Action>| {
+		let wlabel = str_to_wchar(label);
+        let id = storage.len();
+        storage.push(action);
+        winuser::AppendMenuW(menu, winuser::MF_STRING, id, wlabel.as_ptr());
+	};
+	let append_level = |menu, label, items, storage: &mut Vec<callbacks::Action>| {
+		let wlabel = str_to_wchar(label);
+        let submenu = winuser::CreateMenu();
+        make_menu(submenu, items, storage);
+        winuser::AppendMenuW(menu, winuser::MF_POPUP, submenu as usize, wlabel.as_ptr());
+	};
+	let make_special = |menu, mut special: Vec<types::MenuItem>, storage: &mut Vec<callbacks::Action>| {
+		for item in special.drain(..) {
+	        match item {
+	            types::MenuItem::Action(label, action, _) => {
+	                append_item(menu, label, action, storage);
+	            }
+	            types::MenuItem::Sub(label, items, _) => {
+	                append_level(menu, label, items, storage);
+	            }
+	            types::MenuItem::Delimiter => {
+	                winuser::AppendMenuW(menu, winuser::MF_SEPARATOR, 0, ptr::null_mut());
+	            }
+	        }
+	    }
+	};
+	
     for item in items.drain(..) {
         match item {
             types::MenuItem::Action(label, action, role) => {
-                let label = str_to_wchar(label);
-                let id = storage.len();
-                storage.push(action);
                 match role {
                     types::MenuItemRole::None => {
-                        winuser::AppendMenuW(menu, winuser::MF_STRING, id, label.as_ptr());
+                        append_item(menu, label, action, storage);
                     }
-                    types::MenuItemRole::Options => {}
-                    types::MenuItemRole::Help => {}
+                    types::MenuItemRole::Options => {
+	                    options.push(types::MenuItem::Action(label, action, role));
+                    }
+                    types::MenuItemRole::Help => {
+	                    help.push(types::MenuItem::Action(label, action, role));
+                    }
                 }
             }
             types::MenuItem::Sub(label, items, role) => {
-                let label = str_to_wchar(label);
-                let submenu = winuser::CreateMenu();
-                make_menu(submenu, items, storage);
                 match role {
                     types::MenuItemRole::None => {
-                        winuser::AppendMenuW(menu, winuser::MF_POPUP, submenu as usize, label.as_ptr());
+                        append_level(menu, label, items, storage);
                     }
-                    types::MenuItemRole::Options => {}
-                    types::MenuItemRole::Help => {}
+                    types::MenuItemRole::Options => {
+	                    options.push(types::MenuItem::Sub(label, items, role));
+                    }
+                    types::MenuItemRole::Help => {
+	                    help.push(types::MenuItem::Sub(label, items, role));
+                    }
                 }
             }
             types::MenuItem::Delimiter => {
@@ -378,6 +413,9 @@ pub unsafe fn make_menu(menu: windef::HMENU, mut items: Vec<types::MenuItem>, st
             }
         }
     }
+    
+    make_special(menu, options, storage);
+    make_special(menu, help, storage);
 }
 
 #[cfg(not(debug_assertions))]
