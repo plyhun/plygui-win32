@@ -11,7 +11,7 @@ pub struct WindowsTray {
     cfg: shellapi::NOTIFYICONDATAW,
     menu: (windef::HMENU, Vec<callbacks::Action>, isize),
     on_close: Option<callbacks::Action>,
-    skip_callbacks: bool,
+    this: *mut Tray,
 }
 
 pub type Tray = Member<WindowsTray>;
@@ -72,18 +72,26 @@ impl HasLabelInner for WindowsTray {
 }
 
 impl CloseableInner for WindowsTray {
-    fn close(&mut self, skip_callbacks: bool) {
-        self.skip_callbacks = skip_callbacks;
-        
+    fn close(&mut self, skip_callbacks: bool) -> bool {
+    	if !skip_callbacks {
+    		if let Some(ref mut on_close) = self.on_close {
+                if !(on_close.as_mut())(unsafe { &mut *self.this }) {
+                    return false;
+                }
+            }
+    	}
+    	
         let mut app = application::Application::get();
         let app = app.as_any_mut().downcast_mut::<application::Application>().unwrap();
-        app.as_inner_mut().remove_tray(unsafe {ids::Id::from_raw(self.cfg.uID as usize)});
         
         unsafe {
             if shellapi::Shell_NotifyIconW(shellapi::NIM_DELETE, &mut self.cfg) == minwindef::FALSE {
                 common::log_error();
             }
         }
+        app.as_inner_mut().remove_tray(unsafe {ids::Id::from_raw(self.cfg.uID as usize)});
+        
+        true
     }
     fn on_close(&mut self, callback: Option<callbacks::Action>) {
         self.on_close = callback;
@@ -99,10 +107,12 @@ impl TrayInner for WindowsTray {
                 cfg: unsafe { mem::zeroed() },
                 menu: ( ptr::null_mut(), if menu.is_some() { Vec::new() } else { vec![] }, -2 ),
                 on_close: None,
-                skip_callbacks: false,
+                this: ptr::null_mut(),
             }, 
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut)
         ));
+        let this = t.as_mut() as *mut Tray;
+        t.as_inner_mut().this = this;
         
         let app = super::application::Application::get();
         let tip_size = t.as_inner_mut().cfg.szTip.len();
@@ -154,9 +164,9 @@ impl Drop for WindowsTray {
         unsafe {
             if !self.menu.0.is_null() {
                 winuser::DeleteMenu(self.menu.0, 0, 0);
-            }
-            if shellapi::Shell_NotifyIconW(shellapi::NIM_DELETE, &mut self.cfg) == minwindef::FALSE {
-                common::log_error();
+                if shellapi::Shell_NotifyIconW(shellapi::NIM_DELETE, &mut self.cfg) == minwindef::FALSE {
+	                common::log_error();
+	            }
             }
         }
     }

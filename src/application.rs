@@ -130,6 +130,22 @@ impl ApplicationInner for WindowsApplication {
         }
         None
     }
+    fn exit(&mut self, skip_on_close: bool) -> bool {
+    	use plygui_api::controls::Closeable;
+    	
+    	for window in self.windows.as_mut_slice() {
+			if !common::member_from_hwnd::<window::Window>(*window).unwrap().close(!skip_on_close) {	
+				return false;
+			}
+    	}
+    	for (_,tray) in self.trays.as_mut_slice() {
+			if !(unsafe { &mut **tray }.close(!skip_on_close)) {
+				return false
+			}
+    	}
+    	
+    	true
+	}
 }
 
 impl HasNativeIdInner for WindowsApplication {

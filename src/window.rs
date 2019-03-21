@@ -236,11 +236,12 @@ impl SingleContainerInner for WindowsWindow {
 }
 
 impl CloseableInner for WindowsWindow {
-    fn close(&mut self, skip_callbacks: bool) {
+    fn close(&mut self, skip_callbacks: bool) -> bool {
         self.skip_callbacks = skip_callbacks;
         unsafe {
-            winuser::CloseWindow(self.hwnd); // TODO process error
+        	winuser::SendMessageW(self.hwnd, winuser::WM_SYSCOMMAND, winuser::SC_CLOSE, 0);
         }
+        self.hwnd.is_null()
     }
     fn on_close(&mut self, callback: Option<callbacks::Action>) {
         self.on_close = callback;
