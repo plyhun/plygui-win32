@@ -23,7 +23,7 @@ pub type Application = ::plygui_api::development::Application<WindowsApplication
 
 impl WindowsApplication {
     pub(crate) fn remove_tray(&mut self, id: ids::Id) {
-        self.trays.retain(|(i,_)| *i == id);
+        self.trays.retain(|(i,_)| *i != id);
     } 
 }
 
@@ -134,12 +134,12 @@ impl ApplicationInner for WindowsApplication {
     	use plygui_api::controls::Closeable;
     	
     	for window in self.windows.as_mut_slice() {
-			if !common::member_from_hwnd::<window::Window>(*window).unwrap().close(!skip_on_close) {	
+			if !common::member_from_hwnd::<window::Window>(*window).unwrap().close(skip_on_close) {	
 				return false;
 			}
     	}
     	for (_,tray) in self.trays.as_mut_slice() {
-			if !(unsafe { &mut **tray }.close(!skip_on_close)) {
+			if !(unsafe { &mut **tray }.close(skip_on_close)) {
 				return false
 			}
     	}
