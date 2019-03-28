@@ -1,5 +1,4 @@
-use super::common::*;
-use super::*;
+use crate::common::{self, *};
 
 struct WindowsMessageAction {
     title: Vec<u16>,
@@ -168,4 +167,4 @@ unsafe extern "system" fn dialog_proc(hwnd: windef::HWND, msg: minwindef::UINT, 
     lr
 }
 
-impl_all_defaults!(Message);
+default_impls_as!(Message);

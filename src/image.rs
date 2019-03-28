@@ -1,6 +1,5 @@
-use super::common::*;
-use super::*;
-use plygui_api::external::image;
+use crate::common::{self, *};
+use crate::external::image;
 
 lazy_static! {
     pub static ref WINDOW_CLASS: Vec<u16> = OsStr::new("STATIC").encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
@@ -321,4 +320,4 @@ fn fmin(a: f32, b: f32) -> f32 {
     }
 }*/
 
-impl_all_defaults!(Image);
+default_impls_as!(Image);

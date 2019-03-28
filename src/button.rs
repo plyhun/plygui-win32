@@ -1,5 +1,4 @@
-use super::common::*;
-use super::*;
+use crate::common::{self, *};
 
 const CLASS_ID: &str = "Button";
 
@@ -220,4 +219,4 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
     commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
 }
 
-impl_all_defaults!(Button);
+default_impls_as!(Button);

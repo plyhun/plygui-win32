@@ -1,5 +1,4 @@
-use super::common::*;
-use super::*;
+use crate::common::{self, *};
 
 const DEFAULT_BOUND: i32 = DEFAULT_PADDING;
 const HALF_BOUND: i32 = DEFAULT_BOUND / 2;
@@ -566,4 +565,4 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
     winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
-impl_all_defaults!(Splitted);
+default_impls_as!(Splitted);

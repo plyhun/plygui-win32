@@ -1,5 +1,4 @@
-use super::common::*;
-use super::*;
+use crate::common::{self, *};
 
 lazy_static! {
     pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
@@ -381,4 +380,4 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
     winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
-impl_all_defaults!(LinearLayout);
+default_impls_as!(LinearLayout);

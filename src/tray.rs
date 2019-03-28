@@ -1,5 +1,5 @@
-use super::common::*;
-use super::*;
+use crate::common::{self, *};
+use crate::application::Application;
 
 use winapi::um::shellapi;
 
@@ -20,7 +20,7 @@ impl WindowsTray {
     pub(crate) fn toggle_menu(&mut self) {
         if !self.menu.0.is_null() {
             unsafe {
-                let hwnd = application::Application::get().native_id() as windef::HWND;
+                let hwnd = Application::get().native_id() as windef::HWND;
                 if self.menu.2 > -2 {
                     self.menu.2 = -2;
                     winuser::SendMessageW(hwnd, winuser::WM_CANCELMODE, 0, 0);
@@ -74,8 +74,8 @@ impl CloseableInner for WindowsTray {
             }
         }
 
-        let mut app = application::Application::get();
-        let app = app.as_any_mut().downcast_mut::<application::Application>().unwrap();
+        let mut app = Application::get();
+        let app = app.as_any_mut().downcast_mut::<Application>().unwrap();
 
         unsafe {
             if shellapi::Shell_NotifyIconW(shellapi::NIM_DELETE, &mut self.cfg) == minwindef::FALSE {
@@ -168,4 +168,4 @@ impl Drop for WindowsTray {
     }
 }
 
-impl_all_defaults!(Tray);
+default_impls_as!(Tray);

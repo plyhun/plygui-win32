@@ -1,5 +1,4 @@
-use super::common::*;
-use super::*;
+use crate::common::{self, *};
 
 lazy_static! {
     pub static ref WINDOW_CLASS_GBOX: Vec<u16> = OsStr::new("Button").encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
@@ -409,4 +408,4 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
     winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
-impl_all_defaults!(Frame);
+default_impls_as!(Frame);

@@ -1,5 +1,4 @@
-use super::common::*;
-use super::*;
+use crate::common::{self, *};
 
 lazy_static! {
     pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
@@ -300,7 +299,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
         winuser::WM_SIZE => {
             let width = minwindef::LOWORD(lparam as u32);
             let height = minwindef::HIWORD(lparam as u32);
-            let w: &mut window::Window = mem::transmute(ww);
+            let w: &mut Window = mem::transmute(ww);
 
             w.as_inner_mut().as_inner_mut().as_inner_mut().redraw();
 
@@ -310,15 +309,15 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             return 0;
         }
         winuser::WM_DESTROY => {
-            let w: &mut window::Window = mem::transmute(ww);
+            let w: &mut Window = mem::transmute(ww);
             w.as_inner_mut().as_inner_mut().as_inner_mut().hwnd = ptr::null_mut();
             //return 0;
         }
         winuser::WM_CLOSE => {
-            let w: &mut window::Window = mem::transmute(ww);
+            let w: &mut Window = mem::transmute(ww);
             if !w.as_inner_mut().as_inner_mut().as_inner_mut().skip_callbacks {
                 if let Some(ref mut on_close) = w.as_inner_mut().as_inner_mut().as_inner_mut().on_close {
-                    let w2: &mut window::Window = mem::transmute(ww);
+                    let w2: &mut Window = mem::transmute(ww);
                     if !(on_close.as_mut())(w2) {
                         return 0;
                     }
@@ -328,8 +327,8 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
         winuser::WM_COMMAND => {
             let id = minwindef::LOWORD(wparam as u32);
             let _evt = minwindef::HIWORD(wparam as u32);
-            let w: &mut window::Window = mem::transmute(ww);
-            let w2: &mut window::Window = mem::transmute(ww);
+            let w: &mut Window = mem::transmute(ww);
+            let w2: &mut Window = mem::transmute(ww);
             if let Some(a) = w.as_inner_mut().as_inner_mut().as_inner_mut().menu.get_mut(id as usize) {
                 (a.as_mut())(w2);
             }
@@ -339,4 +338,4 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
     winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
-impl_all_defaults!(Window);
+default_impls_as!(Window);
