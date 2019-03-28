@@ -32,16 +32,19 @@ pub type WndProc = unsafe extern "system" fn(hwnd: windef::HWND, msg: minwindef:
 pub struct Hfont(windef::HFONT);
 
 impl From<windef::HFONT> for Hfont {
+    #[inline]
     fn from(a: windef::HFONT) -> Self {
         Hfont(a)
     }
 }
 impl AsRef<windef::HFONT> for Hfont {
+    #[inline]
     fn as_ref(&self) -> &windef::HFONT {
         &self.0
     }
 }
 impl Drop for Hfont {
+    
     fn drop(&mut self) {
         unsafe {
             if wingdi::DeleteObject(self.0 as *mut c_void) == minwindef::FALSE {
@@ -85,16 +88,19 @@ lazy_static! {
 pub struct Hwnd(windef::HWND);
 
 impl From<windef::HWND> for Hwnd {
+    #[inline]
     fn from(a: windef::HWND) -> Hwnd {
         Hwnd(a)
     }
 }
 impl From<Hwnd> for windef::HWND {
+    #[inline]
     fn from(a: Hwnd) -> windef::HWND {
         a.0
     }
 }
 impl From<Hwnd> for usize {
+    #[inline]
     fn from(a: Hwnd) -> usize {
         a.0 as usize
     }
