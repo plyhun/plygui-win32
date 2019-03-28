@@ -16,13 +16,13 @@ pub mod common;
 mod application;
 mod button;
 mod frame;
-mod layout_linear;
-mod splitted;
-mod window;
-mod text;
-mod message;
-mod tray;
 mod image;
+mod layout_linear;
+mod message;
+mod splitted;
+mod text;
+mod tray;
+mod window;
 
 #[cfg(feature = "markup")]
 pub fn register_members(registry: &mut plygui_api::markup::MarkupRegistry) {
@@ -44,12 +44,12 @@ pub mod prelude {
         pub use crate::application::Application;
         pub use crate::button::Button;
         pub use crate::frame::Frame;
-        pub use crate::layout_linear::LinearLayout;
-        pub use crate::splitted::Splitted;
-        pub use crate::window::Window;
-        pub use crate::text::Text;
-        pub use crate::message::Message;
-        pub use crate::tray::Tray;
         pub use crate::image::Image;
+        pub use crate::layout_linear::LinearLayout;
+        pub use crate::message::Message;
+        pub use crate::splitted::Splitted;
+        pub use crate::text::Text;
+        pub use crate::tray::Tray;
+        pub use crate::window::Window;
     }
 }

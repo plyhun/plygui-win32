@@ -190,8 +190,10 @@ impl Drawable for WindowsImage {
                     layout::Size::MatchParent => w,
                     layout::Size::Exact(w) => w,
                     layout::Size::WrapContent => {
-                        let mut bm: wingdi::BITMAP = unsafe { mem::zeroed() }; 
-                        unsafe { wingdi::GetObjectW(self.bmp as *mut c_void, mem::size_of::<wingdi::BITMAP>() as i32, &mut bm as *mut _ as *mut c_void); }
+                        let mut bm: wingdi::BITMAP = unsafe { mem::zeroed() };
+                        unsafe {
+                            wingdi::GetObjectW(self.bmp as *mut c_void, mem::size_of::<wingdi::BITMAP>() as i32, &mut bm as *mut _ as *mut c_void);
+                        }
                         bm.bmWidth as u16
                     }
                 };
@@ -199,8 +201,10 @@ impl Drawable for WindowsImage {
                     layout::Size::MatchParent => h,
                     layout::Size::Exact(h) => h,
                     layout::Size::WrapContent => {
-                        let mut bm: wingdi::BITMAP = unsafe { mem::zeroed() }; 
-                        unsafe { wingdi::GetObjectW(self.bmp as *mut c_void, mem::size_of::<wingdi::BITMAP>() as i32, &mut bm as *mut _ as *mut c_void); }
+                        let mut bm: wingdi::BITMAP = unsafe { mem::zeroed() };
+                        unsafe {
+                            wingdi::GetObjectW(self.bmp as *mut c_void, mem::size_of::<wingdi::BITMAP>() as i32, &mut bm as *mut _ as *mut c_void);
+                        }
                         bm.bmHeight as u16
                     }
                 };

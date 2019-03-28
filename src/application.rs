@@ -1,5 +1,5 @@
-use super::*;
 use super::common::*;
+use super::*;
 
 use plygui_api::controls;
 use plygui_api::ids::Id;
@@ -16,21 +16,15 @@ pub struct WindowsApplication {
     pub(crate) root: windef::HWND,
     name: String,
     windows: Vec<windef::HWND>,
-    trays: Vec<(ids::Id, *mut crate::tray::Tray)>,
+    trays: Vec<*mut crate::tray::Tray>,
 }
 
 pub type Application = ::plygui_api::development::Application<WindowsApplication>;
 
-impl WindowsApplication {
-    pub(crate) fn remove_tray(&mut self, id: ids::Id) {
-        self.trays.retain(|(i,_)| *i != id);
-    } 
-}
-
 impl ApplicationInner for WindowsApplication {
     fn get() -> Box<Application> {
         init_comctl();
-        
+
         let mut a = Box::new(Application::with_inner(
             WindowsApplication {
                 name: String::new(), //name.into(), // TODO later
@@ -40,9 +34,9 @@ impl ApplicationInner for WindowsApplication {
             },
             (),
         ));
-        
+
         let name = OsStr::new(a.as_inner().name.as_str()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
-        let hwnd = unsafe { 
+        let hwnd = unsafe {
             winuser::CreateWindowExW(
                 0,
                 WINDOW_CLASS.as_ptr(),
@@ -56,7 +50,7 @@ impl ApplicationInner for WindowsApplication {
                 ptr::null_mut(),
                 hinstance(),
                 a.as_mut() as *mut _ as *mut c_void,
-            ) 
+            )
         };
         a.as_inner_mut().root = hwnd;
         a
@@ -65,17 +59,22 @@ impl ApplicationInner for WindowsApplication {
         let w = window::WindowsWindow::with_params(title, size, menu);
         unsafe {
             use plygui_api::controls::HasNativeId;
-            
+
             self.windows.push(w.native_id() as windef::HWND);
         }
         w
     }
     fn new_tray(&mut self, title: &str, menu: types::Menu) -> Box<dyn controls::Tray> {
-        use plygui_api::controls::Member;
-        
         let mut tray = tray::WindowsTray::with_params(title, menu);
-        self.trays.push((tray.id(), tray.as_mut() as *mut crate::tray::Tray));
+        self.trays.push(tray.as_mut() as *mut crate::tray::Tray);
         tray
+    }
+    fn remove_window(&mut self, _: Self::Id) {
+        // Better not to remove directly, as is breaks the wndproc loop.
+    }
+    fn remove_tray(&mut self, id: Self::Id) {
+        let id = windef::HWND::from(id) as *mut tray::Tray;
+        self.trays.retain(|t| *t != id);
     }
     fn name<'a>(&'a self) -> Cow<'a, str> {
         Cow::Borrowed(self.name.as_str())
@@ -88,7 +87,7 @@ impl ApplicationInner for WindowsApplication {
                 winuser::TranslateMessage(&mut msg);
                 winuser::DispatchMessageW(&mut msg);
             }
-            
+
             i = 0;
             while i < self.windows.len() {
                 if dispatch_window(self.windows[i]) <= 0 {
@@ -98,7 +97,9 @@ impl ApplicationInner for WindowsApplication {
                 }
             }
             if self.windows.len() < 1 && self.trays.len() < 1 {
-                unsafe { winuser::DestroyWindow(self.root); }
+                unsafe {
+                    winuser::DestroyWindow(self.root);
+                }
             }
         }
     }
@@ -131,21 +132,21 @@ impl ApplicationInner for WindowsApplication {
         None
     }
     fn exit(&mut self, skip_on_close: bool) -> bool {
-    	use plygui_api::controls::Closeable;
-    	
-    	for window in self.windows.as_mut_slice() {
-			if !common::member_from_hwnd::<window::Window>(*window).unwrap().close(skip_on_close) {	
-				return false;
-			}
-    	}
-    	for (_,tray) in self.trays.as_mut_slice() {
-			if !(unsafe { &mut **tray }.close(skip_on_close)) {
-				return false
-			}
-    	}
-    	
-    	true
-	}
+        use plygui_api::controls::Closeable;
+
+        for window in self.windows.as_mut_slice() {
+            if !common::member_from_hwnd::<window::Window>(*window).unwrap().close(skip_on_close) {
+                return false;
+            }
+        }
+        for tray in self.trays.as_mut_slice() {
+            if !(unsafe { &mut **tray }.close(skip_on_close)) {
+                return false;
+            }
+        }
+
+        true
+    }
 }
 
 impl HasNativeIdInner for WindowsApplication {
@@ -161,8 +162,7 @@ impl Drop for WindowsApplication {
         for w in self.windows.drain(..) {
             destroy_hwnd(w, 0, None);
         }
-        for _ in self.trays.drain(..) {
-        }
+        for _ in self.trays.drain(..) {}
         destroy_hwnd(self.root, 0, None);
     }
 }
@@ -203,19 +203,19 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
         }
         winuser::WM_MENUSELECT => {
             //let flags = minwindef::HIWORD(wparam as u32);
-            
+
             let w: &mut application::Application = mem::transmute(ww);
-            let tray = if let Some(tray) = w.as_inner_mut().trays.iter().find(|(_,tray)| (&mut **tray).as_inner_mut().is_menu_shown() ) {
-	            &mut *tray.1
+            let tray = if let Some(tray) = w.as_inner_mut().trays.iter().find(|tray| (&mut ***tray).as_inner_mut().is_menu_shown()) {
+                &mut **tray
             } else {
-	            return 0;
+                return 0;
             };
-            
+
             if lparam == 0 {
-                let w2: &mut application::Application = mem::transmute(ww); 
-            
-                let tray2 = if let Some(tray) = w2.as_inner_mut().trays.iter().find(|(_,tray)| (&mut **tray).as_inner_mut().is_menu_shown() ) {
-    	            &mut *tray.1
+                let w2: &mut application::Application = mem::transmute(ww);
+
+                let tray2 = if let Some(tray) = w2.as_inner_mut().trays.iter().find(|tray| (&mut ***tray).as_inner_mut().is_menu_shown()) {
+                    &mut **tray
                 } else {
                     return 0;
                 };
@@ -226,22 +226,24 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             }
         }
         crate::tray::MESSAGE => {
-        	let evt = minwindef::LOWORD(lparam as u32);
+            use plygui_api::controls::Member;
+
+            let evt = minwindef::LOWORD(lparam as u32);
             let id = minwindef::HIWORD(lparam as u32);
-            
+
             let w: &mut application::Application = mem::transmute(ww);
-            
-            let tray = if let Some(tray) = w.as_inner_mut().trays.iter().find(|(tid,_)| tid.into_raw() as u16 == id) {
-	            &mut *tray.1
+
+            let tray = if let Some(tray) = w.as_inner_mut().trays.iter().find(|tray| (&***tray).id() == ids::Id::from_raw(id as usize)) {
+                &mut **tray
             } else {
-	            return 0;
+                return 0;
             };
-            
+
             match evt as u32 {
-            	winuser::WM_CONTEXTMENU => {
-            		tray.as_inner_mut().toggle_menu();		            
-		        }
-            	_ => {}
+                winuser::WM_CONTEXTMENU => {
+                    tray.as_inner_mut().toggle_menu();
+                }
+                _ => {}
             }
         }
         _ => {}

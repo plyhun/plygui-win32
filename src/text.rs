@@ -54,19 +54,7 @@ impl ControlInner for WindowsText {
         let (hwnd, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
             let (w, h, _) = self.measure(member, control, pw, ph);
-            common::create_control_hwnd(
-                x as i32,
-                y as i32,
-                w as i32,
-                h as i32,
-                self.base.hwnd,
-                0,
-                WINDOW_CLASS.as_ptr(),
-                self.text.as_str(),
-                winuser::WS_TABSTOP,
-                selfptr,
-                Some(handler),
-            )
+            common::create_control_hwnd(x as i32, y as i32, w as i32, h as i32, self.base.hwnd, 0, WINDOW_CLASS.as_ptr(), self.text.as_str(), winuser::WS_TABSTOP, selfptr, Some(handler))
         };
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
@@ -107,7 +95,7 @@ impl HasLayoutInner for WindowsText {
 impl HasSizeInner for WindowsText {
     fn on_size_set(&mut self, base: &mut MemberBase, (width, height): (u16, u16)) -> bool {
         use plygui_api::controls::HasLayout;
-        
+
         let this = base.as_any_mut().downcast_mut::<Text>().unwrap();
         this.set_layout_width(layout::Size::Exact(width));
         this.set_layout_width(layout::Size::Exact(height));
