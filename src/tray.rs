@@ -1,5 +1,5 @@
-use crate::common::{self, *};
 use crate::application::Application;
+use crate::common::{self, *};
 
 use winapi::um::shellapi;
 

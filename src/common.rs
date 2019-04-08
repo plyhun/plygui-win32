@@ -44,7 +44,6 @@ impl AsRef<windef::HFONT> for Hfont {
     }
 }
 impl Drop for Hfont {
-    
     fn drop(&mut self) {
         unsafe {
             if wingdi::DeleteObject(self.0 as *mut c_void) == minwindef::FALSE {
