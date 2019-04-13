@@ -36,6 +36,13 @@ impl ClickableInner for WindowsButton {
     fn on_click(&mut self, handle: Option<callbacks::OnClick>) {
         self.h_left_clicked = handle;
     }
+    fn click(&mut self) {
+        if !self.base.hwnd.is_null() {
+            unsafe {
+                winuser::SendMessageW(self.base.hwnd, winuser::BM_CLICK, 0, 0);
+            }
+        }
+    }
 }
 
 impl ButtonInner for WindowsButton {
