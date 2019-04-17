@@ -58,8 +58,6 @@ impl ApplicationInner for WindowsApplication {
     fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::Menu) -> Box<dyn controls::Window> {
         let w = window::WindowsWindow::with_params(title, size, menu);
         unsafe {
-            use plygui_api::controls::HasNativeId;
-
             self.windows.push(w.native_id() as windef::HWND);
         }
         w
@@ -104,7 +102,7 @@ impl ApplicationInner for WindowsApplication {
         }
     }
     fn find_member_by_id_mut(&mut self, id: Id) -> Option<&mut dyn controls::Member> {
-        use plygui_api::controls::{Container, Member, SingleContainer};
+        use plygui_api::controls::{Member, SingleContainer};
 
         for window in self.windows.as_mut_slice() {
             if let Some(window) = common::member_from_hwnd::<window::Window>(*window) {
@@ -118,7 +116,7 @@ impl ApplicationInner for WindowsApplication {
         None
     }
     fn find_member_by_id(&self, id: Id) -> Option<&dyn controls::Member> {
-        use plygui_api::controls::{Container, Member, SingleContainer};
+        use plygui_api::controls::{Member, SingleContainer};
 
         for window in self.windows.as_slice() {
             if let Some(window) = common::member_from_hwnd::<window::Window>(*window) {
@@ -132,8 +130,6 @@ impl ApplicationInner for WindowsApplication {
         None
     }
     fn exit(&mut self, skip_on_close: bool) -> bool {
-        use plygui_api::controls::Closeable;
-
         for window in self.windows.as_mut_slice() {
             if !common::member_from_hwnd::<window::Window>(*window).unwrap().close(skip_on_close) {
                 return false;
