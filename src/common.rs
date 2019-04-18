@@ -15,6 +15,7 @@ pub use winapi::um::winbase;
 pub use winapi::um::wingdi;
 pub use winapi::um::winnls;
 pub use winapi::um::winuser;
+pub use winapi::um::synchapi;
 
 pub use std::borrow::Cow;
 pub use std::ffi::{CString, IntoStringError, OsStr};

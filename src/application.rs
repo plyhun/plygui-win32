@@ -81,7 +81,9 @@ impl ApplicationInner for WindowsApplication {
         let mut msg: winuser::MSG = unsafe { mem::zeroed() };
         let mut i;
         loop {
-            unsafe { 
+            unsafe {
+                synchapi::Sleep(100);
+                
                 if winuser::PeekMessageW(&mut msg, ptr::null_mut(), 0, 0, winuser::PM_REMOVE) > 0 {
                     winuser::TranslateMessage(&mut msg);
                     winuser::DispatchMessageW(&mut msg);
