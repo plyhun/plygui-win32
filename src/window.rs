@@ -18,29 +18,28 @@ pub type Window = Member<SingleContainer<plygui_api::development::Window<Windows
 
 impl WindowsWindow {
     pub(crate) fn dispatch(&mut self) -> i32 {
-        let ret = unsafe { winuser::GetMessageW(&mut self.msg, ptr::null_mut(), 0, 0) };
+        let ret = unsafe { winuser::PeekMessageW(&mut self.msg, ptr::null_mut(), 0, 0, winuser::PM_REMOVE) };
         if ret > 0 {
             unsafe {
                 winuser::TranslateMessage(&mut self.msg);
                 winuser::DispatchMessageW(&mut self.msg);
             }
-
-            let mut frame_callbacks = 0;
-            while !self.hwnd.is_null() && frame_callbacks < defaults::MAX_FRAME_CALLBACKS {
-                if let Some(w) = member_from_hwnd::<Window>(self.hwnd) {
-                    let w = w.as_inner_mut().as_inner_mut().base_mut();
-                    match w.queue().try_recv() {
-                        Ok(mut cmd) => {
-                            if (cmd.as_mut())(member_from_hwnd::<Window>(self.hwnd).unwrap()) {
-                                let _ = w.sender().send(cmd);
-                            }
-                            frame_callbacks += 1;
+        }
+        let mut frame_callbacks = 0;
+        while !self.hwnd.is_null() && frame_callbacks < defaults::MAX_FRAME_CALLBACKS {
+            if let Some(w) = member_from_hwnd::<Window>(self.hwnd) {
+                let w = w.as_inner_mut().as_inner_mut().base_mut();
+                match w.queue().try_recv() {
+                    Ok(mut cmd) => {
+                        if (cmd.as_mut())(member_from_hwnd::<Window>(self.hwnd).unwrap()) {
+                            let _ = w.sender().send(cmd);
                         }
-                        Err(e) => match e {
-                            mpsc::TryRecvError::Empty => break,
-                            mpsc::TryRecvError::Disconnected => unreachable!(),
-                        },
+                        frame_callbacks += 1;
                     }
+                    Err(e) => match e {
+                        mpsc::TryRecvError::Empty => break,
+                        mpsc::TryRecvError::Disconnected => unreachable!(),
+                    },
                 }
             }
         }

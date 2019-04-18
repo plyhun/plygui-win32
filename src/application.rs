@@ -80,15 +80,17 @@ impl ApplicationInner for WindowsApplication {
     fn start(&mut self) {
         let mut msg: winuser::MSG = unsafe { mem::zeroed() };
         let mut i;
-        while unsafe { winuser::GetMessageW(&mut msg, ptr::null_mut(), 0, 0) } > 0 {
-            unsafe {
-                winuser::TranslateMessage(&mut msg);
-                winuser::DispatchMessageW(&mut msg);
+        loop {
+            unsafe { 
+                if winuser::PeekMessageW(&mut msg, ptr::null_mut(), 0, 0, winuser::PM_REMOVE) > 0 {
+                    winuser::TranslateMessage(&mut msg);
+                    winuser::DispatchMessageW(&mut msg);
+                }
             }
 
             i = 0;
             while i < self.windows.len() {
-                if dispatch_window(self.windows[i]) <= 0 {
+                if dispatch_window(self.windows[i]) < 0 {
                     self.windows.remove(i);
                 } else {
                     i += 1;
@@ -98,6 +100,7 @@ impl ApplicationInner for WindowsApplication {
                 unsafe {
                     winuser::DestroyWindow(self.root);
                 }
+                break;
             }
         }
     }
