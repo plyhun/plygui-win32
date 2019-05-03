@@ -82,7 +82,7 @@ impl ApplicationInner for WindowsApplication {
         let mut i;
         loop {
             unsafe {
-                synchapi::Sleep(100);
+                synchapi::Sleep(10);
                 
                 if winuser::PeekMessageW(&mut msg, ptr::null_mut(), 0, 0, winuser::PM_REMOVE) > 0 {
                     winuser::TranslateMessage(&mut msg);

@@ -11,11 +11,11 @@ pub use winapi::um::commctrl;
 pub use winapi::um::errhandlingapi;
 pub use winapi::um::libloaderapi;
 pub use winapi::um::stringapiset;
+pub use winapi::um::synchapi;
 pub use winapi::um::winbase;
 pub use winapi::um::wingdi;
 pub use winapi::um::winnls;
 pub use winapi::um::winuser;
-pub use winapi::um::synchapi;
 
 pub use std::borrow::Cow;
 pub use std::ffi::{CString, IntoStringError, OsStr};
@@ -291,6 +291,11 @@ pub unsafe fn create_control_hwnd(
 
 pub fn str_to_wchar<S: AsRef<str>>(a: S) -> Vec<u16> {
     OsStr::new(a.as_ref()).encode_wide().chain(Some(0).into_iter()).collect()
+}
+pub unsafe fn wchar_to_str(p: *const u16) -> String {
+    let len = (0..).take_while(|&i| *p.offset(i) != 0).count();
+    let slice = std::slice::from_raw_parts(p, len);
+    String::from_utf16_lossy(slice)
 }
 
 #[inline]

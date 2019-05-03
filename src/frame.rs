@@ -258,23 +258,7 @@ impl HasVisibilityInner for WindowsFrame {
     }
 }
 
-impl MemberInner for WindowsFrame {
-    /*fn size(&self) -> (u16, u16) {
-        self.base.size()
-    }
-
-    fn on_set_visibility(&mut self, base: &mut MemberBase) {
-        let hwnd = self.base.hwnd;
-        if !hwnd.is_null() {
-            unsafe {
-                winuser::ShowWindow(self.hwnd_gbox, if base.visibility == types::Visibility::Visible { winuser::SW_SHOW } else { winuser::SW_HIDE });
-                winuser::ShowWindow(self.base.hwnd, if base.visibility == types::Visibility::Visible { winuser::SW_SHOW } else { winuser::SW_HIDE });
-            }
-            self.on_layout_changed(base);
-        }
-    }
-    */
-}
+impl MemberInner for WindowsFrame {}
 
 impl Drawable for WindowsFrame {
     fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase) {
