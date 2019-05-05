@@ -20,7 +20,7 @@ impl WindowsTray {
     pub(crate) fn toggle_menu(&mut self) {
         if !self.menu.0.is_null() {
             unsafe {
-                let hwnd = Application::get().native_id() as windef::HWND;
+                let hwnd = Application::get().unwrap().native_id() as windef::HWND;
                 if self.menu.2 > -2 {
                     self.menu.2 = -2;
                     winuser::SendMessageW(hwnd, winuser::WM_CANCELMODE, 0, 0);
@@ -74,7 +74,7 @@ impl CloseableInner for WindowsTray {
             }
         }
 
-        let mut app = Application::get();
+        let mut app = Application::get().unwrap();
         let app = app.as_any_mut().downcast_mut::<Application>().unwrap();
 
         unsafe {
@@ -112,7 +112,7 @@ impl TrayInner for WindowsTray {
         let tip_size = t.as_inner_mut().cfg.szTip.len();
         let title = OsStr::new(t.as_inner().label.as_str()).encode_wide().take(tip_size - 1).chain(Some(0).into_iter()).collect::<Vec<_>>();
 
-        t.as_inner_mut().cfg.hWnd = unsafe { app.native_id() as windef::HWND };
+        t.as_inner_mut().cfg.hWnd = unsafe { app.unwrap().native_id() as windef::HWND };
         t.as_inner_mut().cfg.cbSize = mem::size_of::<shellapi::NOTIFYICONDATAW>() as u32;
         t.as_inner_mut().cfg.uID = unsafe { t.id().into_raw() as u32 };
         //t.as_inner_mut().cfg.hIcon = unsafe { winuser::GetClassLongW(app.as_inner().root.into(), winuser::GCL_HICON) as windef::HICON };
