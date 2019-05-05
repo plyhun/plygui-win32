@@ -10,7 +10,7 @@ pub struct WindowsWindow {
     msg: winuser::MSG,
     child: Option<Box<dyn controls::Control>>,
     menu: Vec<callbacks::Action>,
-    on_close: Option<callbacks::Action>,
+    on_close: Option<callbacks::OnClose>,
     skip_callbacks: bool,
 }
 
@@ -59,7 +59,7 @@ impl WindowsWindow {
 }
 
 impl HasLabelInner for WindowsWindow {
-    fn label<'a>(&'a self) -> ::std::borrow::Cow<'a, str> {
+    fn label(&self, _base: &MemberBase) -> Cow<str> {
         if self.hwnd != 0 as windef::HWND {
             let mut wbuffer = vec![0u16; 4096];
             let len = unsafe { winuser::GetWindowTextW(self.hwnd, wbuffer.as_mut_slice().as_mut_ptr(), 4096) };
@@ -68,9 +68,9 @@ impl HasLabelInner for WindowsWindow {
             unreachable!();
         }
     }
-    fn set_label(&mut self, _: &mut MemberBase, label: &str) {
+    fn set_label(&mut self, _: &mut MemberBase, label: Cow<str>) {
         if self.hwnd != 0 as windef::HWND {
-            let control_name = OsStr::new(label).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+            let control_name = OsStr::new(label.as_ref()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
             unsafe {
                 winuser::SetWindowTextW(self.hwnd, control_name.as_ptr());
             }
@@ -241,7 +241,7 @@ impl CloseableInner for WindowsWindow {
         }
         self.hwnd.is_null()
     }
-    fn on_close(&mut self, callback: Option<callbacks::Action>) {
+    fn on_close(&mut self, callback: Option<callbacks::OnClose>) {
         self.on_close = callback;
     }
 }

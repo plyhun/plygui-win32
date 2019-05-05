@@ -13,13 +13,15 @@ pub struct WindowsButton {
     base: common::WindowsControlBase<Button>,
     label: String,
     h_left_clicked: Option<callbacks::OnClick>,
+    h_on_label: Option<callbacks::OnLabel>,
+    skip_callbacks: bool,
 }
 
 impl HasLabelInner for WindowsButton {
-    fn label<'a>(&'a self) -> Cow<'a, str> {
+    fn label<'a>(&'a self, _: &MemberBase) -> Cow<'a, str> {
         Cow::Borrowed(self.label.as_ref())
     }
-    fn set_label(&mut self, _base: &mut MemberBase, label: &str) {
+    fn set_label(&mut self, _base: &mut MemberBase, label: Cow<str>) {
         self.label = label.into();
         let hwnd = self.base.hwnd;
         if !hwnd.is_null() {
@@ -36,11 +38,14 @@ impl ClickableInner for WindowsButton {
     fn on_click(&mut self, handle: Option<callbacks::OnClick>) {
         self.h_left_clicked = handle;
     }
-    fn click(&mut self) {
+    fn click(&mut self, skip_callbacks: bool) -> bool {
         if !self.base.hwnd.is_null() {
+            self.skip_callbacks = skip_callbacks;
             unsafe {
-                winuser::SendMessageW(self.base.hwnd, winuser::BM_CLICK, 0, 0);
+                winuser::SendMessageW(self.base.hwnd, winuser::BM_CLICK, 0, 0) == 0
             }
+        } else {
+            false
         }
     }
 }
@@ -52,7 +57,9 @@ impl ButtonInner for WindowsButton {
                 WindowsButton {
                     base: common::WindowsControlBase::new(),
                     h_left_clicked: None,
+                    h_on_label: None,
                     label: label.to_owned(),
+                    skip_callbacks: false,
                 },
                 (),
             ),
@@ -204,13 +211,18 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
         winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as isize);
     }
     match msg {
-        winuser::WM_LBUTTONDOWN => {
+        winuser::WM_LBUTTONUP => {
             let button: &mut Button = mem::transmute(param);
-            if let Some(ref mut cb) = button.as_inner_mut().as_inner_mut().h_left_clicked {
-                let button2: &mut Button = mem::transmute(param);
-                (cb.as_mut())(button2);
+            if button.as_inner().as_inner().skip_callbacks {
+                return 0;
+            } else {
+                if let Some(ref mut cb) = button.as_inner_mut().as_inner_mut().h_left_clicked {
+                    let button2: &mut Button = mem::transmute(param);
+                    if (cb.as_mut())(button2) {
+                        return 0;
+                    }
+                }
             }
-            return 0;
         }
         winuser::WM_SIZE => {
             let width = lparam as u16;

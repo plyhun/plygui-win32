@@ -34,10 +34,10 @@ pub struct WindowsMessage {
 pub type Message = Member<WindowsMessage>;
 
 impl HasLabelInner for WindowsMessage {
-    fn label<'a>(&'a self) -> Cow<'a, str> {
+    fn label(&self, _base: &MemberBase) -> Cow<str> {
         Cow::Borrowed(self.label.as_ref())
     }
-    fn set_label(&mut self, _base: &mut MemberBase, label: &str) {
+    fn set_label(&mut self, _base: &mut MemberBase, label: Cow<str>) {
         self.label = label.into();
         if !self.hwnd.is_null() {
             let control_name = common::str_to_wchar(&self.label);

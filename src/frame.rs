@@ -52,10 +52,10 @@ impl HasLayoutInner for WindowsFrame {
 }
 
 impl HasLabelInner for WindowsFrame {
-    fn label<'a>(&'a self) -> ::std::borrow::Cow<'a, str> {
+    fn label(&self, _base: &MemberBase) -> Cow<str> {
         Cow::Borrowed(self.label.as_ref())
     }
-    fn set_label(&mut self, base: &mut MemberBase, label: &str) {
+    fn set_label(&mut self, base: &mut MemberBase, label: Cow<str>) {
         self.label = label.into();
         let hwnd = self.base.hwnd;
         if !hwnd.is_null() {

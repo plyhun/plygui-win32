@@ -15,10 +15,10 @@ pub struct WindowsText {
 }
 
 impl HasLabelInner for WindowsText {
-    fn label<'a>(&'a self) -> Cow<'a, str> {
+    fn label(&self, _base: &MemberBase) -> Cow<str> {
         Cow::Borrowed(self.text.as_ref())
     }
-    fn set_label(&mut self, _base: &mut MemberBase, label: &str) {
+    fn set_label(&mut self, _base: &mut MemberBase, label: Cow<str>) {
         self.text = label.into();
         let hwnd = self.base.hwnd;
         if !hwnd.is_null() {

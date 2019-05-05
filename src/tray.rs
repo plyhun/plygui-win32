@@ -10,7 +10,7 @@ pub struct WindowsTray {
     label: String,
     cfg: shellapi::NOTIFYICONDATAW,
     menu: (windef::HMENU, Vec<callbacks::Action>, isize),
-    on_close: Option<callbacks::Action>,
+    on_close: Option<callbacks::OnClose>,
     this: *mut Tray,
 }
 
@@ -50,10 +50,10 @@ impl WindowsTray {
 }
 
 impl HasLabelInner for WindowsTray {
-    fn label<'a>(&'a self) -> Cow<'a, str> {
+    fn label(&self, _base: &MemberBase) -> Cow<str> {
         Cow::Borrowed(self.label.as_ref())
     }
-    fn set_label(&mut self, _base: &mut MemberBase, label: &str) {
+    fn set_label(&mut self, _base: &mut MemberBase, label: Cow<str>) {
         self.label = label.into();
         if !self.cfg.hWnd.is_null() {
             let control_name = common::str_to_wchar(&self.label);
@@ -86,7 +86,7 @@ impl CloseableInner for WindowsTray {
 
         true
     }
-    fn on_close(&mut self, callback: Option<callbacks::Action>) {
+    fn on_close(&mut self, callback: Option<callbacks::OnClose>) {
         self.on_close = callback;
     }
 }
