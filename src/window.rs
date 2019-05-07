@@ -25,24 +25,6 @@ impl WindowsWindow {
                 winuser::DispatchMessageW(&mut self.msg);
             }
         }
-        let mut frame_callbacks = 0;
-        while !self.hwnd.is_null() && frame_callbacks < defaults::MAX_FRAME_CALLBACKS {
-            if let Some(w) = member_from_hwnd::<Window>(self.hwnd) {
-                let w = w.as_inner_mut().as_inner_mut().base_mut();
-                match w.queue().try_recv() {
-                    Ok(mut cmd) => {
-                        if (cmd.as_mut())(member_from_hwnd::<Window>(self.hwnd).unwrap()) {
-                            let _ = w.sender().send(cmd);
-                        }
-                        frame_callbacks += 1;
-                    }
-                    Err(e) => match e {
-                        mpsc::TryRecvError::Empty => break,
-                        mpsc::TryRecvError::Disconnected => unreachable!(),
-                    },
-                }
-            }
-        }
         ret
     }
     fn size_inner(&self) -> (u16, u16) {
@@ -165,14 +147,6 @@ impl WindowInner for WindowsWindow {
 
             w
         }
-    }
-    fn on_frame(&mut self, cb: callbacks::OnFrame) {
-        if let Some(window) = member_from_hwnd::<Window>(self.hwnd) {
-            let _ = window.as_inner_mut().as_inner_mut().base_mut().sender().send(cb);
-        }
-    }
-    fn on_frame_async_feeder(&mut self) -> callbacks::AsyncFeeder<callbacks::OnFrame> {
-        member_from_hwnd::<Window>(self.hwnd).unwrap().as_inner_mut().as_inner_mut().base_mut().sender().clone().into()
     }
     fn size(&self) -> (u16, u16) {
         common::size_hwnd(self.hwnd)

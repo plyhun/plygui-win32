@@ -81,6 +81,24 @@ impl ApplicationInner for WindowsApplication {
         let mut msg: winuser::MSG = unsafe { mem::zeroed() };
         let mut i;
         loop {
+            let mut frame_callbacks = 0;
+            while !self.root.is_null() && frame_callbacks < defaults::MAX_FRAME_CALLBACKS {
+                if let Some(w) = unsafe { cast_hwnd::<Application>(self.root) } {
+                    let w = w.base_mut();
+                    match w.queue().try_recv() {
+                        Ok(mut cmd) => {
+                            if (cmd.as_mut())(unsafe { cast_hwnd::<Application>(self.root) }.unwrap()) {
+                                let _ = w.sender().send(cmd);
+                            }
+                            frame_callbacks += 1;
+                        }
+                        Err(e) => match e {
+                            mpsc::TryRecvError::Empty => break,
+                            mpsc::TryRecvError::Disconnected => unreachable!(),
+                        },
+                    }
+                }
+            }
             unsafe {
                 synchapi::Sleep(10);
                 
@@ -107,15 +125,21 @@ impl ApplicationInner for WindowsApplication {
         }
     }
     fn find_member_by_id_mut(&mut self, id: Id) -> Option<&mut dyn controls::Member> {
-        use plygui_api::controls::{Member, SingleContainer};
+        use plygui_api::controls::Member;
 
         for window in self.windows.as_mut_slice() {
             if let Some(window) = common::member_from_hwnd::<window::Window>(*window) {
                 if window.id() == id {
-                    return Some(window.as_single_container_mut().as_container_mut().as_member_mut());
+                    return Some(window.as_member_mut());
                 } else {
                     return window.find_control_by_id_mut(id).map(|control| control.as_member_mut());
                 }
+            }
+        }
+        for tray in self.trays.as_mut_slice() {
+            let tray = unsafe { &mut **tray };
+            if tray.id() == id {
+                return Some(tray.as_member_mut());
             }
         }
         None
@@ -132,6 +156,12 @@ impl ApplicationInner for WindowsApplication {
                 }
             }
         }
+        for tray in self.trays.as_slice() {
+            let tray = unsafe { &mut **tray };
+            if tray.id() == id {
+                return Some(tray.as_member());
+            }
+        }
         None
     }
     fn exit(&mut self, skip_on_close: bool) -> bool {
@@ -145,7 +175,6 @@ impl ApplicationInner for WindowsApplication {
                 return false;
             }
         }
-
         true
     }
 }
