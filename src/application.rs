@@ -232,7 +232,7 @@ struct MemberIteratorMut<'a> {
     index: usize,
 }
 impl<'a> Iterator for MemberIteratorMut<'a> {
-    type Item = &'a mut (controls::Member + 'static);
+    type Item = &'a mut (controls::Member);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index >= self.inner.windows.len() {
