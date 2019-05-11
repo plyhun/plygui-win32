@@ -157,18 +157,18 @@ impl WindowInner for WindowsWindow {
 }
 
 impl ContainerInner for WindowsWindow {
-    fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut dyn controls::Control> {
+    fn find_control_mut(&mut self, arg: types::FindBy) -> Option<&mut dyn controls::Control> {
         if let Some(child) = self.child.as_mut() {
             if let Some(c) = child.is_container_mut() {
-                return c.find_control_by_id_mut(id_);
+                return c.find_control_mut(arg);
             }
         }
         None
     }
-    fn find_control_by_id(&self, id_: ids::Id) -> Option<&dyn controls::Control> {
+    fn find_control(&self, arg: types::FindBy) -> Option<&dyn controls::Control> {
         if let Some(child) = self.child.as_ref() {
             if let Some(c) = child.is_container() {
-                return c.find_control_by_id(id_);
+                return c.find_control(arg);
             }
         }
         None

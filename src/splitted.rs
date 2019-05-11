@@ -248,51 +248,80 @@ impl HasLayoutInner for WindowsSplitted {
 }
 
 impl ContainerInner for WindowsSplitted {
-    fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut dyn controls::Control> {
-        if self.first().as_member().id() == id_ {
-            return Some(self.first_mut());
-        }
-        if self.second().as_member().id() == id_ {
-            return Some(self.second_mut());
+    fn find_control_mut(&mut self, arg: types::FindBy) -> Option<&mut dyn controls::Control> {
+        match arg {
+            types::FindBy::Id(id) => {
+                if self.first().as_member().id() == id {
+                    return Some(self.first_mut());
+                }
+                if self.second().as_member().id() == id {
+                    return Some(self.second_mut());
+                }
+            }
+            types::FindBy::Tag(ref tag) => {
+                if let Some(mytag) = self.first.as_member().tag() {
+                    if tag.as_str() == mytag {
+                        return Some(self.first_mut());
+                    }
+                }
+                if let Some(mytag) = self.second.as_member().tag() {
+                    if tag.as_str() == mytag {
+                        return Some(self.second_mut());
+                    }
+                }
+            }
         }
 
         let self2: &mut WindowsSplitted = unsafe { mem::transmute(self as *mut WindowsSplitted) }; // bck is stupid
         if let Some(c) = self.first_mut().is_container_mut() {
-            let ret = c.find_control_by_id_mut(id_);
+            let ret = c.find_control_mut(arg.clone());
             if ret.is_some() {
                 return ret;
             }
         }
         if let Some(c) = self2.second_mut().is_container_mut() {
-            let ret = c.find_control_by_id_mut(id_);
+            let ret = c.find_control_mut(arg);
             if ret.is_some() {
                 return ret;
             }
         }
-
         None
     }
-    fn find_control_by_id(&self, id_: ids::Id) -> Option<&dyn controls::Control> {
-        if self.first().as_member().id() == id_ {
-            return Some(self.first());
+    fn find_control(&self, arg: types::FindBy) -> Option<&dyn controls::Control> {
+        match arg {
+            types::FindBy::Id(id) => {
+                if self.first().as_member().id() == id {
+                    return Some(self.first());
+                }
+                if self.second().as_member().id() == id {
+                    return Some(self.second());
+                }
+            }
+            types::FindBy::Tag(ref tag) => {
+                if let Some(mytag) = self.first.as_member().tag() {
+                    if tag.as_str() == mytag {
+                        return Some(self.first.as_ref());
+                    }
+                }
+                if let Some(mytag) = self.second.as_member().tag() {
+                    if tag.as_str() == mytag {
+                        return Some(self.second.as_ref());
+                    }
+                }
+            }
         }
-        if self.second().as_member().id() == id_ {
-            return Some(self.second());
-        }
-
         if let Some(c) = self.first().is_container() {
-            let ret = c.find_control_by_id(id_);
+            let ret = c.find_control(arg.clone());
             if ret.is_some() {
                 return ret;
             }
         }
         if let Some(c) = self.second().is_container() {
-            let ret = c.find_control_by_id(id_);
+            let ret = c.find_control(arg);
             if ret.is_some() {
                 return ret;
             }
         }
-
         None
     }
 }

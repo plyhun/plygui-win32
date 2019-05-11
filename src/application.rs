@@ -2,7 +2,6 @@ use super::common::*;
 use super::*;
 
 use plygui_api::controls;
-use plygui_api::ids::Id;
 use plygui_api::types;
 
 use winapi::shared::windef;
@@ -124,42 +123,90 @@ impl ApplicationInner for WindowsApplication {
             }
         }
     }
-    fn find_member_by_id_mut(&mut self, id: Id) -> Option<&mut dyn controls::Member> {
+    fn find_member_mut(&mut self, arg: types::FindBy) -> Option<&mut dyn controls::Member> {
         use plygui_api::controls::Member;
 
         for window in self.windows.as_mut_slice() {
             if let Some(window) = common::member_from_hwnd::<window::Window>(*window) {
-                if window.id() == id {
-                    return Some(window.as_member_mut());
-                } else {
-                    return window.find_control_by_id_mut(id).map(|control| control.as_member_mut());
+                match arg {
+                    types::FindBy::Id(id) => {
+                        if window.id() == id {
+                            return Some(window.as_member_mut());
+                        }
+                    }
+                    types::FindBy::Tag(ref tag) => {
+                        if let Some(mytag) = window.tag() {
+                            if tag.as_str() == mytag {
+                                return Some(window.as_member_mut());
+                            }
+                        }
+                    }
+                }
+                let found = window.find_control_mut(arg.clone()).map(|control| control.as_member_mut());
+                if found.is_some() {
+                    return found;
                 }
             }
         }
         for tray in self.trays.as_mut_slice() {
             let tray = unsafe { &mut **tray };
-            if tray.id() == id {
-                return Some(tray.as_member_mut());
+            match arg {
+                types::FindBy::Id(ref id) => {
+                    if tray.id() == *id {
+                        return Some(tray.as_member_mut());
+                    }
+                }
+                types::FindBy::Tag(ref tag) => {
+                    if let Some(mytag) = tray.tag() {
+                        if tag.as_str() == mytag {
+                            return Some(tray.as_member_mut());
+                        }
+                    }
+                }
             }
         }
         None
     }
-    fn find_member_by_id(&self, id: Id) -> Option<&dyn controls::Member> {
-        use plygui_api::controls::{Member, SingleContainer};
+    fn find_member(&self, arg: types::FindBy) -> Option<&dyn controls::Member> {
+        use plygui_api::controls::Member;
 
         for window in self.windows.as_slice() {
             if let Some(window) = common::member_from_hwnd::<window::Window>(*window) {
-                if window.id() == id {
-                    return Some(window.as_single_container().as_container().as_member());
-                } else {
-                    return window.find_control_by_id_mut(id).map(|control| control.as_member());
+                match arg {
+                    types::FindBy::Id(id) => {
+                        if window.id() == id {
+                            return Some(window.as_member());
+                        }
+                    }
+                    types::FindBy::Tag(ref tag) => {
+                        if let Some(mytag) = window.tag() {
+                            if tag.as_str() == mytag {
+                                return Some(window.as_member());
+                            }
+                        }
+                    }
+                }
+                let found = window.find_control(arg.clone()).map(|control| control.as_member());
+                if found.is_some() {
+                    return found;
                 }
             }
         }
         for tray in self.trays.as_slice() {
             let tray = unsafe { &mut **tray };
-            if tray.id() == id {
-                return Some(tray.as_member());
+            match arg {
+                types::FindBy::Id(ref id) => {
+                    if tray.id() == *id {
+                        return Some(tray.as_member());
+                    }
+                }
+                types::FindBy::Tag(ref tag) => {
+                    if let Some(mytag) = tray.tag() {
+                        if tag.as_str() == mytag {
+                            return Some(tray.as_member());
+                        }
+                    }
+                }
             }
         }
         None
@@ -178,10 +225,22 @@ impl ApplicationInner for WindowsApplication {
         true
     }
     fn members<'a>(&'a self) -> Box<dyn Iterator<Item = &'a (dyn controls::Member)> + 'a> {
-        Box::new(MemberIterator { inner: self, is_tray: false, index: 0 })
+        Box::new(MemberIterator {
+            inner: self,
+            is_tray: false,
+            index: 0,
+            needs_window: true,
+            needs_tray: true,
+        })
     }
     fn members_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut (dyn controls::Member)> + 'a> {
-        Box::new(MemberIteratorMut { inner: self, is_tray: false, index: 0 })
+        Box::new(MemberIteratorMut {
+            inner: self,
+            is_tray: false,
+            index: 0,
+            needs_window: true,
+            needs_tray: true,
+        })
     }
 }
 
@@ -205,6 +264,8 @@ impl Drop for WindowsApplication {
 
 struct MemberIterator<'a> {
     inner: &'a WindowsApplication,
+    needs_window: bool,
+    needs_tray: bool,
     is_tray: bool,
     index: usize,
 }
@@ -216,10 +277,12 @@ impl<'a> Iterator for MemberIterator<'a> {
             self.is_tray = true;
             self.index = 0;
         }
-        let ret = if self.is_tray {
+        let ret = if self.needs_tray && self.is_tray {
             self.inner.trays.get(self.index).map(|tray| unsafe { &**tray } as &controls::Member)
-        } else {
+        } else if self.needs_window {
             self.inner.windows.get(self.index).map(|window| common::member_from_hwnd::<window::Window>(*window).unwrap() as &controls::Member)
+        } else {
+            return None;
         };
         self.index += 1;
         ret
@@ -228,6 +291,8 @@ impl<'a> Iterator for MemberIterator<'a> {
 
 struct MemberIteratorMut<'a> {
     inner: &'a mut WindowsApplication,
+    needs_window: bool,
+    needs_tray: bool,
     is_tray: bool,
     index: usize,
 }
@@ -235,14 +300,16 @@ impl<'a> Iterator for MemberIteratorMut<'a> {
     type Item = &'a mut (controls::Member);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index >= self.inner.windows.len() {
+        if self.needs_tray && self.index >= self.inner.windows.len() {
             self.is_tray = true;
             self.index = 0;
         }
-        let ret = if self.is_tray {
+        let ret = if self.needs_tray && self.is_tray {
             self.inner.trays.get_mut(self.index).map(|tray| unsafe { &mut **tray } as &mut controls::Member)
-        } else {
+        } else if self.needs_window {
             self.inner.windows.get_mut(self.index).map(|window| common::member_from_hwnd::<window::Window>(*window).unwrap() as &mut controls::Member)
+        } else {
+            return None;
         };
         self.index += 1;
         ret

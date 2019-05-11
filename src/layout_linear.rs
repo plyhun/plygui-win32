@@ -200,12 +200,24 @@ impl HasVisibilityInner for WindowsLinearLayout {
 }
 
 impl ContainerInner for WindowsLinearLayout {
-    fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut dyn controls::Control> {
+    fn find_control_mut(&mut self, arg: types::FindBy) -> Option<&mut dyn controls::Control> {
         for child in self.children.as_mut_slice() {
-            if child.as_member().id() == id_ {
-                return Some(child.as_mut());
-            } else if let Some(c) = child.is_container_mut() {
-                let ret = c.find_control_by_id_mut(id_);
+            match arg {
+                types::FindBy::Id(ref id) => {
+                    if child.as_member_mut().id() == *id {
+                        return Some(child.as_mut());
+                    }
+                }
+                types::FindBy::Tag(ref tag) => {
+                    if let Some(mytag) = child.as_member_mut().tag() {
+                        if tag.as_str() == mytag {
+                            return Some(child.as_mut());
+                        }
+                    }
+                }
+            }
+            if let Some(c) = child.is_container_mut() {
+                let ret = c.find_control_mut(arg.clone());
                 if ret.is_none() {
                     continue;
                 }
@@ -214,12 +226,24 @@ impl ContainerInner for WindowsLinearLayout {
         }
         None
     }
-    fn find_control_by_id(&self, id_: ids::Id) -> Option<&dyn controls::Control> {
+    fn find_control(&self, arg: types::FindBy) -> Option<&dyn controls::Control> {
         for child in self.children.as_slice() {
-            if child.as_member().id() == id_ {
-                return Some(child.as_ref());
-            } else if let Some(c) = child.is_container() {
-                let ret = c.find_control_by_id(id_);
+            match arg {
+                types::FindBy::Id(ref id) => {
+                    if child.as_member().id() == *id {
+                        return Some(child.as_ref());
+                    }
+                }
+                types::FindBy::Tag(ref tag) => {
+                    if let Some(mytag) = child.as_member().tag() {
+                        if tag.as_str() == mytag {
+                            return Some(child.as_ref());
+                        }
+                    }
+                }
+            }
+            if let Some(c) = child.is_container() {
+                let ret = c.find_control(arg.clone());
                 if ret.is_none() {
                     continue;
                 }
