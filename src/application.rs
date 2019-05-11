@@ -101,7 +101,7 @@ impl ApplicationInner for WindowsApplication {
             }
             unsafe {
                 synchapi::Sleep(10);
-                
+
                 if winuser::PeekMessageW(&mut msg, ptr::null_mut(), 0, 0, winuser::PM_REMOVE) > 0 {
                     winuser::TranslateMessage(&mut msg);
                     winuser::DispatchMessageW(&mut msg);
@@ -177,6 +177,12 @@ impl ApplicationInner for WindowsApplication {
         }
         true
     }
+    fn members<'a>(&'a self) -> Box<dyn Iterator<Item = &'a (dyn controls::Member)> + 'a> {
+        Box::new(MemberIterator { inner: self, is_tray: false, index: 0 })
+    }
+    fn members_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut (dyn controls::Member)> + 'a> {
+        Box::new(MemberIteratorMut { inner: self, is_tray: false, index: 0 })
+    }
 }
 
 impl HasNativeIdInner for WindowsApplication {
@@ -194,6 +200,52 @@ impl Drop for WindowsApplication {
         }
         for _ in self.trays.drain(..) {}
         destroy_hwnd(self.root, 0, None);
+    }
+}
+
+struct MemberIterator<'a> {
+    inner: &'a WindowsApplication,
+    is_tray: bool,
+    index: usize,
+}
+impl<'a> Iterator for MemberIterator<'a> {
+    type Item = &'a (controls::Member + 'static);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.inner.windows.len() {
+            self.is_tray = true;
+            self.index = 0;
+        }
+        let ret = if self.is_tray {
+            self.inner.trays.get(self.index).map(|tray| unsafe { &**tray } as &controls::Member)
+        } else {
+            self.inner.windows.get(self.index).map(|window| common::member_from_hwnd::<window::Window>(*window).unwrap() as &controls::Member)
+        };
+        self.index += 1;
+        ret
+    }
+}
+
+struct MemberIteratorMut<'a> {
+    inner: &'a mut WindowsApplication,
+    is_tray: bool,
+    index: usize,
+}
+impl<'a> Iterator for MemberIteratorMut<'a> {
+    type Item = &'a mut (controls::Member + 'static);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.inner.windows.len() {
+            self.is_tray = true;
+            self.index = 0;
+        }
+        let ret = if self.is_tray {
+            self.inner.trays.get_mut(self.index).map(|tray| unsafe { &mut **tray } as &mut controls::Member)
+        } else {
+            self.inner.windows.get_mut(self.index).map(|window| common::member_from_hwnd::<window::Window>(*window).unwrap() as &mut controls::Member)
+        };
+        self.index += 1;
+        ret
     }
 }
 
