@@ -214,9 +214,8 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             if !button.as_inner().as_inner().skip_callbacks {
                 if let Some(ref mut cb) = button.as_inner_mut().as_inner_mut().h_left_clicked {
                     let button2: &mut Button = mem::transmute(param);
-                    if (cb.as_mut())(button2) {
-                        return 0;
-                    }
+                    (cb.as_mut())(button2);
+                    return 0;
                 }
             } 
         }
