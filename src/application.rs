@@ -81,9 +81,9 @@ impl ApplicationInner for WindowsApplication {
         let mut i;
         loop {
             let mut frame_callbacks = 0;
-            while !self.root.is_null() && frame_callbacks < defaults::MAX_FRAME_CALLBACKS {
-                if let Some(w) = unsafe { cast_hwnd::<Application>(self.root) } {
-                    let w = w.base_mut();
+            if let Some(w) = unsafe { cast_hwnd::<Application>(self.root) } {
+                let w = w.base_mut();
+                while !self.root.is_null() && frame_callbacks < defaults::MAX_FRAME_CALLBACKS {
                     match w.queue().try_recv() {
                         Ok(mut cmd) => {
                             if (cmd.as_mut())(unsafe { cast_hwnd::<Application>(self.root) }.unwrap()) {

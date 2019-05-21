@@ -38,14 +38,12 @@ impl ClickableInner for WindowsButton {
     fn on_click(&mut self, handle: Option<callbacks::OnClick>) {
         self.h_left_clicked = handle;
     }
-    fn click(&mut self, skip_callbacks: bool) -> bool {
+    fn click(&mut self, skip_callbacks: bool) {
         if !self.base.hwnd.is_null() {
             self.skip_callbacks = skip_callbacks;
             unsafe {
-                winuser::SendMessageW(self.base.hwnd, winuser::BM_CLICK, 0, 0) == 0
+                winuser::SendMessageW(self.base.hwnd, winuser::BM_CLICK, 0, 0);
             }
-        } else {
-            false
         }
     }
 }
@@ -213,16 +211,14 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
     match msg {
         winuser::WM_LBUTTONUP => {
             let button: &mut Button = mem::transmute(param);
-            if button.as_inner().as_inner().skip_callbacks {
-                return 0;
-            } else {
+            if !button.as_inner().as_inner().skip_callbacks {
                 if let Some(ref mut cb) = button.as_inner_mut().as_inner_mut().h_left_clicked {
                     let button2: &mut Button = mem::transmute(param);
                     if (cb.as_mut())(button2) {
                         return 0;
                     }
                 }
-            }
+            } 
         }
         winuser::WM_SIZE => {
             let width = lparam as u16;
