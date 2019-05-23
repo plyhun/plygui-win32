@@ -81,7 +81,6 @@ impl ControlInner for WindowsText {
         use plygui_api::markup::MEMBER_TYPE_BUTTON;
         fill_from_markup_base!(self, member, markup, registry, Text, [MEMBER_TYPE_BUTTON]);
         fill_from_markup_label!(self, member, markup);
-        fill_from_markup_callbacks!(self, markup, registry, [on_click => plygui_api::callbacks::Click]);
     }
 }
 

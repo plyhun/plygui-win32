@@ -136,8 +136,9 @@ impl ControlInner for WindowsImage {
     }
 
     #[cfg(feature = "markup")]
-    fn fill_from_markup(&mut self, base: &mut development::MemberControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
-        fill_from_markup_base!(self, base, markup, registry, Image, ["Image"]);
+    fn fill_from_markup(&mut self, member: &mut MemberBase, control: &mut ControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
+        use plygui_api::markup::MEMBER_TYPE_IMAGE;
+        fill_from_markup_base!(self, member, markup, registry, Image, [MEMBER_TYPE_IMAGE]);
         //TODO image source
     }
 }
