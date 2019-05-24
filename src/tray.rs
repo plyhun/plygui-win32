@@ -97,11 +97,23 @@ impl HasImageInner for WindowsTray {
     }
     #[inline]
     fn set_image(&mut self, _base: &mut MemberBase, i: Cow<image::DynamicImage>) {
+    	use plygui_api::external::image::GenericImageView;
+    	
+    	let (w,h) = i.dimensions();
+    	let mut mask = image::ImageBuffer::new(w, h);
+	    for x in 0..w {
+	        for y in 0..h {
+	            let bright = std::u8::MAX;
+	            mask.put_pixel(x, y, image::Rgba([bright, bright, bright, 0xff]));
+	        }
+	    }
     	unsafe {
     		if !self.cfg.hIcon.is_null() {
     			winuser::DestroyIcon(self.cfg.hIcon);
     		}
 	        let mut ii: winuser::ICONINFO = mem::zeroed();
+	        ii.fIcon = minwindef::TRUE;
+	        common::image_to_native(&image::DynamicImage::ImageRgba8(mask), &mut ii.hbmMask);
 	        common::image_to_native(&i, &mut ii.hbmColor);
 	        self.cfg.hIcon = winuser::CreateIconIndirect(&mut ii);
 	        if shellapi::Shell_NotifyIconW(shellapi::NIM_MODIFY, &mut self.cfg) == minwindef::FALSE {
