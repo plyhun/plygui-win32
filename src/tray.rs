@@ -99,6 +99,11 @@ impl HasImageInner for WindowsTray {
     fn set_image(&mut self, _base: &mut MemberBase, i: Cow<image::DynamicImage>) {
     	use plygui_api::external::image::GenericImageView;
     	
+    	let i = unsafe {
+    		let status_size = winuser::GetSystemMetrics(winuser::SM_CXSMICON) as u32;
+    		i.resize(status_size, status_size, image::FilterType::Lanczos3)
+    	};
+    	
     	let (w,h) = i.dimensions();
     	let mut mask = image::ImageBuffer::new(w, h);
 	    for x in 0..w {
