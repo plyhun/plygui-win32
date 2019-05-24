@@ -91,6 +91,26 @@ impl CloseableInner for WindowsTray {
     }
 }
 
+impl HasImageInner for WindowsTray {
+	fn image(&self, _base: &MemberBase) -> Cow<image::DynamicImage> {
+        unimplemented!()
+    }
+    #[inline]
+    fn set_image(&mut self, _base: &mut MemberBase, i: Cow<image::DynamicImage>) {
+    	unsafe {
+    		if !self.cfg.hIcon.is_null() {
+    			winuser::DestroyIcon(self.cfg.hIcon);
+    		}
+	        let mut ii: winuser::ICONINFO = mem::zeroed();
+	        common::image_to_native(&i, &mut ii.hbmColor);
+	        self.cfg.hIcon = winuser::CreateIconIndirect(&mut ii);
+	        if shellapi::Shell_NotifyIconW(shellapi::NIM_MODIFY, &mut self.cfg) == minwindef::FALSE {
+                common::log_error();
+            }
+    	}
+    }
+}
+
 impl TrayInner for WindowsTray {
     fn with_params(title: &str, menu: types::Menu) -> Box<Member<Self>> {
         use plygui_api::controls::Member as OuterMember;

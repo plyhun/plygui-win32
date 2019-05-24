@@ -1,5 +1,6 @@
 pub use plygui_api::development::*;
 pub use plygui_api::{callbacks, controls, defaults, ids, layout, types, utils};
+pub use plygui_api::external::image;
 
 pub use winapi::ctypes::c_void;
 pub use winapi::shared::basetsd;
@@ -421,6 +422,39 @@ pub unsafe fn make_menu(menu: windef::HMENU, mut items: Vec<types::MenuItem>, st
 
     make_special(menu, options, storage);
     make_special(menu, help, storage);
+}
+
+pub unsafe fn image_to_native(src: &image::DynamicImage, dst: *mut windef::HBITMAP) {
+    use image::GenericImageView;
+
+    let (w, h) = src.dimensions();
+
+    let bminfo = wingdi::BITMAPINFO {
+        bmiHeader: wingdi::BITMAPINFOHEADER {
+            biSize: mem::size_of::<wingdi::BITMAPINFOHEADER>() as u32,
+            biWidth: w as i32,
+            biHeight: h as i32,
+            biPlanes: 1,
+            biBitCount: 32,
+            biCompression: wingdi::BI_RGB,
+            biSizeImage: 0,
+            biXPelsPerMeter: 0,
+            biYPelsPerMeter: 0,
+            biClrUsed: 0,
+            biClrImportant: 0,
+        },
+        bmiColors: mem::zeroed(),
+    };
+
+    let mut pv_image_bits = ptr::null_mut();
+    let hdc_screen = winuser::GetDC(ptr::null_mut());
+    *dst = wingdi::CreateDIBSection(hdc_screen, &bminfo, wingdi::DIB_RGB_COLORS, &mut pv_image_bits, ptr::null_mut(), 0);
+    winuser::ReleaseDC(ptr::null_mut(), hdc_screen);
+    if (*dst).is_null() {
+        panic!("Could not load image.")
+    }
+
+    ptr::copy(src.flipv().to_rgba().into_raw().as_ptr(), pv_image_bits as *mut u8, (w * h * 4) as usize);
 }
 
 #[cfg(not(debug_assertions))]

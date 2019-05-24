@@ -1,5 +1,4 @@
 use crate::common::{self, *};
-use crate::external::image;
 
 lazy_static! {
     pub static ref WINDOW_CLASS: Vec<u16> = OsStr::new("STATIC").encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
@@ -17,38 +16,7 @@ pub struct WindowsImage {
 
 impl WindowsImage {
     fn install_image(&mut self, content: image::DynamicImage) {
-        use image::GenericImageView;
-
-        let (w, h) = content.dimensions();
-
-        let bminfo = wingdi::BITMAPINFO {
-            bmiHeader: wingdi::BITMAPINFOHEADER {
-                biSize: mem::size_of::<wingdi::BITMAPINFOHEADER>() as u32,
-                biWidth: w as i32,
-                biHeight: h as i32,
-                biPlanes: 1,
-                biBitCount: 32,
-                biCompression: wingdi::BI_RGB,
-                biSizeImage: 0,
-                biXPelsPerMeter: 0,
-                biYPelsPerMeter: 0,
-                biClrUsed: 0,
-                biClrImportant: 0,
-            },
-            bmiColors: unsafe { mem::zeroed() },
-        };
-
-        unsafe {
-            let mut pv_image_bits = ptr::null_mut();
-            let hdc_screen = winuser::GetDC(ptr::null_mut());
-            self.bmp = wingdi::CreateDIBSection(hdc_screen, &bminfo, wingdi::DIB_RGB_COLORS, &mut pv_image_bits, ptr::null_mut(), 0);
-            winuser::ReleaseDC(ptr::null_mut(), hdc_screen);
-            if self.bmp.is_null() {
-                panic!("Could not load image.")
-            }
-
-            ptr::copy(content.flipv().to_rgba().into_raw().as_ptr(), pv_image_bits as *mut u8, (w * h * 4) as usize);
-        }
+		unsafe { common::image_to_native(&content, &mut self.bmp); }
     }
     fn remove_image(&mut self) {
         unsafe {
