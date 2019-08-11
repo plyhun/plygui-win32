@@ -49,7 +49,7 @@ impl HasLabelInner for WindowsMessage {
 }
 
 impl MessageInner for WindowsMessage {
-    fn with_actions(content: types::TextContent, severity: types::MessageSeverity, actions: Vec<(String, callbacks::Action)>, parent: Option<&controls::Member>) -> Box<Member<Self>> {
+    fn with_actions(content: types::TextContent, severity: types::MessageSeverity, actions: Vec<(String, callbacks::Action)>, parent: Option<&dyn controls::Member>) -> Box<Member<Self>> {
         let (label, text) = match content {
             types::TextContent::Plain(text) => (String::new(/* TODO app name here? */), text),
             types::TextContent::LabelDescription(label, description) => (label, description),
