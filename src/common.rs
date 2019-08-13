@@ -25,6 +25,7 @@ pub use std::os::windows::ffi::OsStrExt;
 pub use std::{cmp, mem, ops, ptr, str, sync::mpsc};
 
 pub const DEFAULT_PADDING: i32 = 6;
+pub const DEFAULT_HEIGHT: i32 = 24;
 pub const WM_UPDATE_INNER: u32 = winuser::WM_APP + 1;
 
 pub type WndHandler = unsafe extern "system" fn(windef::HWND, msg: minwindef::UINT, minwindef::WPARAM, minwindef::LPARAM, usize, usize) -> isize;
@@ -61,6 +62,11 @@ unsafe impl Sync for Hfont {}
 fn hfont() -> windef::HFONT {
     *(*HFONT).as_ref()
 }
+
+#[inline]
+pub fn hinstance() -> minwindef::HINSTANCE {
+    *INSTANCE as *mut c_void as minwindef::HINSTANCE
+}
 lazy_static! {
     static ref HFONT: Hfont = unsafe {
         let mut ncm: winuser::NONCLIENTMETRICSW = mem::zeroed();
@@ -75,13 +81,6 @@ lazy_static! {
         }
         hfont.into()
     };
-}
-
-#[inline]
-pub fn hinstance() -> minwindef::HINSTANCE {
-    *INSTANCE as *mut c_void as minwindef::HINSTANCE
-}
-lazy_static! {
     static ref INSTANCE: usize = unsafe { libloaderapi::GetModuleHandleW(ptr::null()) as usize };
 }
 
