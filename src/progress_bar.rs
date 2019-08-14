@@ -47,8 +47,21 @@ impl HasProgressInner for WindowsProgressBar {
                 types::Progress::Value(current, total) => unsafe {
                     style &= !commctrl::PBS_MARQUEE as isize;
                     winuser::SetWindowLongPtrW(self.base.hwnd, winuser::GWL_STYLE, style);
+                    winuser::SendMessageW(self.base.hwnd, commctrl::PBM_SETSTATE, commctrl::PBST_NORMAL as usize, 0);
                     winuser::SendMessageW(self.base.hwnd, commctrl::PBM_SETRANGE32, 0, total as isize);
                     winuser::SendMessageW(self.base.hwnd, commctrl::PBM_SETPOS, current as usize, 0);
+                },
+                types::Progress::Error => unsafe {
+                	style &= !commctrl::PBS_MARQUEE as isize;
+                    winuser::SetWindowLongPtrW(self.base.hwnd, winuser::GWL_STYLE, style);
+                    winuser::SendMessageW(self.base.hwnd, commctrl::PBM_SETSTATE, commctrl::PBST_ERROR as usize, 0);
+                },
+                types::Progress::None => unsafe {
+                	style &= !commctrl::PBS_MARQUEE as isize;
+                    winuser::SetWindowLongPtrW(self.base.hwnd, winuser::GWL_STYLE, style);
+                    winuser::SendMessageW(self.base.hwnd, commctrl::PBM_SETSTATE, commctrl::PBST_PAUSED as usize, 0);
+                    winuser::SendMessageW(self.base.hwnd, commctrl::PBM_SETRANGE32, 0, 0);
+                    winuser::SendMessageW(self.base.hwnd, commctrl::PBM_SETPOS, 0, 0);
                 }
             }
         }
