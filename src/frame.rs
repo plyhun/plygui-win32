@@ -173,7 +173,7 @@ impl ControlInner for WindowsFrame {
                 width as i32,
                 height as i32 - self.label_padding,
                 self.base.hwnd,
-                winuser::WS_EX_CONTROLPARENT,
+                winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN,
                 WINDOW_CLASS.as_ptr(),
                 "",
                 0,

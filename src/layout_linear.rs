@@ -114,7 +114,7 @@ impl ControlInner for WindowsLinearLayout {
                 width as i32,
                 height as i32,
                 parent.native_id() as windef::HWND,
-                winuser::WS_EX_CONTROLPARENT,
+                winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN,
                 WINDOW_CLASS.as_ptr(),
                 "",
                 0,

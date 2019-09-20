@@ -109,7 +109,7 @@ impl HasImageInner for WindowsTray {
 	    for x in 0..w {
 	        for y in 0..h {
 	            let bright = std::u8::MAX;
-	            mask.put_pixel(x, y, image::Rgba([bright, bright, bright, 0xff]));
+	            mask.put_pixel(x, y, image::Rgba([bright, bright, bright, 0x0]));
 	        }
 	    }
     	unsafe {

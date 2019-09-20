@@ -24,6 +24,7 @@ impl Clone for WindowsTableRow {
 pub struct WindowsTable {
     base: WindowsControlBase<Table>,
     rows: Vec<WindowsTableRow>,
+    cols_len: usize,
 }
 
 impl TableInner for WindowsTable {
@@ -36,6 +37,7 @@ impl TableInner for WindowsTable {
                         rows: vec![WindowsTableRow {
 		                        cols: Vec::with_capacity(cols)
 	                        }; rows],
+                        cols_len: cols,
                     },
                     (),
                 ),
@@ -46,7 +48,7 @@ impl TableInner for WindowsTable {
         b
     }
     fn row_len(&self) -> usize { self.rows.len() }
-    fn column_len(&self) -> usize { if self.rows.len() > 0 { self.rows[0].cols.len() } else { 0 } }
+    fn column_len(&self) -> usize { self.cols_len }
     fn table_child_at(&self, row: usize, col: usize) -> Option<&dyn controls::Control> { 
     	if self.rows.get(row).is_some() {
     		self.rows.get(row).map(|row| row.cols.get(col).map(|c| c.as_ref())).unwrap() 
@@ -70,7 +72,14 @@ impl TableInner for WindowsTable {
     }
     
     fn add_row(&mut self) -> usize { 0 }
-    fn add_column(&mut self) -> usize { 0 }
+    fn add_column(&mut self) -> usize { 
+	    if !self.base.hwnd.is_null() {
+	    	let mut col: commctrl::LVCOLUMNW = mem::zeroed();
+	    	
+	    }
+	    self.cols_len += 1;
+	    self.cols_len
+    }
     fn insert_row(&mut self, row: usize) -> usize { 0 }
     fn insert_column(&mut self, col: usize) -> usize { 0 }
     fn delete_row(&mut self, row: usize) -> usize { 0 }
@@ -112,6 +121,17 @@ impl ControlInner for WindowsTable {
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
         control.coords = Some((px as i32, py as i32));
+        
+        let cols = if let Some(row) = self.rows.get(0) {
+        	row.cols.len()
+        } else {
+	        0
+        };
+        
+        for col in 0..cols {
+        	self.add_column();
+        }
+        
         let mut x = DEFAULT_PADDING;
         let mut y = DEFAULT_PADDING;
         for row in self.rows.as_mut_slice() {
@@ -313,6 +333,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             table.call_on_size(width, height);
             return 0;
         }
+        winuser::WM_MEASUREITEM => {}
         _ => {}
     }
 
