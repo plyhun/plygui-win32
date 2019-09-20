@@ -74,8 +74,13 @@ impl TableInner for WindowsTable {
     fn add_row(&mut self) -> usize { 0 }
     fn add_column(&mut self) -> usize { 
 	    if !self.base.hwnd.is_null() {
-	    	let mut col: commctrl::LVCOLUMNW = mem::zeroed();
+	    	let mut col: commctrl::LVCOLUMNW = unsafe { mem::zeroed() };
+	    	col.mask = commctrl::LVCF_FMT | commctrl::LVCF_WIDTH;
+	    	col.fmt = commctrl::LVCFMT_CENTER | commctrl::LVCFMT_FIXED_WIDTH;
 	    	
+	    	unsafe { if 0 > winuser::SendMessageW(self.base.hwnd, commctrl::LVM_INSERTCOLUMNW, self.cols_len, mem::transmute(&col)) {
+		    	common::log_error();
+	    	}};
 	    }
 	    self.cols_len += 1;
 	    self.cols_len
@@ -122,13 +127,7 @@ impl ControlInner for WindowsTable {
         self.base.subclass_id = id;
         control.coords = Some((px as i32, py as i32));
         
-        let cols = if let Some(row) = self.rows.get(0) {
-        	row.cols.len()
-        } else {
-	        0
-        };
-        
-        for col in 0..cols {
+        for col in 0..self.cols_len {
         	self.add_column();
         }
         
