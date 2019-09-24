@@ -16,13 +16,39 @@ pub struct WindowsImage {
 
 impl WindowsImage {
     fn install_image(&mut self, content: image::DynamicImage) {
-		unsafe { common::image_to_native(&content, &mut self.bmp); }
+        unsafe {
+            common::image_to_native(&content, &mut self.bmp);
+        }
     }
     fn remove_image(&mut self) {
         unsafe {
             wingdi::DeleteObject(self.bmp as *mut c_void);
         }
         self.bmp = ptr::null_mut();
+    }
+    fn scaled_image_size(&self, pw: u16, ph: u16) -> (i32, i32) {
+        let hoffs = DEFAULT_PADDING;
+        let voffs = DEFAULT_PADDING;
+        let hdiff = hoffs + DEFAULT_PADDING;
+        let vdiff = voffs + DEFAULT_PADDING;
+        let inner_h = pw as i32 - hdiff;
+        let inner_v = ph as i32 - vdiff;
+
+        let mut bm: wingdi::BITMAP = unsafe { mem::zeroed() };
+
+        unsafe {
+            wingdi::GetObjectW(self.bmp as *mut c_void, mem::size_of::<wingdi::BITMAP>() as i32, &mut bm as *mut _ as *mut c_void);
+        }
+
+        match self.scale {
+            types::ImageScalePolicy::FitCenter => {
+                let (wrate, hrate) = (inner_h as f32 / bm.bmWidth as f32, inner_v as f32 / bm.bmHeight as f32);
+                let less_rate = fmin(wrate, hrate);
+
+                ((bm.bmWidth as f32 * less_rate) as i32, (bm.bmHeight as f32 * less_rate) as i32)
+            }
+            types::ImageScalePolicy::CropCenter => (cmp::min(pw as i32, bm.bmWidth), cmp::min(ph as i32, bm.bmHeight)),
+        }
     }
 }
 
@@ -149,34 +175,28 @@ impl Drawable for WindowsImage {
     fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase) {
         self.base.draw(control.coords, control.measured);
     }
-    fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, w: u16, h: u16) -> (u16, u16, bool) {
+    fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, pw: u16, ph: u16) -> (u16, u16, bool) {
         let old_size = control.measured;
         control.measured = match control.visibility {
             types::Visibility::Gone => (0, 0),
             _ => {
                 let w = match control.layout.width {
-                    layout::Size::MatchParent => w,
-                    layout::Size::Exact(w) => w,
+                    layout::Size::MatchParent => pw as i32,
+                    layout::Size::Exact(w) => w as i32,
                     layout::Size::WrapContent => {
-                        let mut bm: wingdi::BITMAP = unsafe { mem::zeroed() };
-                        unsafe {
-                            wingdi::GetObjectW(self.bmp as *mut c_void, mem::size_of::<wingdi::BITMAP>() as i32, &mut bm as *mut _ as *mut c_void);
-                        }
-                        bm.bmWidth as u16
+                        let (w, _) = self.scaled_image_size(pw, ph);
+                        w
                     }
                 };
                 let h = match control.layout.height {
-                    layout::Size::MatchParent => h,
-                    layout::Size::Exact(h) => h,
+                    layout::Size::MatchParent => ph as i32,
+                    layout::Size::Exact(h) => h as i32,
                     layout::Size::WrapContent => {
-                        let mut bm: wingdi::BITMAP = unsafe { mem::zeroed() };
-                        unsafe {
-                            wingdi::GetObjectW(self.bmp as *mut c_void, mem::size_of::<wingdi::BITMAP>() as i32, &mut bm as *mut _ as *mut c_void);
-                        }
-                        bm.bmHeight as u16
+                        let (_, h) = self.scaled_image_size(pw, ph);
+                        h
                     }
                 };
-                (cmp::max(0, w as i32) as u16, cmp::max(0, h as i32) as u16)
+                (cmp::max(0, w) as u16, cmp::max(0, h) as u16)
             }
         };
         (control.measured.0, control.measured.1, control.measured != old_size)
@@ -186,17 +206,13 @@ impl Drawable for WindowsImage {
     }
 }
 
-/*
 #[allow(dead_code)]
-pub(crate) fn spawn() -> Box<controls::Control> {
-    use super::NewImage;
-
-    Image::with_content().into_control()
+pub(crate) fn spawn() -> Box<dyn controls::Control> {
+    let dummy = image::DynamicImage::ImageRgba8(image::ImageBuffer::new(0, 0));
+    Image::with_content(dummy).into_control()
 }
-*/
 
 unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
-    let sc: &mut Image = mem::transmute(param);
     let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
         winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as isize);
@@ -206,13 +222,15 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             let width = lparam as u16;
             let height = (lparam >> 16) as u16;
 
-            sc.call_on_size(width, height);
+            let i: &mut Image = mem::transmute(param);
+            i.call_on_size(width, height);
         }
         winuser::WM_PAINT => {
             use plygui_api::controls::HasSize;
 
-            let (pw, ph) = sc.size();
-            let sc = sc.as_inner_mut().as_inner_mut();
+            let i: &mut Image = mem::transmute(param);
+            let (pw, ph) = i.size();
+            let i = i.as_inner_mut().as_inner_mut();
             let hoffs = DEFAULT_PADDING;
             let voffs = DEFAULT_PADDING;
             let hdiff = hoffs + DEFAULT_PADDING;
@@ -220,16 +238,15 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             let inner_h = pw as i32 - hdiff;
             let inner_v = ph as i32 - vdiff;
 
+            let (dst_w, dst_h) = i.scaled_image_size(pw, ph);
+
             let mut bm: wingdi::BITMAP = mem::zeroed();
             let mut ps: winuser::PAINTSTRUCT = mem::zeroed();
 
             let hdc = winuser::BeginPaint(hwnd, &mut ps);
             let hdc_mem = wingdi::CreateCompatibleDC(hdc);
-            wingdi::SelectObject(hdc_mem, sc.bmp as *mut c_void); //let hbm_old =
-            wingdi::GetObjectW(sc.bmp as *mut c_void, mem::size_of::<wingdi::BITMAP>() as i32, &mut bm as *mut _ as *mut c_void);
-
-            let (wrate, hrate) = (inner_h as f32 / bm.bmWidth as f32, inner_v as f32 / bm.bmHeight as f32);
-            let less_rate = fmin(wrate, hrate);
+            wingdi::SelectObject(hdc_mem, i.bmp as *mut c_void); //let hbm_old =
+            wingdi::GetObjectW(i.bmp as *mut c_void, mem::size_of::<wingdi::BITMAP>() as i32, &mut bm as *mut _ as *mut c_void);
 
             let blendfunc = wingdi::BLENDFUNCTION {
                 BlendOp: 0,
@@ -238,13 +255,11 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
                 AlphaFormat: 1,
             };
 
-            let (dst_x, dst_y, dst_w, dst_h, src_x, src_y, src_w, src_h) = match sc.scale {
+            let (dst_x, dst_y, src_x, src_y, src_w, src_h) = match i.scale {
                 types::ImageScalePolicy::FitCenter => {
-                    let bm_h = (bm.bmWidth as f32 * less_rate) as i32;
-                    let bm_v = (bm.bmHeight as f32 * less_rate) as i32;
-                    let xoffs = (pw as i32 - bm_h) / 2;
-                    let yoffs = (ph as i32 - bm_v) / 2;
-                    (xoffs, yoffs, bm_h, bm_v, 0, 0, bm.bmWidth, bm.bmHeight)
+                    let xoffs = (pw as i32 - dst_w) / 2;
+                    let yoffs = (ph as i32 - dst_h) / 2;
+                    (xoffs, yoffs, 0, 0, bm.bmWidth, bm.bmHeight)
                 }
                 types::ImageScalePolicy::CropCenter => {
                     let half_diff_h = (bm.bmWidth - pw as i32) / 2;
@@ -252,8 +267,6 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
                     (
                         hoffs + cmp::min(hoffs, half_diff_h).abs(),
                         voffs + cmp::min(voffs, half_diff_v).abs(),
-                        cmp::min(pw as i32, bm.bmWidth),
-                        cmp::min(ph as i32, bm.bmHeight),
                         cmp::max(0, half_diff_h),
                         cmp::max(0, half_diff_v),
                         cmp::min(bm.bmWidth, inner_h),
@@ -261,7 +274,6 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
                     )
                 }
             };
-            println!("{}/{}/{}/{} s {}/{}/{}/{}", dst_x, dst_y, dst_w, dst_h, src_x, src_y, src_w, src_h);
             wingdi::GdiAlphaBlend(hdc, dst_x, dst_y, dst_w, dst_h, hdc_mem, src_x, src_y, src_w, src_h, blendfunc);
 
             wingdi::DeleteDC(hdc_mem);
