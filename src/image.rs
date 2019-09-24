@@ -47,7 +47,7 @@ impl WindowsImage {
 
                 ((bm.bmWidth as f32 * less_rate) as i32, (bm.bmHeight as f32 * less_rate) as i32)
             }
-            types::ImageScalePolicy::CropCenter => (cmp::min(pw as i32, bm.bmWidth), cmp::min(ph as i32, bm.bmHeight)),
+            types::ImageScalePolicy::CropCenter => (cmp::min(pw as i32, bm.bmWidth) - hdiff, cmp::min(ph as i32, bm.bmHeight) - vdiff),
         }
     }
 }
@@ -76,7 +76,7 @@ impl ImageInner for WindowsImage {
         i.as_inner_mut().as_inner_mut().install_image(content);
         i
     }
-    fn set_scale(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, policy: types::ImageScalePolicy) {
+    fn set_scale(&mut self, _member: &mut MemberBase, policy: types::ImageScalePolicy) {
         if self.scale != policy {
             self.scale = policy;
             self.base.invalidate();

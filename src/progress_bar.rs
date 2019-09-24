@@ -109,7 +109,6 @@ impl ControlInner for WindowsProgressBar {
     fn fill_from_markup(&mut self, member: &mut MemberBase, _control: &mut ControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
         use plygui_api::markup::MEMBER_TYPE_PROGRESS_BAR;
         fill_from_markup_base!(self, member, markup, registry, ProgressBar, [MEMBER_TYPE_PROGRESS_BAR]);
-        fill_from_markup_label!(self, member, markup);
     }
 }
 

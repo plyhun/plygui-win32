@@ -114,7 +114,7 @@ impl SplittedInner for WindowsSplitted {
         ));
         b
     }
-    fn set_splitter(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, pos: f32) {
+    fn set_splitter(&mut self, _member: &mut MemberBase, pos: f32) {
         self.splitter = pos;
         self.base.invalidate();
     }
@@ -177,9 +177,10 @@ impl ControlInner for WindowsSplitted {
     }
     fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &dyn controls::Container, px: i32, py: i32, pw: u16, ph: u16) {
         let selfptr = member as *mut _ as *mut c_void;
-        let (width, height, _) = self.measure(member, control, pw, ph);
         let (hwnd, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
+            control.measured = (pw, ph);
+            let (width, height, _) = self.measure(member, control, pw, ph);
             common::create_control_hwnd(
                 px as i32,
                 py as i32,
@@ -205,12 +206,12 @@ impl ControlInner for WindowsSplitted {
 
         match self.orientation {
             layout::Orientation::Horizontal => {
-                let h = utils::coord_to_size(height as i32 - DEFAULT_PADDING - DEFAULT_PADDING);
+                let h = utils::coord_to_size(control.measured.1 as i32 - DEFAULT_PADDING - DEFAULT_PADDING);
                 self.first.on_added_to_container(self2, DEFAULT_PADDING, DEFAULT_PADDING, first_size, h);
                 self.second.on_added_to_container(self2, DEFAULT_PADDING + DEFAULT_BOUND + first_size as i32, DEFAULT_PADDING, second_size, h);
             }
             layout::Orientation::Vertical => {
-                let w = utils::coord_to_size(width as i32 - DEFAULT_PADDING - DEFAULT_PADDING);
+                let w = utils::coord_to_size(control.measured.0 as i32 - DEFAULT_PADDING - DEFAULT_PADDING);
                 self.first.on_added_to_container(self2, DEFAULT_PADDING, DEFAULT_PADDING, w, first_size);
                 self.second.on_added_to_container(self2, DEFAULT_PADDING, DEFAULT_PADDING + DEFAULT_BOUND + first_size as i32, w, second_size);
             }

@@ -9,15 +9,13 @@ lazy_static! {
 pub type Table = Member<Control<MultiContainer<WindowsTable>>>;
 
 struct WindowsTableRow {
-	cols: Vec<Box<dyn controls::Control>>,
+    cols: Vec<Option<Box<dyn controls::Control>>>,
 }
 
 impl Clone for WindowsTableRow {
-	fn clone(&self) -> Self {
-		WindowsTableRow {
-			cols: Vec::with_capacity(self.cols.len())
-		}
-	}
+    fn clone(&self) -> Self {
+        WindowsTableRow { cols: Vec::with_capacity(self.cols.len()) }
+    }
 }
 
 #[repr(C)]
@@ -34,9 +32,7 @@ impl TableInner for WindowsTable {
                 MultiContainer::with_inner(
                     WindowsTable {
                         base: WindowsControlBase::new(),
-                        rows: vec![WindowsTableRow {
-		                        cols: Vec::with_capacity(cols)
-	                        }; rows],
+                        rows: vec![WindowsTableRow { cols: Vec::with_capacity(cols) }; rows],
                         cols_len: cols,
                     },
                     (),
@@ -47,48 +43,79 @@ impl TableInner for WindowsTable {
         ));
         b
     }
-    fn row_len(&self) -> usize { self.rows.len() }
-    fn column_len(&self) -> usize { self.cols_len }
-    fn table_child_at(&self, row: usize, col: usize) -> Option<&dyn controls::Control> { 
-    	if self.rows.get(row).is_some() {
-    		self.rows.get(row).map(|row| row.cols.get(col).map(|c| c.as_ref())).unwrap() 
-    	} else {
-    		None
-    	}
+    fn row_len(&self) -> usize {
+        self.rows.len()
     }
-    fn table_child_at_mut(&mut self, row: usize, col: usize) -> Option<&mut dyn controls::Control> { 
-    	if self.rows.get(row).is_some() {
-    		self.rows.get_mut(row).map(|row| row.cols.get_mut(col).map(|c| c.as_mut())).unwrap()
-    	} else {
-    		None
-    	}
+    fn column_len(&self) -> usize {
+        self.cols_len
     }
-    
+    fn table_child_at(&self, row: usize, col: usize) -> Option<&dyn controls::Control> {
+        if self.rows.len() > row {
+            let row = self.rows.get(row).unwrap();
+            if row.cols.len() > col {
+                return row.cols[col].as_ref().map(|c| c.as_ref());
+            }
+        }
+        None
+    }
+    fn table_child_at_mut(&mut self, row: usize, col: usize) -> Option<&mut dyn controls::Control> {
+        if self.rows.len() > row {
+            let row = self.rows.get_mut(row).unwrap();
+            if row.cols.len() > col {
+                return row.cols[col].as_mut().map(|c| c.as_mut());
+            }
+        }
+        None
+    }
+
     fn set_table_child_to(&mut self, base: &mut MemberBase, row: usize, col: usize, child: Box<dyn controls::Control>) -> Option<Box<dyn controls::Control>> {
-	    None
+        None
     }
     fn remove_table_child_from(&mut self, base: &mut MemberBase, row: usize, col: usize) -> Option<Box<dyn controls::Control>> {
-	    None
+        None
     }
-    
-    fn add_row(&mut self) -> usize { 0 }
-    fn add_column(&mut self) -> usize { 
-	    if !self.base.hwnd.is_null() {
-	    	let mut col: commctrl::LVCOLUMNW = unsafe { mem::zeroed() };
-	    	col.mask = commctrl::LVCF_FMT | commctrl::LVCF_WIDTH;
-	    	col.fmt = commctrl::LVCFMT_CENTER | commctrl::LVCFMT_FIXED_WIDTH;
-	    	
-	    	unsafe { if 0 > winuser::SendMessageW(self.base.hwnd, commctrl::LVM_INSERTCOLUMNW, self.cols_len, mem::transmute(&col)) {
-		    	common::log_error();
-	    	}};
-	    }
-	    self.cols_len += 1;
-	    self.cols_len
+
+    fn add_row(&mut self) -> usize {
+        let mut row = WindowsTableRow { cols: Vec::with_capacity(self.cols_len) };
+        for _ in 0..self.cols_len {
+            row.cols.push(None);
+        }
+        self.rows.push(row);
+        self.rows.len()
     }
-    fn insert_row(&mut self, row: usize) -> usize { 0 }
-    fn insert_column(&mut self, col: usize) -> usize { 0 }
-    fn delete_row(&mut self, row: usize) -> usize { 0 }
-    fn delete_column(&mut self, col: usize) -> usize { 0 }
+    fn add_column(&mut self) -> usize {
+        if !self.base.hwnd.is_null() {
+            let mut col: commctrl::LVCOLUMNW = unsafe { mem::zeroed() };
+            col.mask = commctrl::LVCF_FMT | commctrl::LVCF_WIDTH | commctrl::LVCF_TEXT;
+            col.fmt = commctrl::LVCFMT_CENTER | commctrl::LVCFMT_FIXED_WIDTH;
+            let mut c = WINDOW_CLASS.clone();
+            col.pszText = c.as_mut_ptr();
+
+            unsafe {
+                if self.cols_len as isize > winuser::SendMessageW(self.base.hwnd, commctrl::LVM_INSERTCOLUMNW, self.cols_len, mem::transmute(&col)) {
+                    common::log_error();
+                    return self.cols_len;
+                }
+            };
+        }
+        for row in self.rows.as_mut_slice() {
+            row.cols.push(None)
+        }
+        self.cols_len += 1;
+        self.cols_len
+    }
+    fn insert_row(&mut self, row: usize) -> usize {
+        0
+    }
+    fn insert_column(&mut self, col: usize) -> usize {
+        0
+    }
+    fn delete_row(&mut self, row: usize) -> usize {
+        0
+    }
+    fn delete_column(&mut self, col: usize) -> usize {
+        0
+    }
 }
 
 impl ControlInner for WindowsTable {
@@ -118,7 +145,7 @@ impl ControlInner for WindowsTable {
                 0,
                 WINDOW_CLASS.as_ptr(),
                 "",
-                winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | commctrl::LVS_REPORT | commctrl::LVS_OWNERDRAWFIXED | commctrl::LVS_EX_DOUBLEBUFFER,
+                winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | commctrl::LVS_REPORT | commctrl::LVS_EX_DOUBLEBUFFER,
                 selfptr,
                 Some(handler),
             )
@@ -126,37 +153,43 @@ impl ControlInner for WindowsTable {
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
         control.coords = Some((px as i32, py as i32));
-        
-        for col in 0..self.cols_len {
-        	self.add_column();
+
+        let total_cols = self.cols_len;
+        self.cols_len = 0;
+        for _ in 0..total_cols {
+            self.add_column();
         }
-        
+
         let mut x = DEFAULT_PADDING;
         let mut y = DEFAULT_PADDING;
         for row in self.rows.as_mut_slice() {
-	        for child in row.cols.as_mut_slice() {
-	            let self2: &mut Table = unsafe { utils::base_to_impl_mut(member) };
-	            child.on_added_to_container(
-	                self2,
-	                x,
-	                y,
-	                utils::coord_to_size(pw as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16,
-	                utils::coord_to_size(ph as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16,
-	            );
-	            let (xx, yy) = child.size();
-	            /*match self.orientation {
-	                layout::Orientation::Horizontal => x += xx as i32,
-	                layout::Orientation::Vertical => y += yy as i32,
-	            }*/
-	        }
+            for child in row.cols.as_mut_slice() {
+                if let Some(child) = child {
+                    let self2: &mut Table = unsafe { utils::base_to_impl_mut(member) };
+                    child.on_added_to_container(
+                        self2,
+                        x,
+                        y,
+                        utils::coord_to_size(pw as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16,
+                        utils::coord_to_size(ph as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16,
+                    );
+                    let (xx, yy) = child.size();
+                    /*match self.orientation {
+                        layout::Orientation::Horizontal => x += xx as i32,
+                        layout::Orientation::Vertical => y += yy as i32,
+                    }*/
+                }
+            }
         }
     }
     fn on_removed_from_container(&mut self, member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
         for row in self.rows.as_mut_slice() {
-	        for child in row.cols.as_mut_slice() {
-	            let self2: &mut Table = unsafe { utils::base_to_impl_mut(member) };
-	            child.on_removed_from_container(self2);
-	        }
+            for child in row.cols.as_mut_slice() {
+                if let Some(child) = child {
+                    let self2: &mut Table = unsafe { utils::base_to_impl_mut(member) };
+                    child.on_removed_from_container(self2);
+                }
+            }
         }
         common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, None);
         self.base.hwnd = 0 as windef::HWND;
@@ -212,57 +245,65 @@ impl HasVisibilityInner for WindowsTable {
 impl ContainerInner for WindowsTable {
     fn find_control_mut(&mut self, arg: types::FindBy) -> Option<&mut dyn controls::Control> {
         for row in self.rows.as_mut_slice() {
-	        for child in row.cols.as_mut_slice() {
-	            match arg {
-	                types::FindBy::Id(ref id) => {
-	                    if child.as_member_mut().id() == *id {
-	                        return Some(child.as_mut());
-	                    }
-	                }
-	                types::FindBy::Tag(ref tag) => {
-	                    if let Some(mytag) = child.as_member_mut().tag() {
-	                        if tag.as_str() == mytag {
-	                            return Some(child.as_mut());
-	                        }
-	                    }
-	                }
-	            }
-	            if let Some(c) = child.is_container_mut() {
-	                let ret = c.find_control_mut(arg.clone());
-	                if ret.is_none() {
-	                    continue;
-	                }
-	                return ret;
-	            }
-	        }
+            for child in row.cols.as_mut_slice() {
+                if let Some(child) = child {
+                    match arg {
+                        types::FindBy::Id(ref id) => {
+                            if child.as_member_mut().id() == *id {
+                                return Some(child.as_mut());
+                            }
+                        }
+                        types::FindBy::Tag(ref tag) => {
+                            if let Some(mytag) = child.as_member_mut().tag() {
+                                if tag.as_str() == mytag {
+                                    return Some(child.as_mut());
+                                }
+                            }
+                        }
+                    }
+                    if let Some(c) = child.is_container_mut() {
+                        let ret = c.find_control_mut(arg.clone());
+                        if ret.is_none() {
+                            continue;
+                        }
+                        return ret;
+                    }
+                }
+            }
         }
         None
     }
     fn find_control(&self, arg: types::FindBy) -> Option<&dyn controls::Control> {
         for row in self.rows.as_slice() {
-	        for child in row.cols.as_slice() {
-	            match arg {
-	                types::FindBy::Id(ref id) => {
-	                    if child.as_member().id() == *id {
-	                        return Some(child.as_ref());
-	                    }
-	                }
-	                types::FindBy::Tag(ref tag) => {
-	                    if let Some(mytag) = child.as_member().tag() {
-	                        if tag.as_str() == mytag {
-	                            return Some(child.as_ref());
-	                        }
-	                    }
-	                }
-	            }
-	            if let Some(c) = child.is_container() {
-	                let ret = c.find_control(arg.clone());
-	                if ret.is_none() {
-	                    continue;
-	                }
-	                return ret;
-	            }
-	        }
+            for child in row.cols.as_slice() {
+                match arg {
+                    types::FindBy::Id(ref id) => {
+                        if let Some(child) = child {
+                            if child.as_member().id() == *id {
+                                return Some(child.as_ref());
+                            }
+                        }
+                    }
+                    types::FindBy::Tag(ref tag) => {
+                        if let Some(child) = child {
+                            if let Some(mytag) = child.as_member().tag() {
+                                if tag.as_str() == mytag {
+                                    return Some(child.as_ref());
+                                }
+                            }
+                        }
+                    }
+                }
+                if let Some(child) = child {
+                    if let Some(c) = child.is_container() {
+                        let ret = c.find_control(arg.clone());
+                        if ret.is_none() {
+                            continue;
+                        }
+                        return ret;
+                    }
+                }
+            }
         }
         None
     }
@@ -274,14 +315,16 @@ impl Drawable for WindowsTable {
         let mut x = DEFAULT_PADDING;
         let mut y = DEFAULT_PADDING;
         for row in self.rows.as_mut_slice() {
-	        for child in row.cols.as_mut_slice() {
-	        	child.draw(Some((x, y)));
-	        	/*let (xx, yy) = child.size();
-	            match self.orientation {
-	                layout::Orientation::Horizontal => x += xx as i32,
-	                layout::Orientation::Vertical => y += yy as i32,
-	            }*/
-	        }
+            for child in row.cols.as_mut_slice() {
+                if let Some(child) = child {
+                    child.draw(Some((x, y)));
+                    /*let (xx, yy) = child.size();
+                    match self.orientation {
+                        layout::Orientation::Horizontal => x += xx as i32,
+                        layout::Orientation::Vertical => y += yy as i32,
+                    }*/
+                }
+            }
         }
     }
     fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
@@ -292,21 +335,17 @@ impl Drawable for WindowsTable {
                 let w = match control.layout.width {
                     layout::Size::MatchParent => parent_width,
                     layout::Size::Exact(w) => w,
-                    layout::Size::WrapContent => {
-                        defaults::THE_ULTIMATE_ANSWER_TO_EVERYTHING
-                    }
+                    layout::Size::WrapContent => defaults::THE_ULTIMATE_ANSWER_TO_EVERYTHING,
                 };
                 let h = match control.layout.height {
                     layout::Size::MatchParent => parent_height,
                     layout::Size::Exact(h) => h,
-                    layout::Size::WrapContent => {
-                        defaults::THE_ULTIMATE_ANSWER_TO_EVERYTHING
-                    }
+                    layout::Size::WrapContent => defaults::THE_ULTIMATE_ANSWER_TO_EVERYTHING,
                 };
                 (cmp::max(0, w as i32) as u16, cmp::max(0, h as i32) as u16)
             }
         };
-		(control.measured.0, control.measured.1, control.measured != old_size)
+        (control.measured.0, control.measured.1, control.measured != old_size)
     }
     fn invalidate(&mut self, _member: &mut MemberBase, _control: &mut ControlBase) {
         self.base.invalidate()
