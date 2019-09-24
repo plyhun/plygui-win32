@@ -70,17 +70,45 @@ impl ControlInner for WindowsList {
         self.base.subclass_id = id;
         control.coords = Some((px as i32, py as i32));
         
+        {
+            let mut col: commctrl::LVCOLUMNW = unsafe { mem::zeroed() };
+            col.mask = commctrl::LVCF_FMT | commctrl::LVCF_WIDTH | commctrl::LVCF_TEXT;
+            col.fmt = commctrl::LVCFMT_CENTER | commctrl::LVCFMT_FIXED_WIDTH;
+            col.cx = w as i32;
+            let mut c = WINDOW_CLASS.clone();
+            col.pszText = c.as_mut_ptr();
+
+            unsafe {
+                if 1 != winuser::SendMessageW(self.base.hwnd, commctrl::LVM_INSERTCOLUMNW, 1, mem::transmute(&col)) {
+                    common::log_error();
+                }
+            };
+        }
+        
         let (member, _, adapter) = List::adapter_base_parts_mut(member);
         
         let mut x = DEFAULT_PADDING;
         let mut y = DEFAULT_PADDING;
-        for item in 0..adapter.adapter.len() {
+        for i in 0..adapter.adapter.len() {
             let self2: &mut List = unsafe { utils::base_to_impl_mut(member) };
-            let mut item = adapter.adapter.spawn_item_view(item, self2);
-            item.on_added_to_container(self2, x, y, utils::coord_to_size(pw as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16,
-                        utils::coord_to_size(ph as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16);
+            let mut item = adapter.adapter.spawn_item_view(i, self2);
+            //item.on_added_to_container(self2, x, y, utils::coord_to_size(pw as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16, utils::coord_to_size(ph as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16);
             let (xx, yy) = item.size();
-            y += yy as i32
+            y += yy as i32;
+            
+            let txt = common::str_to_wchar("Item");
+            
+            let mut lvi: commctrl::LVITEMW = unsafe { mem::zeroed() };
+            lvi.mask = commctrl::LVCF_WIDTH | commctrl::LVCF_TEXT;
+            //lvi.cx = xx;
+            lvi.iItem = i as i32;
+            lvi.pszText = txt.as_ptr() as *const _ as *mut u16;
+            
+            unsafe {
+                if i as isize != winuser::SendMessageW(self.base.hwnd, commctrl::LVM_INSERTITEMW, 0, mem::transmute(&lvi)) {
+                    common::log_error();
+                }
+            };
         }
     }
     fn on_removed_from_container(&mut self, member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
