@@ -361,7 +361,7 @@ fn update_label_size(label: &str, hwnd: windef::HWND) -> i32 {
     unsafe {
         wingdi::GetTextExtentPointW(winuser::GetDC(hwnd), label.as_ptr(), label.len() as i32, &mut label_size);
     }
-    label_size.cy as i32 / 2
+    label_size.cy as i32 / 2 + DEFAULT_PADDING
 }
 
 unsafe fn register_window_class() -> Vec<u16> {
@@ -402,12 +402,13 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             let label_padding = frame.as_inner().as_inner().as_inner().label_padding;
             let hp = DEFAULT_PADDING + DEFAULT_PADDING;
             let vp = DEFAULT_PADDING + DEFAULT_PADDING + label_padding;
-
+            
+            frame.call_on_size(width, height);
+            
             if let Some(ref mut child) = frame.as_inner_mut().as_inner_mut().as_inner_mut().child {
                 child.measure(cmp::max(0, width as i32 - hp) as u16, cmp::max(0, height as i32 - vp) as u16);
                 child.draw(Some((DEFAULT_PADDING, DEFAULT_PADDING)));
             }
-            frame.call_on_size(width, height);
             return 0;
         }
         _ => {}

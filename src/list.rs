@@ -71,13 +71,12 @@ impl ControlInner for WindowsList {
         
        let (member, _, adapter) = List::adapter_base_parts_mut(member);
         
-        let mut x = 0;
         let mut y = 0;
         for i in 0..adapter.adapter.len() {
             let self2: &mut List = unsafe { utils::base_to_impl_mut(member) };
             let mut item = adapter.adapter.spawn_item_view(i, self2);
-            item.on_added_to_container(self2, x, y, utils::coord_to_size(pw as i32) as u16, utils::coord_to_size(ph as i32) as u16);
-            let (xx, yy) = item.size();
+            item.on_added_to_container(self2, 0, y, utils::coord_to_size(pw as i32) as u16, utils::coord_to_size(ph as i32) as u16);
+            let (_, yy) = item.size();
             self.children.push(item);
             y += yy as i32;
             
@@ -106,7 +105,7 @@ impl ControlInner for WindowsList {
         use plygui_api::markup::MEMBER_TYPE_TABLE;
 
         fill_from_markup_base!(self, member, markup, registry, List, [MEMBER_TYPE_TABLE]);
-        fill_from_markup_children!(self, member, markup, registry);
+        //fill_from_markup_children!(self, member, markup, registry);
     }
 }
 impl ContainerInner for WindowsList {
