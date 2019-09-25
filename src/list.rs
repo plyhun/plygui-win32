@@ -1,6 +1,6 @@
 use crate::common::{self, *};
 
-const CLASS_ID: &str = ::winapi::um::commctrl::WC_LISTVIEW;
+const CLASS_ID: &str = commctrl::WC_LISTBOX;
 
 lazy_static! {
     pub static ref WINDOW_CLASS: Vec<u16> = OsStr::new(CLASS_ID).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
@@ -29,7 +29,6 @@ impl AdapterViewInner for WindowsList {
             ),
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
-        //List::adapter_base_parts_mut(b.base_mut());
         b
     }
 }
@@ -61,7 +60,7 @@ impl ControlInner for WindowsList {
                 0,
                 WINDOW_CLASS.as_ptr(),
                 "",
-                winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | commctrl::LVS_REPORT | commctrl::LVS_EX_DOUBLEBUFFER,
+                winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::LBS_OWNERDRAWVARIABLE | winuser::WS_BORDER | winuser::WS_VSCROLL | winuser::WS_EX_RIGHTSCROLLBAR,
                 selfptr,
                 Some(handler),
             )
@@ -70,45 +69,26 @@ impl ControlInner for WindowsList {
         self.base.subclass_id = id;
         control.coords = Some((px as i32, py as i32));
         
-        {
-            let mut col: commctrl::LVCOLUMNW = unsafe { mem::zeroed() };
-            col.mask = commctrl::LVCF_FMT | commctrl::LVCF_WIDTH | commctrl::LVCF_TEXT;
-            col.fmt = commctrl::LVCFMT_CENTER | commctrl::LVCFMT_FIXED_WIDTH;
-            col.cx = w as i32;
-            let mut c = WINDOW_CLASS.clone();
-            col.pszText = c.as_mut_ptr();
-
-            unsafe {
-                if 1 != winuser::SendMessageW(self.base.hwnd, commctrl::LVM_INSERTCOLUMNW, 1, mem::transmute(&col)) {
-                    common::log_error();
-                }
-            };
-        }
+       let (member, _, adapter) = List::adapter_base_parts_mut(member);
         
-        let (member, _, adapter) = List::adapter_base_parts_mut(member);
-        
-        let mut x = DEFAULT_PADDING;
-        let mut y = DEFAULT_PADDING;
+        let mut x = 0;
+        let mut y = 0;
         for i in 0..adapter.adapter.len() {
             let self2: &mut List = unsafe { utils::base_to_impl_mut(member) };
             let mut item = adapter.adapter.spawn_item_view(i, self2);
-            //item.on_added_to_container(self2, x, y, utils::coord_to_size(pw as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16, utils::coord_to_size(ph as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16);
+            item.on_added_to_container(self2, x, y, utils::coord_to_size(pw as i32) as u16, utils::coord_to_size(ph as i32) as u16);
             let (xx, yy) = item.size();
+            self.children.push(item);
             y += yy as i32;
             
-            let txt = common::str_to_wchar("Item");
-            
-            let mut lvi: commctrl::LVITEMW = unsafe { mem::zeroed() };
-            lvi.mask = commctrl::LVCF_WIDTH | commctrl::LVCF_TEXT;
-            //lvi.cx = xx;
-            lvi.iItem = i as i32;
-            lvi.pszText = txt.as_ptr() as *const _ as *mut u16;
-            
             unsafe {
-                if i as isize != winuser::SendMessageW(self.base.hwnd, commctrl::LVM_INSERTITEMW, 0, mem::transmute(&lvi)) {
+                if i as isize != winuser::SendMessageW(self.base.hwnd, winuser::LB_ADDSTRING, 0, WINDOW_CLASS.as_ptr() as isize) {
                     common::log_error();
                 }
-            };
+                if winuser::LB_ERR == winuser::SendMessageW(self.base.hwnd, winuser::LB_SETITEMHEIGHT, i, yy as isize) {
+                    common::log_error();
+                }
+            }
         }
     }
     fn on_removed_from_container(&mut self, member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
@@ -275,6 +255,11 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
         winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as isize);
     }
     match msg {
+        winuser::WM_LBUTTONUP => {
+            let x = lparam as u16;
+            let y = (lparam >> 16) as u16;
+            println!("clicked {}/{}", x,y);
+        }
         winuser::WM_SIZE => {
             let width = lparam as u16;
             let height = (lparam >> 16) as u16;
@@ -283,7 +268,30 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             list.call_on_size(width, height);
             return 0;
         }
-        winuser::WM_MEASUREITEM => {}
+        winuser::WM_COMMAND => {
+            let id = wparam as u16;
+            let param = (wparam >> 16) as u16;
+            
+            match param as u32 {
+                winuser::WM_MEASUREITEM => {
+                    println!("Measure");
+                    return 0;
+                }
+                winuser::WM_DRAWITEM => {
+                    println!("Draw");
+                    return 0;
+                }
+                _ => {}
+            }
+        }
+        winuser::WM_MEASUREITEM => {
+            println!("Measure2");
+            return 0;
+        }
+        winuser::WM_DRAWITEM => {
+            println!("Draw2");
+            return 0;
+        }
         _ => {}
     }
 
