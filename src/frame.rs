@@ -361,7 +361,7 @@ fn update_label_size(label: &str, hwnd: windef::HWND) -> i32 {
     unsafe {
         wingdi::GetTextExtentPointW(winuser::GetDC(hwnd), label.as_ptr(), label.len() as i32, &mut label_size);
     }
-    label_size.cy as i32 / 2 + DEFAULT_PADDING
+    (label_size.cy + DEFAULT_PADDING) as i32 / 2
 }
 
 unsafe fn register_window_class() -> Vec<u16> {
@@ -410,6 +410,13 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
                 child.draw(Some((DEFAULT_PADDING, DEFAULT_PADDING)));
             }
             return 0;
+        }
+        winuser::WM_CTLCOLORSTATIC => {
+            let hdc = wparam as windef::HDC; 
+            wingdi::SetTextColor(hdc, wingdi::RGB(0,0,0));    
+            wingdi::SetBkMode(hdc, wingdi::TRANSPARENT as i32);
+        
+            return wingdi::GetStockObject(wingdi::NULL_BRUSH as i32) as isize;
         }
         _ => {}
     }

@@ -187,7 +187,7 @@ impl ControlInner for WindowsSplitted {
                 width as i32,
                 height as i32,
                 parent.native_id() as windef::HWND,
-                winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN ,
+                winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN,
                 WINDOW_CLASS.as_ptr(),
                 "",
                 0,
@@ -588,6 +588,13 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             winuser::ReleaseCapture();
             ll.as_inner_mut().as_inner_mut().as_inner_mut().moving = false;
             return 0;
+        }
+        winuser::WM_CTLCOLORSTATIC => {
+            let hdc = wparam as windef::HDC; 
+            wingdi::SetTextColor(hdc, wingdi::RGB(0,0,0));    
+            wingdi::SetBkMode(hdc, wingdi::TRANSPARENT as i32);
+        
+            return wingdi::GetStockObject(wingdi::NULL_BRUSH as i32) as isize;
         }
         _ => {}
     }

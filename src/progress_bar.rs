@@ -160,14 +160,14 @@ impl Drawable for WindowsProgressBar {
                     layout::Size::MatchParent => parent_width as i32,
                     layout::Size::Exact(w) => w as i32,
                     layout::Size::WrapContent => {
-                        common::DEFAULT_HEIGHT + DEFAULT_PADDING + DEFAULT_PADDING
+                        common::DEFAULT_HEIGHT / 2 + DEFAULT_PADDING + DEFAULT_PADDING
                     }
                 };
                 let h = match control.layout.height {
                     layout::Size::MatchParent => parent_height as i32,
                     layout::Size::Exact(h) => h as i32,
                     layout::Size::WrapContent => {
-                        common::DEFAULT_HEIGHT + DEFAULT_PADDING + DEFAULT_PADDING
+                        common::DEFAULT_HEIGHT / 2 + DEFAULT_PADDING + DEFAULT_PADDING
                     }
                 };
                 (cmp::max(0, w) as u16, cmp::max(0, h) as u16)

@@ -398,6 +398,13 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             ll.call_on_size(width, height);
             return 0;
         }
+        winuser::WM_CTLCOLORSTATIC => {
+            let hdc = wparam as windef::HDC; 
+            wingdi::SetTextColor(hdc, wingdi::RGB(0,0,0));    
+            wingdi::SetBkMode(hdc, wingdi::TRANSPARENT as i32);
+        
+            return wingdi::GetStockObject(wingdi::NULL_BRUSH as i32) as isize;
+        }
         _ => {}
     }
 
