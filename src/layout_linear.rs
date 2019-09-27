@@ -368,8 +368,6 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
 
     match msg {
         winuser::WM_SIZE => {
-            use std::cmp::max;
-
             let mut width = lparam as u16;
             let mut height = (lparam >> 16) as u16;
             let ll: &mut LinearLayout = mem::transmute(ww);
@@ -380,7 +378,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             let mut x = 0;
             let mut y = 0;
             for child in ll.as_inner_mut().as_inner_mut().as_inner_mut().children.as_mut_slice() {
-                let (cw, ch, _) = child.measure(max(0, width as i32 - hp) as u16, max(0, height as i32 - vp) as u16);
+                let (cw, ch, _) = child.measure(cmp::max(0, width as i32 - hp) as u16, cmp::max(0, height as i32 - vp) as u16);
                 child.draw(Some((x + DEFAULT_PADDING, y + DEFAULT_PADDING)));
                 match o {
                     layout::Orientation::Horizontal if width >= cw => {

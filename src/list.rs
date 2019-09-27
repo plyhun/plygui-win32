@@ -68,9 +68,9 @@ impl ControlInner for WindowsList {
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
         control.coords = Some((px as i32, py as i32));
-        
-       let (member, _, adapter) = List::adapter_base_parts_mut(member);
-        
+
+        let (member, _, adapter) = List::adapter_base_parts_mut(member);
+
         let mut y = 0;
         for i in 0..adapter.adapter.len() {
             let self2: &mut List = unsafe { utils::base_to_impl_mut(member) };
@@ -79,7 +79,7 @@ impl ControlInner for WindowsList {
             let (_, yy) = item.size();
             self.children.push(item);
             y += yy as i32;
-            
+
             unsafe {
                 if i as isize != winuser::SendMessageW(self.base.hwnd, winuser::LB_ADDSTRING, 0, WINDOW_CLASS.as_ptr() as isize) {
                     common::log_error();
@@ -255,29 +255,59 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
     }
     match msg {
         winuser::WM_LBUTTONUP => {
-            let x = lparam as u16;
-            let y = (lparam >> 16) as u16;
-            println!("clicked {}/{}", x,y);
+            let i = winuser::SendMessageW(hwnd, winuser::LB_ITEMFROMPOINT, 0, lparam);
+            println!("clicked {}", i);
         }
         winuser::WM_SIZE => {
             let width = lparam as u16;
             let height = (lparam >> 16) as u16;
 
             let list: &mut List = mem::transmute(param);
+            
+            let mut y = 0;
+            for item in list.as_inner_mut().as_inner_mut().as_inner_mut().children.as_mut_slice() {
+                let (_, ch, _) = item.measure(cmp::max(0, width as i32) as u16, cmp::max(0, height as i32) as u16);
+                item.draw(Some((0, y)));
+                y += ch as i32;
+            }
+            
             list.call_on_size(width, height);
             return 0;
         }
         winuser::WM_CTLCOLORSTATIC => {
-            let hdc = wparam as windef::HDC; 
-            wingdi::SetTextColor(hdc, wingdi::RGB(0,0,0));    
+            let hdc = wparam as windef::HDC;
+            wingdi::SetTextColor(hdc, wingdi::RGB(0, 0, 0));
             wingdi::SetBkMode(hdc, wingdi::TRANSPARENT as i32);
-        
+
             return wingdi::GetStockObject(wingdi::NULL_BRUSH as i32) as isize;
+        }
+        winuser::WM_VSCROLL | winuser::WM_MOUSEWHEEL => {
+            use crate::plygui_api::controls::HasSize;
+            
+            let list: &mut List = mem::transmute(param);
+            let list_h = list.size().1 as i32;
+            let list = list.as_inner_mut().as_inner_mut().as_inner_mut();
+            
+            let i = cmp::max(0, winuser::SendMessageW(hwnd, winuser::LB_GETTOPINDEX, 0, 0)) as usize;
+            
+            for i in i..list.children.len() {
+                let item = &mut list.children[i];
+                if let Some((x, y)) = item.coords() {
+                    println!("vis {} = {}/{}", i, x, y);
+                    if y < list_h {
+                        item.draw(Some((x, y)));
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
         }
         winuser::WM_COMMAND => {
             let id = wparam as u16;
             let param = (wparam >> 16) as u16;
-            
+
             match param as u32 {
                 winuser::WM_MEASUREITEM => {
                     println!("Measure");
