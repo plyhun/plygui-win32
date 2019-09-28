@@ -127,19 +127,27 @@ impl ControlInner for WindowsLinearLayout {
         control.coords = Some((px as i32, py as i32));
         let mut x = DEFAULT_PADDING;
         let mut y = DEFAULT_PADDING;
+        let mut pw = pw as i32 - DEFAULT_PADDING - DEFAULT_PADDING;
+        let mut ph = ph as i32 - DEFAULT_PADDING - DEFAULT_PADDING;
         for ref mut child in self.children.as_mut_slice() {
             let self2: &mut LinearLayout = unsafe { utils::base_to_impl_mut(member) };
             child.on_added_to_container(
                 self2,
                 x,
                 y,
-                utils::coord_to_size(pw as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16,
-                utils::coord_to_size(ph as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16,
+                utils::coord_to_size(pw) as u16,
+                utils::coord_to_size(ph) as u16,
             );
             let (xx, yy) = child.size();
             match self.orientation {
-                layout::Orientation::Horizontal => x += xx as i32,
-                layout::Orientation::Vertical => y += yy as i32,
+                layout::Orientation::Horizontal => {
+                    x += xx as i32;
+                    pw -= xx as i32;
+                },
+                layout::Orientation::Vertical => {
+                    y += yy as i32;
+                    ph -= yy as i32;
+                },
             }
         }
     }
@@ -257,16 +265,6 @@ impl ContainerInner for WindowsLinearLayout {
 impl Drawable for WindowsLinearLayout {
     fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase) {
         self.base.draw(control.coords, control.measured);
-        /*let mut x = DEFAULT_PADDING;
-        let mut y = DEFAULT_PADDING;
-        for ref mut child in self.children.as_mut_slice() {
-            child.draw(Some((x, y)));
-            let (xx, yy) = child.size();
-            match self.orientation {
-                layout::Orientation::Horizontal => x += xx as i32,
-                layout::Orientation::Vertical => y += yy as i32,
-            }
-        }*/
     }
     fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
         use std::cmp::max;
@@ -285,7 +283,7 @@ impl Drawable for WindowsLinearLayout {
                     layout::Size::WrapContent => {
                         let mut w = 0;
                         for child in self.children.as_mut_slice() {
-                            let (cw, _, _) = child.measure(max(0, parent_width as i32 - hp) as u16, max(0, parent_height as i32 - vp) as u16);
+                            let (cw, _, _) = child.measure(max(0, parent_width as i32 - w as i32 - hp) as u16, max(0, parent_height as i32 - vp) as u16);
                             match orientation {
                                 layout::Orientation::Horizontal => {
                                     w += cw;
@@ -308,7 +306,7 @@ impl Drawable for WindowsLinearLayout {
                             let ch = if measured {
                                 child.size().1
                             } else {
-                                let (_, ch, _) = child.measure(max(0, parent_width as i32 - hp) as u16, max(0, parent_height as i32 - vp) as u16);
+                                let (_, ch, _) = child.measure(max(0, parent_width as i32 - hp) as u16, max(0, parent_height as i32 - h as i32 - vp) as u16);
                                 ch
                             };
                             match orientation {

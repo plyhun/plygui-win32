@@ -4,6 +4,8 @@ lazy_static! {
     pub static ref WINDOW_CLASS: Vec<u16> = OsStr::new("STATIC").encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
 }
 
+const DEFAULT_CONTENT_PADDING: i32 = 0;
+
 pub type Image = Member<Control<WindowsImage>>;
 
 #[repr(C)]
@@ -27,10 +29,10 @@ impl WindowsImage {
         self.bmp = ptr::null_mut();
     }
     fn scaled_image_size(&self, pw: u16, ph: u16) -> (i32, i32) {
-        let hoffs = DEFAULT_PADDING;
-        let voffs = DEFAULT_PADDING;
-        let hdiff = hoffs + DEFAULT_PADDING;
-        let vdiff = voffs + DEFAULT_PADDING;
+        let hoffs = DEFAULT_CONTENT_PADDING;
+        let voffs = DEFAULT_CONTENT_PADDING;
+        let hdiff = hoffs + DEFAULT_CONTENT_PADDING;
+        let vdiff = voffs + DEFAULT_CONTENT_PADDING;
         let inner_h = pw as i32 - hdiff;
         let inner_v = ph as i32 - vdiff;
 
@@ -231,10 +233,10 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             let i: &mut Image = mem::transmute(param);
             let (pw, ph) = i.size();
             let i = i.as_inner_mut().as_inner_mut();
-            let hoffs = DEFAULT_PADDING;
-            let voffs = DEFAULT_PADDING;
-            let hdiff = hoffs + DEFAULT_PADDING;
-            let vdiff = voffs + DEFAULT_PADDING;
+            let hoffs = DEFAULT_CONTENT_PADDING;
+            let voffs = DEFAULT_CONTENT_PADDING;
+            let hdiff = hoffs + DEFAULT_CONTENT_PADDING;
+            let vdiff = voffs + DEFAULT_CONTENT_PADDING;
             let inner_h = pw as i32 - hdiff;
             let inner_v = ph as i32 - vdiff;
 

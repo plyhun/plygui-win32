@@ -183,6 +183,22 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             text.call_on_size(width, height);
             return 0;
         }
+        /*winuser::WM_PAINT => {
+            use crate::plygui_api::controls::HasLabel;
+            
+            let text: &mut Text = mem::transmute(param);
+            let mut ps: winuser::PAINTSTRUCT = mem::zeroed();
+            let hdc = winuser::BeginPaint(hwnd, &mut ps);
+            let mut text = common::str_to_wchar(text.label());
+            let mut rc = common::window_rect(hwnd);
+            
+            wingdi::SetBkMode(hdc, wingdi::TRANSPARENT as i32);
+            winuser::DrawTextW(hdc, text.as_mut_ptr(), text.len() as i32, &mut rc, winuser::DT_CENTER | winuser::DT_VCENTER);
+            winuser::EndPaint(hwnd, &mut ps);
+            
+            winuser::EndPaint(hwnd, &ps);
+            return 0;
+        }*/
         _ => {}
     }
 

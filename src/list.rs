@@ -68,6 +68,8 @@ impl ControlInner for WindowsList {
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
         control.coords = Some((px as i32, py as i32));
+        
+        let scroll_width = unsafe { winuser::GetSystemMetrics(winuser::SM_CXVSCROLL) };
 
         let (member, _, adapter) = List::adapter_base_parts_mut(member);
 
@@ -75,7 +77,7 @@ impl ControlInner for WindowsList {
         for i in 0..adapter.adapter.len() {
             let self2: &mut List = unsafe { utils::base_to_impl_mut(member) };
             let mut item = adapter.adapter.spawn_item_view(i, self2);
-            item.on_added_to_container(self2, 0, y, utils::coord_to_size(pw as i32) as u16, utils::coord_to_size(ph as i32) as u16);
+            item.on_added_to_container(self2, 0, y, utils::coord_to_size(pw as i32 - scroll_width - 2) as u16, utils::coord_to_size(ph as i32) as u16);
             let (_, yy) = item.size();
             self.children.push(item);
             y += yy as i32;
@@ -203,20 +205,6 @@ impl HasVisibilityInner for WindowsList {
 impl Drawable for WindowsList {
     fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase) {
         self.base.draw(control.coords, control.measured);
-        /*let mut x = DEFAULT_PADDING;
-        let mut y = DEFAULT_PADDING;
-        for row in self.rows.as_mut_slice() {
-            for child in row.cols.as_mut_slice() {
-                if let Some(child) = child {
-                    child.draw(Some((x, y)));
-                    /*let (xx, yy) = child.size();
-                    match self.orientation {
-                        layout::Orientation::Horizontal => x += xx as i32,
-                        layout::Orientation::Vertical => y += yy as i32,
-                    }*/
-                }
-            }
-        }*/
     }
     fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
         let old_size = control.measured;
@@ -256,13 +244,20 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
     match msg {
         winuser::WM_LBUTTONUP => {
             let i = winuser::SendMessageW(hwnd, winuser::LB_ITEMFROMPOINT, 0, lparam);
-            println!("clicked {}", i);
+            let list: &mut List = mem::transmute(param);
+            let item_view = list.as_inner_mut().as_inner_mut().as_inner_mut().children.get_mut(i as usize).unwrap();
+            let list: &mut List = mem::transmute(param); // bck is stupid
+            if let Some(ref mut callback) = list.as_inner_mut().as_inner_mut().base_mut().on_item_click {
+                let list: &mut List = mem::transmute(param); // bck is still stupid
+                (callback.as_mut())(list, i as usize, item_view.as_mut());
+            }
         }
         winuser::WM_SIZE => {
             let width = lparam as u16;
             let height = (lparam >> 16) as u16;
 
             let list: &mut List = mem::transmute(param);
+            list.call_on_size(width, height);
             
             let mut y = 0;
             for item in list.as_inner_mut().as_inner_mut().as_inner_mut().children.as_mut_slice() {
@@ -270,9 +265,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
                 item.draw(Some((0, y)));
                 y += ch as i32;
             }
-            
-            list.call_on_size(width, height);
-            return 0;
+            winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::FALSE);
         }
         winuser::WM_CTLCOLORSTATIC => {
             let hdc = wparam as windef::HDC;
@@ -282,51 +275,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             return wingdi::GetStockObject(wingdi::NULL_BRUSH as i32) as isize;
         }
         winuser::WM_VSCROLL | winuser::WM_MOUSEWHEEL => {
-            use crate::plygui_api::controls::HasSize;
-            
-            let list: &mut List = mem::transmute(param);
-            let list_h = list.size().1 as i32;
-            let list = list.as_inner_mut().as_inner_mut().as_inner_mut();
-            
-            let i = cmp::max(0, winuser::SendMessageW(hwnd, winuser::LB_GETTOPINDEX, 0, 0)) as usize;
-            
-            for i in i..list.children.len() {
-                let item = &mut list.children[i];
-                if let Some((x, y)) = item.coords() {
-                    println!("vis {} = {}/{}", i, x, y);
-                    if y < list_h {
-                        item.draw(Some((x, y)));
-                    } else {
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
-        }
-        winuser::WM_COMMAND => {
-            let id = wparam as u16;
-            let param = (wparam >> 16) as u16;
-
-            match param as u32 {
-                winuser::WM_MEASUREITEM => {
-                    println!("Measure");
-                    return 0;
-                }
-                winuser::WM_DRAWITEM => {
-                    println!("Draw");
-                    return 0;
-                }
-                _ => {}
-            }
-        }
-        winuser::WM_MEASUREITEM => {
-            println!("Measure2");
-            return 0;
-        }
-        winuser::WM_DRAWITEM => {
-            println!("Draw2");
-            return 0;
+            winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::FALSE);
         }
         _ => {}
     }

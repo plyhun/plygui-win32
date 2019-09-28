@@ -1,6 +1,8 @@
 use crate::common::{self, *};
 
-const DEFAULT_BOUND: i32 = DEFAULT_PADDING;
+const DEFAULT_BOUND: i32 = DEFAULT_PADDING * 2;
+const DEFAULT_DIVIDER_PADDING: i32 = DEFAULT_PADDING * 8;
+const HALF_DIVIDER_PADDING: i32 = DEFAULT_DIVIDER_PADDING / 2;
 const HALF_BOUND: i32 = DEFAULT_BOUND / 2;
 
 lazy_static! {
@@ -34,6 +36,35 @@ impl WindowsSplitted {
             utils::coord_to_size((target as f32 * self.splitter) as i32 - DEFAULT_PADDING - HALF_BOUND),
             utils::coord_to_size((target as f32 * (1.0 - self.splitter)) as i32 - DEFAULT_PADDING - HALF_BOUND),
         )
+    }
+    fn draw_divider(&mut self, base: &ControlBase) {
+        let (w, h) = base.measured;
+        let (x0, y0, x1, y1) = match self.orientation {
+            layout::Orientation::Vertical => {
+                let coord = (h as f32 * self.splitter) as i32;
+                (HALF_DIVIDER_PADDING, coord, w as i32 - HALF_DIVIDER_PADDING, coord)
+            }
+            layout::Orientation::Horizontal => {
+                let coord = (w as f32 * self.splitter) as i32;
+                (coord, HALF_DIVIDER_PADDING, coord, h as i32 - HALF_DIVIDER_PADDING)
+            }
+        };
+
+        unsafe {
+            let color = winuser::GetSysColor(winuser::COLOR_ACTIVEBORDER);
+
+            let mut ps: winuser::PAINTSTRUCT = mem::zeroed();
+            let dc = winuser::BeginPaint(self.base.hwnd, &mut ps);
+            wingdi::SelectObject(dc, wingdi::GetStockObject(wingdi::DC_PEN as i32));
+            wingdi::SetDCPenColor(dc, color);
+            wingdi::SelectObject(dc, wingdi::GetStockObject(wingdi::DC_BRUSH as i32));
+            wingdi::SetDCBrushColor(dc, color);
+
+            wingdi::MoveToEx(dc, x0, y0, ptr::null_mut());
+            wingdi::LineTo(dc, x1, y1);
+
+            winuser::EndPaint(self.base.hwnd, &ps);
+        }
     }
     fn draw_children(&mut self) {
         let mut x = DEFAULT_PADDING;
@@ -216,6 +247,7 @@ impl ControlInner for WindowsSplitted {
                 self.second.on_added_to_container(self2, DEFAULT_PADDING, DEFAULT_PADDING + DEFAULT_BOUND + first_size as i32, w, second_size);
             }
         }
+        //self.draw_divider(control);
     }
     fn on_removed_from_container(&mut self, member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
         let self2: &mut Splitted = unsafe { utils::base_to_impl_mut(member) };
@@ -526,6 +558,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
                     let ll = ll.as_inner_mut().as_inner_mut().as_inner_mut();
                     ll.update_children_layout(base);
                     ll.draw_children();
+                    //ll.draw_divider(base);
                 }
                 ll.set_skip_draw(false);
             }
@@ -590,11 +623,17 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             return 0;
         }
         winuser::WM_CTLCOLORSTATIC => {
-            let hdc = wparam as windef::HDC; 
-            wingdi::SetTextColor(hdc, wingdi::RGB(0,0,0));    
+            let hdc = wparam as windef::HDC;
+            wingdi::SetTextColor(hdc, wingdi::RGB(0, 0, 0));
             wingdi::SetBkMode(hdc, wingdi::TRANSPARENT as i32);
-        
+
             return wingdi::GetStockObject(wingdi::NULL_BRUSH as i32) as isize;
+        }
+        winuser::WM_PAINT => {
+            let ll: &mut Splitted = mem::transmute(ww);
+            let base = mem::transmute::<isize, &Splitted>(ww).as_inner().base();
+            let ll = ll.as_inner_mut().as_inner_mut().as_inner_mut();
+            ll.draw_divider(base);
         }
         _ => {}
     }
