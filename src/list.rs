@@ -60,7 +60,7 @@ impl ControlInner for WindowsList {
                 0,
                 WINDOW_CLASS.as_ptr(),
                 "",
-                winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::LBS_OWNERDRAWVARIABLE | winuser::WS_BORDER | winuser::WS_VSCROLL | winuser::WS_EX_RIGHTSCROLLBAR,
+                winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::LBS_OWNERDRAWVARIABLE | winuser::WS_THICKFRAME | winuser::WS_VSCROLL | winuser::WS_EX_RIGHTSCROLLBAR,
                 selfptr,
                 Some(handler),
             )
@@ -77,7 +77,7 @@ impl ControlInner for WindowsList {
         for i in 0..adapter.adapter.len() {
             let self2: &mut List = unsafe { utils::base_to_impl_mut(member) };
             let mut item = adapter.adapter.spawn_item_view(i, self2);
-            item.on_added_to_container(self2, 0, y, utils::coord_to_size(pw as i32 - scroll_width - 2) as u16, utils::coord_to_size(ph as i32) as u16);
+            item.on_added_to_container(self2, 0, y, utils::coord_to_size(pw as i32 - scroll_width - 14) as u16, utils::coord_to_size(ph as i32) as u16);
             let (_, yy) = item.size();
             self.children.push(item);
             y += yy as i32;
@@ -260,10 +260,16 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             list.call_on_size(width, height);
             
             let mut y = 0;
-            for item in list.as_inner_mut().as_inner_mut().as_inner_mut().children.as_mut_slice() {
-                let (_, ch, _) = item.measure(cmp::max(0, width as i32) as u16, cmp::max(0, height as i32) as u16);
-                item.draw(Some((0, y)));
-                y += ch as i32;
+            let i = cmp::max(0, winuser::SendMessageW(hwnd, winuser::LB_GETTOPINDEX, 0, 0)) as usize;
+            //let i = 0;
+            {
+                let list = list.as_inner_mut().as_inner_mut().as_inner_mut();
+                for i in i..list.children.len() {
+                    let item = &mut list.children[i];
+                    let (_, ch, _) = item.measure(cmp::max(0, width as i32) as u16, cmp::max(0, height as i32) as u16);
+                    item.draw(Some((0, y)));
+                    y += ch as i32;
+                }
             }
             winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::FALSE);
         }

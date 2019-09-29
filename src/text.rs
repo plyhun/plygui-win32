@@ -53,7 +53,8 @@ impl ControlInner for WindowsText {
         let (hwnd, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
             let (w, h, _) = self.measure(member, control, pw, ph);
-            common::create_control_hwnd(x as i32, y as i32, w as i32, h as i32, self.base.hwnd, 0, WINDOW_CLASS.as_ptr(), self.text.as_str(), winuser::WS_TABSTOP, selfptr, Some(handler))
+            common::create_control_hwnd(x as i32, y as i32, w as i32, h as i32, self.base.hwnd, 0, WINDOW_CLASS.as_ptr(), self.text.as_str(), 
+                winuser::WS_TABSTOP | winuser::SS_NOPREFIX, selfptr, Some(handler))
         };
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
@@ -195,9 +196,23 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             wingdi::SetBkMode(hdc, wingdi::TRANSPARENT as i32);
             winuser::DrawTextW(hdc, text.as_mut_ptr(), text.len() as i32, &mut rc, winuser::DT_CENTER | winuser::DT_VCENTER);
             winuser::EndPaint(hwnd, &mut ps);
-            
-            winuser::EndPaint(hwnd, &ps);
             return 0;
+        }
+        winuser::WM_NCCALCSIZE => {
+            match wparam as i32 {
+                minwindef::TRUE => {
+                    let nccalc: &mut winuser::NCCALCSIZE_PARAMS = mem::transmute(lparam);
+                    //println!("{:?}", nccalc);
+                }
+                minwindef::FALSE => {
+                    let rect: &mut windef::RECT = mem::transmute(lparam);
+                    rect.left += DEFAULT_PADDING;
+                    rect.top += DEFAULT_PADDING;
+                    rect.right -= DEFAULT_PADDING;
+                    rect.bottom -= DEFAULT_PADDING;
+                }
+                _ => {}
+            }
         }*/
         _ => {}
     }
