@@ -31,6 +31,9 @@ impl AdapterViewInner for WindowsList {
         ));
         b
     }
+    fn on_item_change(&mut self, base: &mut MemberBase, i: usize) {
+        println!("got at {}", i);
+    }
 }
 
 impl ControlInner for WindowsList {
@@ -170,9 +173,6 @@ impl HasLayoutInner for WindowsList {
         if !hwnd.is_null() {
             self.base.invalidate();
         }
-    }
-    fn layout_margin(&self, _member: &MemberBase) -> layout::BoundarySize {
-        layout::BoundarySize::AllTheSame(DEFAULT_PADDING)
     }
 }
 impl HasNativeIdInner for WindowsList {
