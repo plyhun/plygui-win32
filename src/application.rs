@@ -11,9 +11,12 @@ lazy_static! {
     pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
 }
 
+const DEFAULT_FRAME_SLEEP_MS: u32 = 10;
+
 pub struct WindowsApplication {
     pub(crate) root: windef::HWND,
     name: String,
+    sleep: u32,
     windows: Vec<windef::HWND>,
     trays: Vec<*mut crate::tray::Tray>,
 }
@@ -27,6 +30,7 @@ impl ApplicationInner for WindowsApplication {
         let mut a = Box::new(Application::with_inner(
             WindowsApplication {
                 name: String::new(), //name.into(), // TODO later
+                sleep: DEFAULT_FRAME_SLEEP_MS,
                 windows: Vec::with_capacity(1),
                 trays: Vec::with_capacity(0),
                 root: 0 as windef::HWND,
@@ -76,6 +80,12 @@ impl ApplicationInner for WindowsApplication {
     fn name<'a>(&'a self) -> Cow<'a, str> {
         Cow::Borrowed(self.name.as_str())
     }
+    fn frame_sleep(&self) -> u32 {
+        self.sleep
+    }
+    fn set_frame_sleep(&mut self, value: u32) {
+        self.sleep = value;
+    }    
     fn start(&mut self) {
         let mut msg: winuser::MSG = unsafe { mem::zeroed() };
         let mut i;
@@ -99,7 +109,7 @@ impl ApplicationInner for WindowsApplication {
                 }
             }
             unsafe {
-                synchapi::Sleep(10);
+                synchapi::Sleep(self.sleep);
 
                 if winuser::PeekMessageW(&mut msg, ptr::null_mut(), 0, 0, winuser::PM_REMOVE) > 0 {
                     winuser::TranslateMessage(&mut msg);
