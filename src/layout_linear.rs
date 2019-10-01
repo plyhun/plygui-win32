@@ -395,9 +395,9 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             return 0;
         }
         winuser::WM_CTLCOLORLISTBOX | winuser::WM_CTLCOLORSTATIC => {
-            /*let hdc = wparam as windef::HDC; 
-            wingdi::SetTextColor(hdc, wingdi::RGB(0,0,0));    
-            wingdi::SetBkMode(hdc, wingdi::TRANSPARENT as i32);*/
+            let hdc = wparam as windef::HDC; 
+            //wingdi::SetTextColor(hdc, wingdi::RGB(0,0,0));    
+            wingdi::SetBkMode(hdc, wingdi::TRANSPARENT as i32);
         
             return wingdi::GetStockObject(wingdi::NULL_BRUSH as i32) as isize;
             //return winuser::GetSysColorBrush(winuser::COLOR_BACKGROUND) as isize;

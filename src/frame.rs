@@ -399,9 +399,8 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             let width = lparam as u16;
             let height = (lparam >> 16) as u16;
             let frame: &mut Frame = mem::transmute(ww);
-            let label_padding = frame.as_inner().as_inner().as_inner().label_padding;
             let hp = DEFAULT_PADDING + DEFAULT_PADDING;
-            let vp = DEFAULT_PADDING + DEFAULT_PADDING + label_padding;
+            let vp = DEFAULT_PADDING + DEFAULT_PADDING;
             
             frame.call_on_size(width, height);
             
@@ -411,9 +410,9 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             }
             return 0;
         }
-        winuser::WM_CTLCOLORSTATIC => {
+        winuser::WM_CTLCOLORLISTBOX | winuser::WM_CTLCOLORSTATIC => {
             let hdc = wparam as windef::HDC; 
-            wingdi::SetTextColor(hdc, wingdi::RGB(0,0,0));    
+            //wingdi::SetTextColor(hdc, wingdi::RGB(0,0,0));    
             wingdi::SetBkMode(hdc, wingdi::TRANSPARENT as i32);
         
             return wingdi::GetStockObject(wingdi::NULL_BRUSH as i32) as isize;
