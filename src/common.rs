@@ -187,24 +187,23 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
         if self.hwnd.is_null() {
             return;
         }
-        let parent_hwnd = self.parent_hwnd();
         let this = self.as_outer_mut();
         if this.is_skip_draw() {
             return;
         }
+        /*let parent_hwnd = self.parent_hwnd();
         if let Some(parent_hwnd) = parent_hwnd {
             if let Some(mparent) = member_base_from_hwnd(parent_hwnd) {
-                let (pw, ph) = mparent.as_member().is_has_size().unwrap().size();
-                let (_, _, changed) = this.measure(pw, ph);
-
                 if let Some(cparent) = mparent.as_member_mut().is_control_mut() {
-                    if changed && !cparent.is_skip_draw() {
-                        cparent.invalidate();
-                    }
+                    cparent.invalidate();
                 } else {
                     this.draw(None);
                 }
             }
+        }*/
+        //this.draw(None);
+        unsafe {
+            winuser::InvalidateRect(self.hwnd, ptr::null_mut(), 0);
         }
     }
     pub fn draw(&mut self, coords: Option<(i32, i32)>, (width, height): (u16, u16)) -> bool {

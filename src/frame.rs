@@ -85,9 +85,9 @@ impl SingleContainerInner for WindowsFrame {
                     new.as_mut().on_added_to_container(
                         self.base.as_outer_mut(),
                         DEFAULT_PADDING,
-                        DEFAULT_PADDING,
-                        cmp::max(0, w as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16,
-                        cmp::max(0, h as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16,
+                        DEFAULT_PADDING + self.label_padding,
+                        utils::coord_to_size(w as i32 - DEFAULT_PADDING - DEFAULT_PADDING),
+                        utils::coord_to_size(h as i32 - DEFAULT_PADDING - DEFAULT_PADDING - self.label_padding),
                     );
                 }
             }
@@ -206,9 +206,9 @@ impl ControlInner for WindowsFrame {
             child.on_added_to_container(
                 self2,
                 DEFAULT_PADDING,
-                DEFAULT_PADDING,
-                cmp::max(0, control.measured.0 as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16,
-                cmp::max(0, control.measured.1 as i32 - DEFAULT_PADDING - DEFAULT_PADDING - self.label_padding) as u16,
+                DEFAULT_PADDING + self.label_padding,
+                utils::coord_to_size(control.measured.0 as i32 - DEFAULT_PADDING - DEFAULT_PADDING),
+                utils::coord_to_size(control.measured.1 as i32 - DEFAULT_PADDING - DEFAULT_PADDING - self.label_padding - self.label_padding),
             );
         }
     }
@@ -291,17 +291,15 @@ impl Drawable for WindowsFrame {
                 winuser::SetWindowPos(self.base.hwnd, ptr::null_mut(), x, y + self.label_padding, control.measured.0 as i32, control.measured.1 as i32 - self.label_padding, 0);
                 winuser::SetWindowPos(self.hwnd_gbox, ptr::null_mut(), x, y, control.measured.0 as i32, control.measured.1 as i32, 0);
             }
-            /*if let Some(ref mut child) = self.child {
-                child.draw(Some((DEFAULT_PADDING, DEFAULT_PADDING)));
-            }*/
         }
     }
     fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
         use std::cmp::max;
 
         let old_size = control.measured;
+        self.label_padding = update_label_size(self.label.as_str(), self.base.hwnd);
         let hp = DEFAULT_PADDING + DEFAULT_PADDING;
-        let vp = DEFAULT_PADDING + DEFAULT_PADDING;
+        let vp = DEFAULT_PADDING + DEFAULT_PADDING + self.label_padding;
         control.measured = match control.visibility {
             types::Visibility::Gone => (0, 0),
             _ => {
@@ -312,7 +310,6 @@ impl Drawable for WindowsFrame {
                     layout::Size::WrapContent => {
                         let mut w = 0;
                         if let Some(ref mut child) = self.child {
-                            self.label_padding = update_label_size(self.label.as_str(), self.base.hwnd);
                             let (cw, _, _) = child.measure(max(0, parent_width as i32 - hp) as u16, max(0, parent_height as i32 - vp - self.label_padding) as u16);
                             w += cw as i32;
                             measured = true;
@@ -329,7 +326,6 @@ impl Drawable for WindowsFrame {
                             let ch = if measured {
                                 child.size().1
                             } else {
-                                self.label_padding = update_label_size(self.label.as_str(), self.base.hwnd);
                                 let (_, ch, _) = child.measure(max(0, parent_width as i32 - hp) as u16, max(0, parent_height as i32 - vp - self.label_padding) as u16);
                                 ch
                             };
@@ -361,7 +357,7 @@ fn update_label_size(label: &str, hwnd: windef::HWND) -> i32 {
     unsafe {
         wingdi::GetTextExtentPointW(winuser::GetDC(hwnd), label.as_ptr(), label.len() as i32, &mut label_size);
     }
-    (label_size.cy + DEFAULT_PADDING) as i32 / 2
+    (label_size.cy) as i32 / 2
 }
 
 unsafe fn register_window_class() -> Vec<u16> {
@@ -399,14 +395,15 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             let width = lparam as u16;
             let height = (lparam >> 16) as u16;
             let frame: &mut Frame = mem::transmute(ww);
+            let label_padding = frame.as_inner().as_inner().as_inner().label_padding;
             let hp = DEFAULT_PADDING + DEFAULT_PADDING;
-            let vp = DEFAULT_PADDING + DEFAULT_PADDING;
+            let vp = DEFAULT_PADDING + DEFAULT_PADDING + label_padding;
             
             frame.call_on_size(width, height);
             
             if let Some(ref mut child) = frame.as_inner_mut().as_inner_mut().as_inner_mut().child {
-                child.measure(cmp::max(0, width as i32 - hp) as u16, cmp::max(0, height as i32 - vp) as u16);
-                child.draw(Some((DEFAULT_PADDING, DEFAULT_PADDING)));
+                child.measure(utils::coord_to_size(width as i32 - hp), utils::coord_to_size(height as i32 - vp));
+                child.draw(Some((DEFAULT_PADDING, DEFAULT_PADDING + label_padding)));
             }
             return 0;
         }

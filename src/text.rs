@@ -139,7 +139,7 @@ impl Drawable for WindowsText {
                                 wingdi::GetTextExtentPointW(winuser::GetDC(self.base.hwnd), label.as_ptr(), self.text.len() as i32, &mut label_size);
                             }
                         }
-                        label_size.cx as i32 + DEFAULT_PADDING + DEFAULT_PADDING
+                        label_size.cx as i32
                     }
                 };
                 let h = match control.layout.height {
@@ -152,7 +152,7 @@ impl Drawable for WindowsText {
                                 wingdi::GetTextExtentPointW(winuser::GetDC(self.base.hwnd), label.as_ptr(), self.text.len() as i32, &mut label_size);
                             }
                         }
-                        label_size.cy as i32 + DEFAULT_PADDING + DEFAULT_PADDING
+                        label_size.cy as i32
                     }
                 };
                 (cmp::max(0, w) as u16, cmp::max(0, h) as u16)

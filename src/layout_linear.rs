@@ -55,14 +55,37 @@ impl MultiContainerInner for WindowsLinearLayout {
         self.children.insert(index, child);
         if !self.base.hwnd.is_null() {
             let (w, h) = base.as_any().downcast_ref::<LinearLayout>().unwrap().as_inner().base().measured;
-            self.children.get_mut(index).unwrap().on_added_to_container(
-                self.base.as_outer_mut(),
-                w as i32 - DEFAULT_PADDING,
-                h as i32 - DEFAULT_PADDING,
-                utils::coord_to_size(w as i32 - DEFAULT_PADDING),
-                utils::coord_to_size(h as i32 - DEFAULT_PADDING),
-            );
-            self.base.invalidate();
+            let (cw, ch) = {
+                let mut w = 0;
+                let mut h = 0;
+                for i in 0..index {
+                    let (cw, ch) = self.children[i].size();
+                    w += cw;
+                    h += ch;
+                }
+                (w as i32, h as i32)
+            };
+            match self.orientation {
+                layout::Orientation::Vertical => {
+                    self.children.get_mut(index).unwrap().on_added_to_container(
+                        self.base.as_outer_mut(),
+                        DEFAULT_PADDING,
+                        ch + DEFAULT_PADDING,
+                        utils::coord_to_size(w as i32 - DEFAULT_PADDING - DEFAULT_PADDING),
+                        utils::coord_to_size(h as i32 - ch - DEFAULT_PADDING - DEFAULT_PADDING),
+                    );
+                },
+                layout::Orientation::Horizontal => {
+                    self.children.get_mut(index).unwrap().on_added_to_container(
+                        self.base.as_outer_mut(),
+                        cw + DEFAULT_PADDING,
+                        DEFAULT_PADDING,
+                        utils::coord_to_size(w as i32 - cw - DEFAULT_PADDING - DEFAULT_PADDING),
+                        utils::coord_to_size(h as i32 - DEFAULT_PADDING - DEFAULT_PADDING),
+                    );                
+                }
+            }
+            
         }
         old
     }
