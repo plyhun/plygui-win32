@@ -305,9 +305,11 @@ pub unsafe fn set_default_font(hwnd: windef::HWND) {
 pub fn destroy_hwnd(hwnd: windef::HWND, subclass_id: usize, handler: Option<unsafe extern "system" fn(windef::HWND, msg: minwindef::UINT, minwindef::WPARAM, minwindef::LPARAM, usize, usize) -> isize>) {
     unsafe {
         if subclass_id != 0 {
-            commctrl::RemoveWindowSubclass(hwnd, handler, subclass_id);
+            if minwindef::FALSE == commctrl::RemoveWindowSubclass(hwnd, handler, subclass_id) {
+                log_error();
+            }
         }
-        if winuser::DestroyWindow(hwnd) == 0 && winuser::IsWindow(hwnd) > 0 {
+        if winuser::DestroyWindow(hwnd) == 0 && winuser::IsWindow(hwnd) != 0 {
             log_error();
         }
     }
