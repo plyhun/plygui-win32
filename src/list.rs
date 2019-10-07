@@ -77,7 +77,6 @@ impl AdapterViewInner for WindowsList {
             match value {
                 types::Change::Added(at) => {
                     self.add_item_inner(base, at, &mut y);
-                    self.children[at].draw(None);
                 },
                 types::Change::Removed(at) => {
                     self.remove_item_inner(base, at);
