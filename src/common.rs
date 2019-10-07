@@ -203,7 +203,7 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
         }*/
         //this.draw(None);
         unsafe {
-            winuser::InvalidateRect(self.hwnd, ptr::null_mut(), 0);
+           winuser::InvalidateRect(self.hwnd, ptr::null_mut(), minwindef::FALSE);
         }
     }
     pub fn draw(&mut self, coords: Option<(i32, i32)>, (width, height): (u16, u16)) -> bool {

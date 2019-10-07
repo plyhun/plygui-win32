@@ -14,6 +14,40 @@ pub struct WindowsList {
     children: Vec<Box<dyn controls::Control>>,
 }
 
+impl WindowsList {
+    fn add_item_inner(&mut self, base: &mut MemberBase, i: usize, y: &mut i32) {
+        let (member, control, adapter) = List::adapter_base_parts_mut(base);
+        let (pw, ph) = control.measured;
+        let scroll_width = unsafe { winuser::GetSystemMetrics(winuser::SM_CXVSCROLL) };
+        let this: &mut List = unsafe { utils::base_to_impl_mut(member) };
+        
+        let mut item = adapter.adapter.spawn_item_view(i, this);
+        item.on_added_to_container(this, 0, *y, utils::coord_to_size(pw as i32 - scroll_width - 14) as u16, utils::coord_to_size(ph as i32) as u16);
+                
+        let (_, yy) = item.size();
+        self.children.push(item);
+        *y += yy as i32;
+        
+        unsafe {
+            if i as isize != winuser::SendMessageW(self.base.hwnd, winuser::LB_ADDSTRING, 0, WINDOW_CLASS.as_ptr() as isize) {
+                common::log_error();
+            }
+            if winuser::LB_ERR == winuser::SendMessageW(self.base.hwnd, winuser::LB_SETITEMHEIGHT, i, yy as isize) {
+                common::log_error();
+            }
+        }
+    }
+    fn remove_item_inner(&mut self, base: &mut MemberBase, i: usize) {
+        let this: &mut List = unsafe { utils::base_to_impl_mut(base) };
+        self.children.remove(i).on_removed_from_container(this); 
+        unsafe {
+            if i as isize != winuser::SendMessageW(self.base.hwnd, winuser::LB_DELETESTRING, 0, WINDOW_CLASS.as_ptr() as isize) {
+                common::log_error();
+            }
+        }
+    }
+}
+
 impl AdapterViewInner for WindowsList {
     fn with_adapter(adapter: Box<dyn types::Adapter>) -> Box<List> {
         let b = Box::new(Member::with_inner(
@@ -31,8 +65,28 @@ impl AdapterViewInner for WindowsList {
         ));
         b
     }
-    fn on_item_change(&mut self, base: &mut MemberBase, i: usize) {
-        println!("got at {}", i);
+    fn on_item_change(&mut self, base: &mut MemberBase, value: types::Change) {
+        if !self.base.hwnd.is_null() {
+            let mut y = 0;
+            {
+                for item in self.children.as_slice() {
+                    let (_, yy) = item.size();
+                    y += yy as i32;
+                }
+            }
+            match value {
+                types::Change::Added(at) => {
+                    self.add_item_inner(base, at, &mut y);
+                    self.children[at].draw(None);
+                },
+                types::Change::Removed(at) => {
+                    self.remove_item_inner(base, at);
+                },
+                types::Change::Edited(_) => {
+                },
+            }
+            self.base.invalidate();
+        }
     }
 }
 
@@ -72,27 +126,11 @@ impl ControlInner for WindowsList {
         self.base.subclass_id = id;
         control.coords = Some((px as i32, py as i32));
         
-        let scroll_width = unsafe { winuser::GetSystemMetrics(winuser::SM_CXVSCROLL) };
-
         let (member, _, adapter) = List::adapter_base_parts_mut(member);
 
         let mut y = 0;
         for i in 0..adapter.adapter.len() {
-            let self2: &mut List = unsafe { utils::base_to_impl_mut(member) };
-            let mut item = adapter.adapter.spawn_item_view(i, self2);
-            item.on_added_to_container(self2, 0, y, utils::coord_to_size(pw as i32 - scroll_width - 14) as u16, utils::coord_to_size(ph as i32) as u16);
-            let (_, yy) = item.size();
-            self.children.push(item);
-            y += yy as i32;
-
-            unsafe {
-                if i as isize != winuser::SendMessageW(self.base.hwnd, winuser::LB_ADDSTRING, 0, WINDOW_CLASS.as_ptr() as isize) {
-                    common::log_error();
-                }
-                if winuser::LB_ERR == winuser::SendMessageW(self.base.hwnd, winuser::LB_SETITEMHEIGHT, i, yy as isize) {
-                    common::log_error();
-                }
-            }
+            self.add_item_inner(member, i, &mut y);
         }
     }
     fn on_removed_from_container(&mut self, member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
