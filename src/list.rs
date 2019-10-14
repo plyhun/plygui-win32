@@ -11,7 +11,7 @@ pub type List = Member<Control<Adapter<WindowsList>>>;
 #[repr(C)]
 pub struct WindowsList {
     base: WindowsControlBase<List>,
-    children: Vec<Box<dyn controls::Control>>,
+    items: Vec<Box<dyn controls::Control>>,
 }
 
 impl WindowsList {
@@ -25,7 +25,7 @@ impl WindowsList {
         item.on_added_to_container(this, 0, *y, utils::coord_to_size(pw as i32 - scroll_width - 14) as u16, utils::coord_to_size(ph as i32) as u16);
                 
         let (_, yy) = item.size();
-        self.children.push(item);
+        self.items.push(item);
         *y += yy as i32;
         
         unsafe {
@@ -39,7 +39,7 @@ impl WindowsList {
     }
     fn remove_item_inner(&mut self, base: &mut MemberBase, i: usize) {
         let this: &mut List = unsafe { utils::base_to_impl_mut(base) };
-        self.children.remove(i).on_removed_from_container(this); 
+        self.items.remove(i).on_removed_from_container(this); 
         unsafe {
             if i as isize != winuser::SendMessageW(self.base.hwnd, winuser::LB_DELETESTRING, 0, WINDOW_CLASS.as_ptr() as isize) {
                 common::log_error();
@@ -55,7 +55,7 @@ impl AdapterViewInner for WindowsList {
                 Adapter::with_inner(
                     WindowsList {
                         base: WindowsControlBase::new(),
-                        children: Vec::with_capacity(adapter.len()),
+                        items: Vec::with_capacity(adapter.len()),
                     },
                     adapter,
                 ),
@@ -69,7 +69,7 @@ impl AdapterViewInner for WindowsList {
         if !self.base.hwnd.is_null() {
             let mut y = 0;
             {
-                for item in self.children.as_slice() {
+                for item in self.items.as_slice() {
                     let (_, yy) = item.size();
                     y += yy as i32;
                 }
@@ -133,7 +133,7 @@ impl ControlInner for WindowsList {
         }
     }
     fn on_removed_from_container(&mut self, member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
-        for ref mut child in self.children.as_mut_slice() {
+        for ref mut child in self.items.as_mut_slice() {
             let self2: &mut List = unsafe { utils::base_to_impl_mut(member) };
             child.on_removed_from_container(self2);
         }
@@ -147,12 +147,12 @@ impl ControlInner for WindowsList {
         use plygui_api::markup::MEMBER_TYPE_TABLE;
 
         fill_from_markup_base!(self, member, markup, registry, List, [MEMBER_TYPE_TABLE]);
-        //fill_from_markup_children!(self, member, markup, registry);
+        //fill_from_markup_items!(self, member, markup, registry);
     }
 }
 impl ContainerInner for WindowsList {
     fn find_control_mut(&mut self, arg: types::FindBy) -> Option<&mut dyn controls::Control> {
-        for child in self.children.as_mut_slice() {
+        for child in self.items.as_mut_slice() {
             match arg {
                 types::FindBy::Id(ref id) => {
                     if child.as_member_mut().id() == *id {
@@ -178,7 +178,7 @@ impl ContainerInner for WindowsList {
         None
     }
     fn find_control(&self, arg: types::FindBy) -> Option<&dyn controls::Control> {
-        for child in self.children.as_slice() {
+        for child in self.items.as_slice() {
             match arg {
                 types::FindBy::Id(ref id) => {
                     if child.as_member().id() == *id {
@@ -282,7 +282,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
         winuser::WM_LBUTTONUP => {
             let i = winuser::SendMessageW(hwnd, winuser::LB_ITEMFROMPOINT, 0, lparam);
             let list: &mut List = mem::transmute(param);
-            let item_view = list.as_inner_mut().as_inner_mut().as_inner_mut().children.get_mut(i as usize).unwrap();
+            let item_view = list.as_inner_mut().as_inner_mut().as_inner_mut().items.get_mut(i as usize).unwrap();
             let list: &mut List = mem::transmute(param); // bck is stupid
             if let Some(ref mut callback) = list.as_inner_mut().as_inner_mut().base_mut().on_item_click {
                 let list: &mut List = mem::transmute(param); // bck is still stupid
@@ -301,8 +301,8 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             //let i = 0;
             {
                 let list = list.as_inner_mut().as_inner_mut().as_inner_mut();
-                for i in i..list.children.len() {
-                    let item = &mut list.children[i];
+                for i in i..list.items.len() {
+                    let item = &mut list.items[i];
                     let (_, ch, _) = item.measure(cmp::max(0, width as i32) as u16, cmp::max(0, height as i32) as u16);
                     item.draw(Some((0, y)));
                     y += ch as i32;
