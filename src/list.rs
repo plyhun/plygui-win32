@@ -22,7 +22,7 @@ impl WindowsList {
         let this: &mut List = unsafe { utils::base_to_impl_mut(member) };
         
         let mut item = adapter.adapter.spawn_item_view(i, this);
-        item.on_added_to_container(this, 0, *y, utils::coord_to_size(pw as i32 - scroll_width - 14) as u16, utils::coord_to_size(ph as i32) as u16);
+        item.on_added_to_container(this, 0, *y, utils::coord_to_size(pw as i32 - scroll_width - 14 /*TODO: WHY???*/ - DEFAULT_PADDING) as u16, utils::coord_to_size(ph as i32) as u16);
                 
         let (_, yy) = item.size();
         self.items.push(item);
@@ -44,6 +44,11 @@ impl WindowsList {
             if i as isize != winuser::SendMessageW(self.base.hwnd, winuser::LB_DELETESTRING, 0, WINDOW_CLASS.as_ptr() as isize) {
                 common::log_error();
             }
+        }
+    }
+    fn force_scrollbar(&mut self) {
+        unsafe {
+            winuser::ShowScrollBar(self.base.hwnd, winuser::SB_VERT as i32, minwindef::TRUE);
         }
     }
 }
@@ -85,6 +90,7 @@ impl AdapterViewInner for WindowsList {
                 },
             }
             self.base.invalidate();
+            self.force_scrollbar();
         }
     }
 }
@@ -131,6 +137,7 @@ impl ControlInner for WindowsList {
         for i in 0..adapter.adapter.len() {
             self.add_item_inner(member, i, &mut y);
         }
+        self.force_scrollbar();
     }
     fn on_removed_from_container(&mut self, member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
         for ref mut child in self.items.as_mut_slice() {
@@ -298,17 +305,15 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             
             let mut y = 0;
             let i = cmp::max(0, winuser::SendMessageW(hwnd, winuser::LB_GETTOPINDEX, 0, 0)) as usize;
-            //let i = 0;
-            {
-                let list = list.as_inner_mut().as_inner_mut().as_inner_mut();
-                for i in i..list.items.len() {
-                    let item = &mut list.items[i];
-                    let (_, ch, _) = item.measure(cmp::max(0, width as i32) as u16, cmp::max(0, height as i32) as u16);
-                    item.draw(Some((0, y)));
-                    y += ch as i32;
-                }
+            let list = list.as_inner_mut().as_inner_mut().as_inner_mut();
+            for i in i..list.items.len() {
+                let item = &mut list.items[i];
+                let (_, ch, _) = item.measure(cmp::max(0, width as i32 - DEFAULT_PADDING) as u16, cmp::max(0, height as i32) as u16);
+                item.draw(Some((0, y)));
+                y += ch as i32;
             }
             winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::FALSE);
+            list.force_scrollbar();
         }
         winuser::WM_CTLCOLORSTATIC => {
             let hdc = wparam as windef::HDC;
