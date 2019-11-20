@@ -175,12 +175,7 @@ impl HasNativeIdInner for WindowsSplitted {
 }
 
 impl HasSizeInner for WindowsSplitted {
-    fn on_size_set(&mut self, base: &mut MemberBase, (width, height): (u16, u16)) -> bool {
-        use plygui_api::controls::HasLayout;
-
-        let this = base.as_any_mut().downcast_mut::<Splitted>().unwrap();
-        this.set_layout_width(layout::Size::Exact(width));
-        this.set_layout_width(layout::Size::Exact(height));
+    fn on_size_set(&mut self, _: &mut MemberBase, _: (u16, u16)) -> bool {
         self.base.invalidate();
         true
     }
