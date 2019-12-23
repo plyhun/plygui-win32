@@ -5,7 +5,7 @@ lazy_static! {
     //pub static ref INSTANCE: winuser::HINSTANCE = unsafe { kernel32::GetModuleHandleW(ptr::null()) };
 }
 
-pub type LinearLayout = AMember<AControl<AMultiContainer<ALinearLayout<WindowsLinearLayout>>>>;
+pub type LinearLayout = AMember<AControl<AContainer<AMultiContainer<ALinearLayout<WindowsLinearLayout>>>>>;
 
 #[repr(C)]
 pub struct WindowsLinearLayout {
@@ -389,13 +389,13 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             let mut width = lparam as u16;
             let mut height = (lparam >> 16) as u16;
             let ll: &mut LinearLayout = mem::transmute(ww);
-            let o = ll.inner().inner().inner().inner().orientation;
+            let o = ll.inner().inner().inner().inner().inner().orientation;
             let hp = DEFAULT_PADDING + DEFAULT_PADDING;
             let vp = DEFAULT_PADDING + DEFAULT_PADDING;
 
             let mut x = 0;
             let mut y = 0;
-            for child in ll.inner_mut().inner_mut().inner_mut().inner_mut().children.as_mut_slice() {
+            for child in ll.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().children.as_mut_slice() {
                 let (cw, ch, _) = child.measure(cmp::max(0, width as i32 - hp) as u16, cmp::max(0, height as i32 - vp) as u16);
                 child.draw(Some((x + DEFAULT_PADDING, y + DEFAULT_PADDING)));
                 match o {
