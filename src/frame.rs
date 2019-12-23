@@ -5,7 +5,7 @@ lazy_static! {
     pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
 }
 
-pub type Frame = Member<Control<SingleContainer<WindowsFrame>>>;
+pub type Frame = AMember<AControl<AContainer<ASingleContainer<AFrame<WindowsFrame>>>>>;
 
 #[repr(C)]
 pub struct WindowsFrame {
@@ -17,20 +17,22 @@ pub struct WindowsFrame {
 }
 
 impl FrameInner for WindowsFrame {
-    fn with_label(label: &str) -> Box<Frame> {
-        let b = Box::new(Member::with_inner(
-            Control::with_inner(
-                SingleContainer::with_inner(
-                    WindowsFrame {
-                        base: common::WindowsControlBase::new(),
-                        child: None,
-                        hwnd_gbox: 0 as windef::HWND,
-                        label: label.to_owned(),
-                        label_padding: 0,
-                    },
-                    (),
+    fn with_label<S: AsRef<str>>(label: S) -> Box<dyn controls::Frame> {
+        let b = Box::new(AMember::with_inner(
+            AControl::with_inner(
+                AContainer::with_inner(
+                    ASingleContainer::with_inner(
+                        AFrame::with_inner(
+                            WindowsFrame {
+                                base: common::WindowsControlBase::new(),
+                                child: None,
+                                hwnd_gbox: 0 as windef::HWND,
+                                label: label.as_ref().to_owned(),
+                                label_padding: 0,
+                            },
+                        )
+                    ),
                 ),
-                (),
             ),
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
@@ -80,7 +82,7 @@ impl SingleContainerInner for WindowsFrame {
 
         if self.child.is_some() {
             if !self.base.hwnd.is_null() {
-                let (w, h) = base.as_any().downcast_ref::<Frame>().unwrap().as_inner().base().measured;
+                let (w, h) = base.as_any().downcast_ref::<Frame>().unwrap().inner().base.measured;
                 if let Some(new) = self.child.as_mut() {
                     new.as_mut().on_added_to_container(
                         self.base.as_outer_mut(),
@@ -341,9 +343,10 @@ impl Drawable for WindowsFrame {
     }
 }
 
-#[allow(dead_code)]
-pub(crate) fn spawn() -> Box<dyn controls::Control> {
-    Frame::with_label("").into_control()
+impl Spawnable for WindowsFrame {
+    fn spawn() -> Box<dyn controls::Control> {
+        Self::with_label("").into_control()
+    }
 }
 
 fn update_label_size(label: &str, hwnd: windef::HWND) -> i32 {
@@ -390,13 +393,13 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             let width = lparam as u16;
             let height = (lparam >> 16) as u16;
             let frame: &mut Frame = mem::transmute(ww);
-            let label_padding = frame.as_inner().as_inner().as_inner().label_padding;
+            let label_padding = frame.inner().inner().inner().inner().inner().label_padding;
             let hp = DEFAULT_PADDING + DEFAULT_PADDING;
             let vp = DEFAULT_PADDING + DEFAULT_PADDING + label_padding;
             
             frame.call_on_size(width, height);
             
-            if let Some(ref mut child) = frame.as_inner_mut().as_inner_mut().as_inner_mut().child {
+            if let Some(ref mut child) = frame.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().child {
                 child.measure(utils::coord_to_size(width as i32 - hp), utils::coord_to_size(height as i32 - vp));
                 child.draw(Some((DEFAULT_PADDING, DEFAULT_PADDING + label_padding)));
             }

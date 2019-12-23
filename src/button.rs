@@ -6,14 +6,13 @@ lazy_static! {
     pub static ref WINDOW_CLASS: Vec<u16> = OsStr::new(CLASS_ID).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
 }
 
-pub type Button = Member<Control<WindowsButton>>;
+pub type Button = AMember<AControl<AButton<WindowsButton>>>;
 
 #[repr(C)]
 pub struct WindowsButton {
     base: common::WindowsControlBase<Button>,
     label: String,
     h_left_clicked: Option<callbacks::OnClick>,
-    h_on_label: Option<callbacks::OnLabel>,
     skip_callbacks: bool,
 }
 
@@ -49,17 +48,17 @@ impl ClickableInner for WindowsButton {
 }
 
 impl ButtonInner for WindowsButton {
-    fn with_label(label: &str) -> Box<Button> {
-        let b: Box<Button> = Box::new(Member::with_inner(
-            Control::with_inner(
-                WindowsButton {
-                    base: common::WindowsControlBase::new(),
-                    h_left_clicked: None,
-                    h_on_label: None,
-                    label: label.to_owned(),
-                    skip_callbacks: false,
-                },
-                (),
+    fn with_label<S: AsRef<str>>(label: S) -> Box<dyn controls::Button> {
+        let b: Box<Button> = Box::new(AMember::with_inner(
+            AControl::with_inner(
+                AButton::with_inner(
+                    WindowsButton {
+                        base: common::WindowsControlBase::new(),
+                        h_left_clicked: None,
+                        label: label.as_ref().to_owned(),
+                        skip_callbacks: false,
+                    },
+                )
             ),
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
@@ -206,8 +205,8 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
     match msg {
         winuser::WM_LBUTTONUP => {
             let button: &mut Button = mem::transmute(param);
-            if !button.as_inner().as_inner().skip_callbacks {
-                if let Some(ref mut cb) = button.as_inner_mut().as_inner_mut().h_left_clicked {
+            if !button.inner().inner().inner().skip_callbacks {
+                if let Some(ref mut cb) = button.inner_mut().inner_mut().inner_mut().h_left_clicked {
                     let button2: &mut Button = mem::transmute(param);
                     (cb.as_mut())(button2);
                     //return 0;
@@ -226,6 +225,12 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
     }
 
     commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
+}
+
+impl Spawnable for WindowsButton {
+    fn spawn() -> Box<dyn controls::Control> {
+        Self::with_label("").into_control()
+    }
 }
 
 default_impls_as!(Button);

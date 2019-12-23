@@ -14,7 +14,7 @@ pub struct WindowsTray {
     this: *mut Tray,
 }
 
-pub type Tray = Member<WindowsTray>;
+pub type Tray = AMember<ATray<WindowsTray>>;
 
 impl WindowsTray {
     pub(crate) fn toggle_menu(&mut self) {
@@ -82,7 +82,7 @@ impl CloseableInner for WindowsTray {
                 common::log_error();
             }
         }
-        app.as_inner_mut().remove_tray((self.this as windef::HWND).into());
+        app.inner_mut().remove_tray((self.this as windef::HWND).into());
 
         true
     }
@@ -129,52 +129,52 @@ impl HasImageInner for WindowsTray {
 }
 
 impl TrayInner for WindowsTray {
-    fn with_params(title: &str, menu: types::Menu) -> Box<Member<Self>> {
-        use plygui_api::controls::Member as OuterMember;
-
-        let mut t = Box::new(Member::with_inner(
-            WindowsTray {
-                label: title.into(),
-                cfg: unsafe { mem::zeroed() },
-                menu: (ptr::null_mut(), if menu.is_some() { Vec::new() } else { vec![] }, -2),
-                on_close: None,
-                this: ptr::null_mut(),
-            },
+    fn with_params<S: AsRef<str>>(title: S, menu: types::Menu) -> Box<dyn controls::Tray> {
+        let mut t = Box::new(AMember::with_inner(
+            ATray::with_inner(
+                WindowsTray {
+                    label: title.as_ref().into(),
+                    cfg: unsafe { mem::zeroed() },
+                    menu: (ptr::null_mut(), if menu.is_some() { Vec::new() } else { vec![] }, -2),
+                    on_close: None,
+                    this: ptr::null_mut(),
+                },
+            ),
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
         let this = t.as_mut() as *mut Tray;
-        t.as_inner_mut().this = this;
+        t.inner_mut().inner_mut().this = this;
 
         let app = super::application::Application::get();
-        let tip_size = t.as_inner_mut().cfg.szTip.len();
-        let title = OsStr::new(t.as_inner().label.as_str()).encode_wide().take(tip_size - 1).chain(Some(0).into_iter()).collect::<Vec<_>>();
+        let tip_size = t.inner_mut().inner_mut().cfg.szTip.len();
+        let title = OsStr::new(t.inner().inner().label.as_str()).encode_wide().take(tip_size - 1).chain(Some(0).into_iter()).collect::<Vec<_>>();
 
-        t.as_inner_mut().cfg.hWnd = unsafe { app.unwrap().native_id() as windef::HWND };
-        t.as_inner_mut().cfg.cbSize = mem::size_of::<shellapi::NOTIFYICONDATAW>() as u32;
-        t.as_inner_mut().cfg.uID = unsafe { t.id().into_raw() as u32 };
-        //t.as_inner_mut().cfg.hIcon = unsafe { winuser::GetClassLongW(app.as_inner().root.into(), winuser::GCL_HICON) as windef::HICON };
+        t.inner_mut().inner_mut().cfg.hWnd = unsafe { app.unwrap().native_id() as windef::HWND };
+        t.inner_mut().inner_mut().cfg.cbSize = mem::size_of::<shellapi::NOTIFYICONDATAW>() as u32;
+        t.inner_mut().inner_mut().cfg.uID = unsafe { controls::Member::id(t.as_ref()).into_raw() as u32 };
+        //t.inner_mut().inner_mut().cfg.hIcon = unsafe { winuser::GetClassLongW(app.inner().root.into(), winuser::GCL_HICON) as windef::HICON };
 
         unsafe {
-            commctrl::LoadIconMetric(ptr::null_mut(), winuser::MAKEINTRESOURCEW(32512), commctrl::LIM_SMALL as i32, &mut t.as_inner_mut().cfg.hIcon);
+            commctrl::LoadIconMetric(ptr::null_mut(), winuser::MAKEINTRESOURCEW(32512), commctrl::LIM_SMALL as i32, &mut t.inner_mut().inner_mut().cfg.hIcon);
         }
 
-        t.as_inner_mut().cfg.uFlags = shellapi::NIF_ICON | shellapi::NIF_TIP | shellapi::NIF_MESSAGE | shellapi::NIF_SHOWTIP;
-        t.as_inner_mut().cfg.uCallbackMessage = MESSAGE;
-        t.as_inner_mut().cfg.szTip[..title.len()].clone_from_slice(title.as_slice());
+        t.inner_mut().inner_mut().cfg.uFlags = shellapi::NIF_ICON | shellapi::NIF_TIP | shellapi::NIF_MESSAGE | shellapi::NIF_SHOWTIP;
+        t.inner_mut().inner_mut().cfg.uCallbackMessage = MESSAGE;
+        t.inner_mut().inner_mut().cfg.szTip[..title.len()].clone_from_slice(title.as_slice());
         unsafe {
-            if shellapi::Shell_NotifyIconW(shellapi::NIM_ADD, &mut t.as_inner_mut().cfg) == minwindef::FALSE {
+            if shellapi::Shell_NotifyIconW(shellapi::NIM_ADD, &mut t.inner_mut().inner_mut().cfg) == minwindef::FALSE {
                 common::log_error();
             }
-            *t.as_inner_mut().cfg.u.uVersion_mut() = shellapi::NOTIFYICON_VERSION_4;
-            if shellapi::Shell_NotifyIconW(shellapi::NIM_SETVERSION, &mut t.as_inner_mut().cfg) == minwindef::FALSE {
+            *t.inner_mut().inner_mut().cfg.u.uVersion_mut() = shellapi::NOTIFYICON_VERSION_4;
+            if shellapi::Shell_NotifyIconW(shellapi::NIM_SETVERSION, &mut t.inner_mut().inner_mut().cfg) == minwindef::FALSE {
                 common::log_error();
             }
         }
         if let Some(items) = menu {
             unsafe {
                 let menu = winuser::CreatePopupMenu();
-                common::make_menu(menu, items, &mut t.as_inner_mut().menu.1);
-                t.as_inner_mut().menu.0 = menu;
+                common::make_menu(menu, items, &mut t.inner_mut().inner_mut().menu.1);
+                t.inner_mut().inner_mut().menu.0 = menu;
             }
         }
 

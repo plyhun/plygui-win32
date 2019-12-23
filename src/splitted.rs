@@ -9,7 +9,7 @@ lazy_static! {
     pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
 }
 
-pub type Splitted = Member<Control<MultiContainer<WindowsSplitted>>>;
+pub type Splitted = AMember<AControl<AContainer<AMultiContainer<ASplitted<WindowsSplitted>>>>>;
 
 #[repr(C)]
 pub struct WindowsSplitted {
@@ -122,24 +122,26 @@ impl WindowsSplitted {
 }
 
 impl SplittedInner for WindowsSplitted {
-    fn with_content(first: Box<dyn controls::Control>, second: Box<dyn controls::Control>, orientation: layout::Orientation) -> Box<Splitted> {
-        let b = Box::new(Member::with_inner(
-            Control::with_inner(
-                MultiContainer::with_inner(
-                    WindowsSplitted {
-                        base: common::WindowsControlBase::new(),
-                        orientation: orientation,
-
-                        splitter: 0.5,
-                        cursor: ptr::null_mut(),
-                        moving: false,
-
-                        first: first,
-                        second: second,
-                    },
-                    (),
-                ),
-                (),
+    fn with_content(first: Box<dyn controls::Control>, second: Box<dyn controls::Control>, orientation: layout::Orientation) -> Box<dyn controls::Splitted> {
+        let b = Box::new(AMember::with_inner(
+            AControl::with_inner(
+                AContainer::with_inner(
+                    AMultiContainer::with_inner(
+                        ASplitted::with_inner(
+                            WindowsSplitted {
+                                base: common::WindowsControlBase::new(),
+                                orientation: orientation,
+        
+                                splitter: 0.5,
+                                cursor: ptr::null_mut(),
+                                moving: false,
+        
+                                first: first,
+                                second: second,
+                            },
+                        )
+                    ),
+                )
             ),
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
@@ -418,10 +420,10 @@ impl MultiContainerInner for WindowsSplitted {
 }
 
 impl HasOrientationInner for WindowsSplitted {
-    fn layout_orientation(&self) -> layout::Orientation {
+    fn orientation(&self, _base: &MemberBase) -> layout::Orientation {
         self.orientation
     }
-    fn set_layout_orientation(&mut self, _base: &mut MemberBase, orientation: layout::Orientation) {
+    fn set_orientation(&mut self, _base: &mut MemberBase, orientation: layout::Orientation) {
         if orientation != self.orientation {
             self.orientation = orientation;
             self.reload_cursor();
@@ -504,10 +506,10 @@ impl Drawable for WindowsSplitted {
         self.base.invalidate()
     }
 }
-
-#[allow(dead_code)]
-pub(crate) fn spawn() -> Box<dyn controls::Control> {
-    Splitted::with_content(super::text::spawn(), super::text::spawn(), layout::Orientation::Vertical).into_control()
+impl Spawnable for WindowsSplitted {
+    fn spawn() -> Box<dyn controls::Control> {
+        Self::with_content(super::text::Text::spawn(), super::text::Text::spawn(), layout::Orientation::Vertical).into_control()
+    }
 }
 
 unsafe fn register_window_class() -> Vec<u16> {
@@ -531,8 +533,6 @@ unsafe fn register_window_class() -> Vec<u16> {
 }
 
 unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
-    use plygui_api::controls::HasOrientation;
-
     let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
         if winuser::WM_CREATE == msg {
@@ -549,8 +549,8 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             {
                 ll.set_skip_draw(true);
                 {
-                    let base = mem::transmute::<isize, &Splitted>(ww).as_inner().base();
-                    let ll = ll.as_inner_mut().as_inner_mut().as_inner_mut();
+                    let base = &mem::transmute::<isize, &Splitted>(ww).inner().base;
+                    let ll = ll.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
                     ll.update_children_layout(base);
                     ll.draw_children();
                     //ll.draw_divider(base);
@@ -571,25 +571,25 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             let mut updated = false;
 
             let ll: &mut Splitted = mem::transmute(ww);
-            let (width, height) = ll.as_inner().base().measured;
+            let (width, height) = ll.inner().base.measured;
 
-            match ll.layout_orientation() {
+            match controls::HasOrientation::orientation(ll) {
                 layout::Orientation::Horizontal => {
                     if width >= DEFAULT_BOUND as u16 && x > DEFAULT_BOUND as u16 && x < (width - DEFAULT_BOUND as u16) {
-                        winuser::SetCursor(ll.as_inner_mut().as_inner_mut().as_inner_mut().cursor);
+                        winuser::SetCursor(ll.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().cursor);
 
                         if wparam == winuser::MK_LBUTTON && true {
-                            ll.as_inner_mut().as_inner_mut().as_inner_mut().splitter = x as f32 / width as f32;
+                            ll.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().splitter = x as f32 / width as f32;
                             updated = true;
                         }
                     }
                 }
                 layout::Orientation::Vertical => {
                     if height >= DEFAULT_BOUND as u16 && y > DEFAULT_BOUND as u16 && y < (height - DEFAULT_BOUND as u16) {
-                        winuser::SetCursor(ll.as_inner_mut().as_inner_mut().as_inner_mut().cursor);
+                        winuser::SetCursor(ll.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().cursor);
 
-                        if wparam == winuser::MK_LBUTTON && ll.as_inner_mut().as_inner_mut().as_inner_mut().moving {
-                            ll.as_inner_mut().as_inner_mut().as_inner_mut().splitter = y as f32 / height as f32;
+                        if wparam == winuser::MK_LBUTTON && ll.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().moving {
+                            ll.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().splitter = y as f32 / height as f32;
                             updated = true;
                         }
                     }
@@ -605,8 +605,8 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
         winuser::WM_LBUTTONDOWN => {
             let ll: &mut Splitted = mem::transmute(ww);
 
-            winuser::SetCursor(ll.as_inner_mut().as_inner_mut().as_inner_mut().cursor);
-            ll.as_inner_mut().as_inner_mut().as_inner_mut().moving = true;
+            winuser::SetCursor(ll.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().cursor);
+            ll.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().moving = true;
             winuser::SetCapture(hwnd);
             return 0;
         }
@@ -614,7 +614,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             let ll: &mut Splitted = mem::transmute(ww);
 
             winuser::ReleaseCapture();
-            ll.as_inner_mut().as_inner_mut().as_inner_mut().moving = false;
+            ll.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().moving = false;
             return 0;
         }
         winuser::WM_CTLCOLORLISTBOX | winuser::WM_CTLCOLORSTATIC => {
@@ -626,8 +626,8 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
         }
         winuser::WM_PAINT => {
             let ll: &mut Splitted = mem::transmute(ww);
-            let base = mem::transmute::<isize, &Splitted>(ww).as_inner().base();
-            let ll = ll.as_inner_mut().as_inner_mut().as_inner_mut();
+            let base = &mem::transmute::<isize, &Splitted>(ww).inner().base;
+            let ll = ll.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
             ll.draw_divider(base);
         }
         _ => {}

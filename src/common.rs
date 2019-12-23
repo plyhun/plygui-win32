@@ -105,7 +105,11 @@ impl From<Hwnd> for usize {
         a.0 as usize
     }
 }
-impl NativeId for Hwnd {}
+impl NativeId for Hwnd {
+    unsafe fn from_outer(arg: usize) -> Self {
+        Hwnd(arg as windef::HWND)
+    }
+}
 
 #[repr(C)]
 pub struct WindowsControlBase<T: controls::Control + Sized> {

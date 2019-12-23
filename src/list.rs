@@ -6,7 +6,7 @@ lazy_static! {
     pub static ref WINDOW_CLASS: Vec<u16> = OsStr::new(CLASS_ID).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
 }
 
-pub type List = Member<Control<Adapter<WindowsList>>>;
+pub type List = AMember<AControl<AContainer<AAdapted<AList<WindowsList>>>>>;
 
 #[repr(C)]
 pub struct WindowsList {
@@ -16,7 +16,7 @@ pub struct WindowsList {
 
 impl WindowsList {
     fn add_item_inner(&mut self, base: &mut MemberBase, i: usize, y: &mut i32) {
-        let (member, control, adapter) = List::adapter_base_parts_mut(base);
+        let (member, control, adapter, _) = unsafe { List::adapter_base_parts_mut(base) };
         let (pw, ph) = control.measured;
         let scroll_width = unsafe { winuser::GetSystemMetrics(winuser::SM_CXVSCROLL) };
         let this: &mut List = unsafe { utils::base_to_impl_mut(member) };
@@ -53,23 +53,29 @@ impl WindowsList {
     }
 }
 
-impl AdapterViewInner for WindowsList {
-    fn with_adapter(adapter: Box<dyn types::Adapter>) -> Box<List> {
-        let b = Box::new(Member::with_inner(
-            Control::with_inner(
-                Adapter::with_inner(
-                    WindowsList {
-                        base: WindowsControlBase::new(),
-                        items: Vec::with_capacity(adapter.len()),
-                    },
-                    adapter,
-                ),
-                (),
+impl ListInner for WindowsList {
+    fn with_adapter(adapter: Box<dyn types::Adapter>) -> Box<dyn controls::List> {
+        let b = Box::new(AMember::with_inner(
+            AControl::with_inner(
+                AContainer::with_inner(
+                    AAdapted::with_inner(
+                        AList::with_inner(
+                            WindowsList {
+                                base: WindowsControlBase::new(),
+                                items: Vec::with_capacity(adapter.len()),
+                            },
+                        ),
+                        adapter,
+                    ),
+                )
             ),
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
         b
     }
+}
+
+impl AdaptedInner for WindowsList {
     fn on_item_change(&mut self, base: &mut MemberBase, value: types::Change) {
         if !self.base.hwnd.is_null() {
             let mut y = 0;
@@ -131,7 +137,7 @@ impl ControlInner for WindowsList {
         self.base.subclass_id = id;
         control.coords = Some((px as i32, py as i32));
         
-        let (member, _, adapter) = List::adapter_base_parts_mut(member);
+        let (member, _, adapter, _) = unsafe { List::adapter_base_parts_mut(member) };
 
         let mut y = 0;
         for i in 0..adapter.adapter.len() {
@@ -269,11 +275,11 @@ impl Drawable for WindowsList {
         self.base.invalidate()
     }
 }
-
-/*#[allow(dead_code)]
-pub(crate) fn spawn() -> Box<dyn controls::Control> {
-    List::with_dimensions(0, 0).into_control()
-}*/
+impl Spawnable for WindowsList {
+    fn spawn() -> Box<dyn controls::Control> {
+        Self::with_adapter(Box::new(types::imp::StringVecAdapter::<crate::imp::Text>::new())).into_control()
+    }
+}
 
 unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
     let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
@@ -284,9 +290,9 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
         winuser::WM_LBUTTONUP => {
             let i = winuser::SendMessageW(hwnd, winuser::LB_ITEMFROMPOINT, 0, lparam);
             let list: &mut List = mem::transmute(param);
-            let item_view = list.as_inner_mut().as_inner_mut().as_inner_mut().items.get_mut(i as usize).unwrap();
+            let item_view = list.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items.get_mut(i as usize).unwrap();
             let list: &mut List = mem::transmute(param); // bck is stupid
-            if let Some(ref mut callback) = list.as_inner_mut().as_inner_mut().base_mut().on_item_click {
+            if let Some(ref mut callback) = list.inner_mut().inner_mut().inner_mut().inner_mut().base.on_item_click {
                 let list: &mut List = mem::transmute(param); // bck is still stupid
                 (callback.as_mut())(list, i as usize, item_view.as_mut());
             }
@@ -300,7 +306,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             
             let mut y = 0;
             let i = cmp::max(0, winuser::SendMessageW(hwnd, winuser::LB_GETTOPINDEX, 0, 0)) as usize;
-            let list = list.as_inner_mut().as_inner_mut().as_inner_mut();
+            let list = list.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
             for i in i..list.items.len() {
                 let item = &mut list.items[i];
                 let (_, ch, _) = item.measure(cmp::max(0, width as i32 - DEFAULT_PADDING) as u16, cmp::max(0, height as i32) as u16);

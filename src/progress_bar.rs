@@ -6,7 +6,7 @@ lazy_static! {
     pub static ref WINDOW_CLASS: Vec<u16> = OsStr::new(CLASS_ID).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
 }
 
-pub type ProgressBar = Member<Control<WindowsProgressBar>>;
+pub type ProgressBar = AMember<AControl<AProgressBar<WindowsProgressBar>>>;
 
 #[repr(C)]
 pub struct WindowsProgressBar {
@@ -15,14 +15,15 @@ pub struct WindowsProgressBar {
 }
 
 impl ProgressBarInner for WindowsProgressBar {
-    fn with_progress(progress: types::Progress) -> Box<ProgressBar> {
-        let b: Box<ProgressBar> = Box::new(Member::with_inner(
-            Control::with_inner(
-                WindowsProgressBar {
-                    base: common::WindowsControlBase::new(),
-                    progress: progress,
-                },
-                (),
+    fn with_progress(progress: types::Progress) -> Box<dyn controls::ProgressBar> {
+        let b: Box<ProgressBar> = Box::new(AMember::with_inner(
+            AControl::with_inner(
+                AProgressBar::with_inner(
+                    WindowsProgressBar {
+                        base: common::WindowsControlBase::new(),
+                        progress: progress,
+                    },
+                )
             ),
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
@@ -174,10 +175,10 @@ impl Drawable for WindowsProgressBar {
         self.base.invalidate()
     }
 }
-
-#[allow(dead_code)]
-pub(crate) fn spawn() -> Box<dyn controls::Control> {
-    ProgressBar::with_progress(types::Progress::Undefined).into_control()
+impl Spawnable for WindowsProgressBar {
+    fn spawn() -> Box<dyn controls::Control> {
+        Self::with_progress(types::Progress::None).into_control()
+    }
 }
 
 unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {

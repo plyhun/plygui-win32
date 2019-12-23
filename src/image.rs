@@ -6,7 +6,7 @@ lazy_static! {
 
 const DEFAULT_CONTENT_PADDING: i32 = 0;
 
-pub type Image = Member<Control<WindowsImage>>;
+pub type Image = AMember<AControl<AImage<WindowsImage>>>;
 
 #[repr(C)]
 pub struct WindowsImage {
@@ -59,23 +59,31 @@ impl Drop for WindowsImage {
         self.remove_image();
     }
 }
-
+impl HasImageInner for WindowsImage {
+    fn image(&self, _: &MemberBase) -> Cow<image::DynamicImage> {
+        todo!()
+    }
+    fn set_image(&mut self, _: &mut MemberBase, arg0: Cow<image::DynamicImage>) {
+        self.install_image(arg0.into_owned())
+    }
+}
 impl ImageInner for WindowsImage {
     fn with_content(content: image::DynamicImage) -> Box<dyn controls::Image> {
-        let mut i = Box::new(Member::with_inner(
-            Control::with_inner(
-                WindowsImage {
-                    base: WindowsControlBase::new(),
-
-                    bmp: ptr::null_mut(),
-                    scale: types::ImageScalePolicy::FitCenter,
-                },
-                (),
+        let mut i = Box::new(AMember::with_inner(
+            AControl::with_inner(
+                AImage::with_inner(
+                    WindowsImage {
+                        base: WindowsControlBase::new(),
+    
+                        bmp: ptr::null_mut(),
+                        scale: types::ImageScalePolicy::FitCenter,
+                    },
+                )
             ),
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
 
-        i.as_inner_mut().as_inner_mut().install_image(content);
+        i.inner_mut().inner_mut().inner_mut().install_image(content);
         i
     }
     fn set_scale(&mut self, _member: &mut MemberBase, policy: types::ImageScalePolicy) {
@@ -202,11 +210,10 @@ impl Drawable for WindowsImage {
         self.base.invalidate()
     }
 }
-
-#[allow(dead_code)]
-pub(crate) fn spawn() -> Box<dyn controls::Control> {
-    let dummy = image::DynamicImage::ImageRgba8(image::ImageBuffer::new(0, 0));
-    Image::with_content(dummy).into_control()
+impl Spawnable for WindowsImage {
+    fn spawn() -> Box<dyn controls::Control> {
+        Self::with_content(image::DynamicImage::ImageRgba8(image::ImageBuffer::new(0, 0))).into_control()
+    }
 }
 
 unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
@@ -227,7 +234,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
 
             let i: &mut Image = mem::transmute(param);
             let (pw, ph) = i.size();
-            let i = i.as_inner_mut().as_inner_mut();
+            let i = i.inner_mut().inner_mut().inner_mut();
             let hoffs = DEFAULT_CONTENT_PADDING;
             let voffs = DEFAULT_CONTENT_PADDING;
             let hdiff = hoffs + DEFAULT_CONTENT_PADDING;

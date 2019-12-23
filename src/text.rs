@@ -6,7 +6,7 @@ lazy_static! {
     pub static ref WINDOW_CLASS: Vec<u16> = OsStr::new(CLASS_ID).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
 }
 
-pub type Text = Member<Control<WindowsText>>;
+pub type Text = AMember<AControl<AText<WindowsText>>>;
 
 #[repr(C)]
 pub struct WindowsText {
@@ -32,14 +32,15 @@ impl HasLabelInner for WindowsText {
 }
 
 impl TextInner for WindowsText {
-    fn with_text(text: &str) -> Box<Text> {
-        let b: Box<Text> = Box::new(Member::with_inner(
-            Control::with_inner(
-                WindowsText {
-                    base: common::WindowsControlBase::new(),
-                    text: text.to_owned(),
-                },
-                (),
+    fn with_text<S: AsRef<str>>(text: S) -> Box<dyn controls::Text> {
+        let b: Box<Text> = Box::new(AMember::with_inner(
+            AControl::with_inner(
+                AText::with_inner(
+                    WindowsText {
+                        base: common::WindowsControlBase::new(),
+                        text: text.as_ref().to_owned(),
+                    },
+                )
             ),
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
@@ -158,10 +159,10 @@ impl Drawable for WindowsText {
         self.base.invalidate()
     }
 }
-
-#[allow(dead_code)]
-pub(crate) fn spawn() -> Box<dyn controls::Control> {
-    Text::empty().into_control()
+impl Spawnable for WindowsText {
+    fn spawn() -> Box<dyn controls::Control> {
+        Self::with_text("").into_control()
+    }
 }
 
 unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {

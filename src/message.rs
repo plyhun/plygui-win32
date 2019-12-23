@@ -31,7 +31,7 @@ pub struct WindowsMessage {
     actions: Vec<WindowsMessageAction>,
 }
 
-pub type Message = Member<WindowsMessage>;
+pub type Message = AMember<AMessage<WindowsMessage>>;
 
 impl HasLabelInner for WindowsMessage {
     fn label(&self, _base: &MemberBase) -> Cow<str> {
@@ -49,35 +49,37 @@ impl HasLabelInner for WindowsMessage {
 }
 
 impl MessageInner for WindowsMessage {
-    fn with_actions(content: types::TextContent, severity: types::MessageSeverity, actions: Vec<(String, callbacks::Action)>, parent: Option<&dyn controls::Member>) -> Box<Member<Self>> {
+    fn with_actions(content: types::TextContent, severity: types::MessageSeverity, actions: Vec<(String, callbacks::Action)>, parent: Option<&dyn controls::Member>) -> Box<dyn controls::Message> {
         let (label, text) = match content {
             types::TextContent::Plain(text) => (String::new(/* TODO app name here? */), text),
             types::TextContent::LabelDescription(label, description) => (label, description),
         };
-        let mut a: Box<Message> = Box::new(Member::with_inner(
-            WindowsMessage {
-                hwnd: 0 as windef::HWND,
-                cfg: unsafe { mem::zeroed() },
-                label: label,
-                text: text,
-                actions: actions.into_iter().map(|a| a.into()).collect(),
-            },
+        let mut a: Box<Message> = Box::new(AMember::with_inner(
+            AMessage::with_inner(
+                WindowsMessage {
+                    hwnd: 0 as windef::HWND,
+                    cfg: unsafe { mem::zeroed() },
+                    label: label,
+                    text: text,
+                    actions: actions.into_iter().map(|a| a.into()).collect(),
+                },
+            ),
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
         /*
         if let types::TextContent::Plain(_) = content {
             let label = { &*a.base().app.upgrade().unwrap().get() }.label().clone();
-            a.as_inner_mut().label = label;
+            a.inner_mut().label = label;
         }
         */
-        a.as_inner_mut().cfg.cbSize = mem::size_of::<commctrl::TASKDIALOGCONFIG>() as u32;
-        a.as_inner_mut().cfg.hwndParent = if let Some(parent) = parent { unsafe { parent.native_id() as windef::HWND } } else { 0 as windef::HWND };
-        a.as_inner_mut().cfg.hInstance = common::hinstance();
-        a.as_inner_mut().cfg.pfCallback = Some(dialog_proc);
-        a.as_inner_mut().cfg.lpCallbackData = a.as_mut() as *mut Message as isize;
+        a.inner_mut().inner_mut().cfg.cbSize = mem::size_of::<commctrl::TASKDIALOGCONFIG>() as u32;
+        a.inner_mut().inner_mut().cfg.hwndParent = if let Some(parent) = parent { unsafe { parent.native_id() as windef::HWND } } else { 0 as windef::HWND };
+        a.inner_mut().inner_mut().cfg.hInstance = common::hinstance();
+        a.inner_mut().inner_mut().cfg.pfCallback = Some(dialog_proc);
+        a.inner_mut().inner_mut().cfg.lpCallbackData = a.as_mut() as *mut Message as isize;
 
         unsafe {
-            *a.as_inner_mut().cfg.u1.pszMainIcon_mut() = match severity {
+            *a.inner_mut().inner_mut().cfg.u1.pszMainIcon_mut() = match severity {
                 types::MessageSeverity::Info => commctrl::TD_INFORMATION_ICON,
                 types::MessageSeverity::Warning => commctrl::TD_WARNING_ICON,
                 types::MessageSeverity::Alert => commctrl::TD_ERROR_ICON,
@@ -144,8 +146,8 @@ unsafe extern "system" fn dialog_proc(hwnd: windef::HWND, msg: minwindef::UINT, 
     let mut lr = 0;
 
     let alert: &mut Message = mem::transmute(param);
-    if alert.as_inner_mut().hwnd.is_null() {
-        alert.as_inner_mut().hwnd = hwnd;
+    if alert.inner_mut().inner_mut().hwnd.is_null() {
+        alert.inner_mut().inner_mut().hwnd = hwnd;
     }
     match msg {
         winuser::WM_CLOSE => {
@@ -153,7 +155,7 @@ unsafe extern "system" fn dialog_proc(hwnd: windef::HWND, msg: minwindef::UINT, 
         }
         winuser::WM_DESTROY => {
             let alert2: &mut Message = mem::transmute(param);
-            match alert.as_inner_mut().actions.iter_mut().find(|a| a.id == wparam as i32) {
+            match alert.inner_mut().inner_mut().actions.iter_mut().find(|a| a.id == wparam as i32) {
                 Some(a) => {
                     if !(a.cb.as_mut())(alert2) {
                         return 0;

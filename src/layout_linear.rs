@@ -5,7 +5,7 @@ lazy_static! {
     //pub static ref INSTANCE: winuser::HINSTANCE = unsafe { kernel32::GetModuleHandleW(ptr::null()) };
 }
 
-pub type LinearLayout = Member<Control<MultiContainer<WindowsLinearLayout>>>;
+pub type LinearLayout = AMember<AControl<AMultiContainer<ALinearLayout<WindowsLinearLayout>>>>;
 
 #[repr(C)]
 pub struct WindowsLinearLayout {
@@ -15,18 +15,20 @@ pub struct WindowsLinearLayout {
 }
 
 impl LinearLayoutInner for WindowsLinearLayout {
-    fn with_orientation(orientation: layout::Orientation) -> Box<LinearLayout> {
-        let b = Box::new(Member::with_inner(
-            Control::with_inner(
-                MultiContainer::with_inner(
-                    WindowsLinearLayout {
-                        base: WindowsControlBase::new(),
-                        orientation: orientation,
-                        children: Vec::new(),
-                    },
-                    (),
-                ),
-                (),
+    fn with_orientation(orientation: layout::Orientation) -> Box<dyn controls::LinearLayout> {
+        let b = Box::new(AMember::with_inner(
+            AControl::with_inner(
+                AContainer::with_inner(
+                    AMultiContainer::with_inner(
+                        ALinearLayout::with_inner(
+                            WindowsLinearLayout {
+                                base: WindowsControlBase::new(),
+                                orientation: orientation,
+                                children: Vec::new(),
+                            },
+                        )
+                    ),
+                )
             ),
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
@@ -35,10 +37,10 @@ impl LinearLayoutInner for WindowsLinearLayout {
 }
 
 impl HasOrientationInner for WindowsLinearLayout {
-    fn layout_orientation(&self) -> layout::Orientation {
+    fn orientation(&self, _base: &MemberBase) -> layout::Orientation {
         self.orientation
     }
-    fn set_layout_orientation(&mut self, _base: &mut MemberBase, orientation: layout::Orientation) {
+    fn set_orientation(&mut self, _base: &mut MemberBase, orientation: layout::Orientation) {
         if orientation != self.orientation {
             self.orientation = orientation;
             self.base.invalidate();
@@ -54,7 +56,7 @@ impl MultiContainerInner for WindowsLinearLayout {
 
         self.children.insert(index, child);
         if !self.base.hwnd.is_null() {
-            let (w, h) = base.as_any().downcast_ref::<LinearLayout>().unwrap().as_inner().base().measured;
+            let (w, h) = base.as_any().downcast_ref::<LinearLayout>().unwrap().inner().base.measured;
             let (cw, ch) = {
                 let mut w = 0;
                 let mut h = 0;
@@ -348,10 +350,10 @@ impl Drawable for WindowsLinearLayout {
         self.base.invalidate()
     }
 }
-
-#[allow(dead_code)]
-pub(crate) fn spawn() -> Box<dyn controls::Control> {
-    LinearLayout::with_orientation(layout::Orientation::Vertical).into_control()
+impl Spawnable for WindowsLinearLayout {
+    fn spawn() -> Box<dyn controls::Control> {
+        Self::with_orientation(layout::Orientation::Vertical).into_control()
+    }
 }
 
 unsafe fn register_window_class() -> Vec<u16> {
@@ -387,13 +389,13 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             let mut width = lparam as u16;
             let mut height = (lparam >> 16) as u16;
             let ll: &mut LinearLayout = mem::transmute(ww);
-            let o = ll.as_inner().as_inner().as_inner().orientation;
+            let o = ll.inner().inner().inner().inner().orientation;
             let hp = DEFAULT_PADDING + DEFAULT_PADDING;
             let vp = DEFAULT_PADDING + DEFAULT_PADDING;
 
             let mut x = 0;
             let mut y = 0;
-            for child in ll.as_inner_mut().as_inner_mut().as_inner_mut().children.as_mut_slice() {
+            for child in ll.inner_mut().inner_mut().inner_mut().inner_mut().children.as_mut_slice() {
                 let (cw, ch, _) = child.measure(cmp::max(0, width as i32 - hp) as u16, cmp::max(0, height as i32 - vp) as u16);
                 child.draw(Some((x + DEFAULT_PADDING, y + DEFAULT_PADDING)));
                 match o {
