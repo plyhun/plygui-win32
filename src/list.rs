@@ -56,7 +56,8 @@ impl WindowsList {
 
 impl ListInner for WindowsList {
     fn with_adapter(adapter: Box<dyn types::Adapter>) -> Box<dyn controls::List> {
-        let b = Box::new(AMember::with_inner(
+        let mut b: Box<mem::MaybeUninit<List>> = Box::new_uninit();
+        let ab = AMember::with_inner(
             AControl::with_inner(
                 AContainer::with_inner(
                     AAdapted::with_inner(
@@ -65,15 +66,19 @@ impl ListInner for WindowsList {
                                 base: WindowsControlBase::new(),
                                 items: Vec::with_capacity(adapter.len()),
                                 on_item_click: None,
-                            },
+                            }
                         ),
                         adapter,
+                        &mut b,
                     ),
                 )
             ),
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
-        ));
-        b
+        );
+        unsafe {
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        }
     }
 }
 impl ItemClickableInner for WindowsList {
