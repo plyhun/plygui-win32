@@ -24,7 +24,7 @@ pub struct WindowsApplication {
 pub type Application = ::plygui_api::development::AApplication<WindowsApplication>;
 
 impl ApplicationInner for WindowsApplication {
-    fn get() -> Box<Application> {
+    fn get() -> Box<dyn controls::Application> {
         init_comctl();
 
         let mut a = Box::new(AApplication::with_inner(

@@ -12,6 +12,7 @@ pub type List = AMember<AControl<AContainer<AAdapted<AList<WindowsList>>>>>;
 pub struct WindowsList {
     base: WindowsControlBase<List>,
     items: Vec<Box<dyn controls::Control>>,
+    on_item_click: Option<callbacks::OnItemClick>,
 }
 
 impl WindowsList {
@@ -63,6 +64,7 @@ impl ListInner for WindowsList {
                             WindowsList {
                                 base: WindowsControlBase::new(),
                                 items: Vec::with_capacity(adapter.len()),
+                                on_item_click: None,
                             },
                         ),
                         adapter,
@@ -74,7 +76,19 @@ impl ListInner for WindowsList {
         b
     }
 }
-
+impl ItemClickableInner for WindowsList {
+    fn item_click(&mut self, i: usize, item_view: &mut dyn controls::Control, skip_callbacks: bool) {
+        if !skip_callbacks{
+            let self2 = self.base.as_outer_mut();
+            if let Some(ref mut callback) = self.on_item_click {
+                (callback.as_mut())(self2, i, item_view)
+            }
+        }
+    }
+    fn on_item_click(&mut self, callback: Option<callbacks::OnItemClick>) {
+        self.on_item_click = callback;
+    }
+}
 impl AdaptedInner for WindowsList {
     fn on_item_change(&mut self, base: &mut MemberBase, value: types::Change) {
         if !self.base.hwnd.is_null() {
@@ -292,7 +306,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             let list: &mut List = mem::transmute(param);
             let item_view = list.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items.get_mut(i as usize).unwrap();
             let list: &mut List = mem::transmute(param); // bck is stupid
-            if let Some(ref mut callback) = list.inner_mut().inner_mut().inner_mut().inner_mut().base.on_item_click {
+            if let Some(ref mut callback) = list.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().on_item_click {
                 let list: &mut List = mem::transmute(param); // bck is still stupid
                 (callback.as_mut())(list, i as usize, item_view.as_mut());
             }
