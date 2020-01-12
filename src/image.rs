@@ -67,24 +67,31 @@ impl HasImageInner for WindowsImage {
         self.install_image(arg0.into_owned())
     }
 }
+impl<O: controls::Image> NewImageInner<O> for WindowsImage {
+    fn with_uninit(u: &mut mem::MaybeUninit<O>) -> Self {
+        WindowsImage {
+            base: WindowsControlBase::with_handler(Some(handler::<O>)),
+            bmp: ptr::null_mut(),
+            scale: types::ImageScalePolicy::FitCenter,
+        }
+    }
+}
 impl ImageInner for WindowsImage {
     fn with_content(content: image::DynamicImage) -> Box<dyn controls::Image> {
-        let mut i = Box::new(AMember::with_inner(
+        let mut b: Box<mem::MaybeUninit<Image>> = Box::new_uninit();
+        let mut ab = AMember::with_inner(
             AControl::with_inner(
                 AImage::with_inner(
-                    WindowsImage {
-                        base: WindowsControlBase::new(),
-    
-                        bmp: ptr::null_mut(),
-                        scale: types::ImageScalePolicy::FitCenter,
-                    },
+                    <Self as NewImageInner<Image>>::with_uninit(b.as_mut())
                 )
             ),
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
-        ));
-
-        i.inner_mut().inner_mut().inner_mut().install_image(content);
-        i
+        );
+        ab.inner_mut().inner_mut().inner_mut().install_image(content);
+        unsafe {
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        }
     }
     fn set_scale(&mut self, _member: &mut MemberBase, policy: types::ImageScalePolicy) {
         if self.scale != policy {
@@ -103,7 +110,7 @@ impl ControlInner for WindowsImage {
         let (hwnd, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
             let (w, h, _) = self.measure(member, control, pw, ph);
-            create_control_hwnd(
+            self.base.create_control_hwnd(
                 x as i32,
                 y as i32,
                 w as i32,
@@ -113,15 +120,14 @@ impl ControlInner for WindowsImage {
                 WINDOW_CLASS.as_ptr(),
                 "",
                 winuser::SS_BITMAP | winuser::SS_CENTERIMAGE | winuser::WS_TABSTOP,
-                selfptr,
-                Some(handler),
+                selfptr
             )
         };
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
     }
     fn on_removed_from_container(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
-        destroy_hwnd(self.base.hwnd, self.base.subclass_id, Some(handler));
+        destroy_hwnd(self.base.hwnd, self.base.subclass_id, self.base.proc_handler.as_handler());
         self.base.hwnd = 0 as windef::HWND;
         self.base.subclass_id = 0;
     }
@@ -216,7 +222,7 @@ impl Spawnable for WindowsImage {
     }
 }
 
-unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
+unsafe extern "system" fn handler<T: controls::Image>(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
     let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
         winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as isize);
@@ -227,7 +233,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             let height = (lparam >> 16) as u16;
 
             let i: &mut Image = mem::transmute(param);
-            i.call_on_size(width, height);
+            i.call_on_size::<T>(width, height);
         }
         winuser::WM_PAINT => {
             use plygui_api::controls::HasSize;

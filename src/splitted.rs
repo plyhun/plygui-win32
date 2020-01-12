@@ -120,32 +120,43 @@ impl WindowsSplitted {
         }
     }
 }
+impl<O: controls::Splitted> NewSplittedInner<O> for WindowsSplitted {
+    fn with_uninit(u: &mut mem::MaybeUninit<O>) -> Self {
+        WindowsSplitted {
+            base: common::WindowsControlBase::with_wndproc(Some(handler::<O>)),
+            orientation: layout::Orientation::Horizontal,
 
+            splitter: 0.5,
+            cursor: ptr::null_mut(),
+            moving: false,
+
+            first: unsafe { mem::zeroed() },
+            second: unsafe { mem::zeroed() },
+        }
+    }
+}
 impl SplittedInner for WindowsSplitted {
     fn with_content(first: Box<dyn controls::Control>, second: Box<dyn controls::Control>, orientation: layout::Orientation) -> Box<dyn controls::Splitted> {
-        let b = Box::new(AMember::with_inner(
+        let mut b: Box<mem::MaybeUninit<Splitted>> = Box::new_uninit();
+        let mut ab = AMember::with_inner(
             AControl::with_inner(
                 AContainer::with_inner(
                     AMultiContainer::with_inner(
                         ASplitted::with_inner(
-                            WindowsSplitted {
-                                base: common::WindowsControlBase::new(),
-                                orientation: orientation,
-        
-                                splitter: 0.5,
-                                cursor: ptr::null_mut(),
-                                moving: false,
-        
-                                first: first,
-                                second: second,
-                            },
+                            <Self as NewSplittedInner<Splitted>>::with_uninit(b.as_mut())
                         )
                     ),
                 )
             ),
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
-        ));
-        b
+        );
+        controls::HasOrientation::set_orientation(&mut ab, orientation);
+        unsafe {
+            ptr::write(&mut ab.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().first, first);
+            ptr::write(&mut ab.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().second, second);
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        }
     }
     fn set_splitter(&mut self, _member: &mut MemberBase, pos: f32) {
         self.splitter = pos;
@@ -517,7 +528,7 @@ unsafe fn register_window_class() -> Vec<u16> {
     let class = winuser::WNDCLASSEXW {
         cbSize: mem::size_of::<winuser::WNDCLASSEXW>() as minwindef::UINT,
         style: winuser::CS_DBLCLKS,
-        lpfnWndProc: Some(whandler),
+        lpfnWndProc: Some(window_handler),
         cbClsExtra: 0,
         cbWndExtra: 0,
         hInstance: libloaderapi::GetModuleHandleW(ptr::null()),
@@ -532,7 +543,7 @@ unsafe fn register_window_class() -> Vec<u16> {
     class_name
 }
 
-unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
+unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
     let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
         if winuser::WM_CREATE == msg {
@@ -541,6 +552,13 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
         }
         return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }
+    
+    let s: &mut Splitted = mem::transmute(ww);
+    s.inner().inner().inner().inner().inner().base.proc_handler.as_proc().unwrap()(hwnd, msg, wparam, lparam)
+}
+
+unsafe extern "system" fn handler<T: controls::Splitted>(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
+    let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     match msg {
         winuser::WM_SIZE | common::WM_UPDATE_INNER => {
             let width = lparam as u16;
@@ -559,7 +577,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             }
 
             if msg != common::WM_UPDATE_INNER {
-                ll.call_on_size(width, height);
+                ll.call_on_size::<T>(width, height);
             } else {
                 winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::TRUE);
             }

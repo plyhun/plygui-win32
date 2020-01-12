@@ -15,7 +15,6 @@ pub struct WindowsButton {
     h_left_clicked: Option<callbacks::OnClick>,
     skip_callbacks: bool,
 }
-
 impl HasLabelInner for WindowsButton {
     fn label<'a>(&'a self, _: &MemberBase) -> Cow<'a, str> {
         Cow::Borrowed(self.label.as_ref())
@@ -46,23 +45,33 @@ impl ClickableInner for WindowsButton {
         }
     }
 }
+impl<O: controls::Button> NewButtonInner<O> for WindowsButton {
+    fn with_uninit(u: &mut mem::MaybeUninit<O>) -> Self {
+        WindowsButton {
+            base: common::WindowsControlBase::with_handler(Some(handler::<O>)),
+            h_left_clicked: None,
+            label: String::new(),
+            skip_callbacks: false,
+        }
+    }
+}
 
 impl ButtonInner for WindowsButton {
     fn with_label<S: AsRef<str>>(label: S) -> Box<dyn controls::Button> {
-        let b: Box<Button> = Box::new(AMember::with_inner(
+        let mut b: Box<mem::MaybeUninit<Button>> = Box::new_uninit();
+        let mut ab = AMember::with_inner(
             AControl::with_inner(
                 AButton::with_inner(
-                    WindowsButton {
-                        base: common::WindowsControlBase::new(),
-                        h_left_clicked: None,
-                        label: label.as_ref().to_owned(),
-                        skip_callbacks: false,
-                    },
+                    <Self as NewButtonInner<Button>>::with_uninit(b.as_mut())
                 )
             ),
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
-        ));
-        b
+        );
+        controls::HasLabel::set_label(&mut ab, label.as_ref().into());
+        unsafe {
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        }
     }
 }
 
@@ -72,7 +81,7 @@ impl ControlInner for WindowsButton {
         let (hwnd, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
             let (w, h, _) = self.measure(member, control, pw, ph);
-            common::create_control_hwnd(
+            self.base.create_control_hwnd(
                 x as i32,
                 y as i32,
                 w as i32,
@@ -83,14 +92,13 @@ impl ControlInner for WindowsButton {
                 self.label.as_str(),
                 winuser::BS_PUSHBUTTON | winuser::WS_TABSTOP,
                 selfptr,
-                Some(handler),
             )
         };
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
     }
     fn on_removed_from_container(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
-        common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, Some(handler));
+        common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, self.base.proc_handler.as_handler());
         self.base.hwnd = 0 as windef::HWND;
         self.base.subclass_id = 0;
     }
@@ -192,12 +200,7 @@ impl Drawable for WindowsButton {
     }
 }
 
-#[allow(dead_code)]
-pub(crate) fn spawn() -> Box<dyn controls::Control> {
-    Button::with_label("").into_control()
-}
-
-unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
+unsafe extern "system" fn handler<T: controls::Button>(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
     let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
         winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as isize);
@@ -207,7 +210,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             let button: &mut Button = mem::transmute(param);
             if !button.inner().inner().inner().skip_callbacks {
                 if let Some(ref mut cb) = button.inner_mut().inner_mut().inner_mut().h_left_clicked {
-                    let button2: &mut Button = mem::transmute(param);
+                    let button2: &mut T = mem::transmute(param);
                     (cb.as_mut())(button2);
                     //return 0;
                 }
@@ -218,7 +221,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             let height = (lparam >> 16) as u16;
 
             let button: &mut Button = mem::transmute(param);
-            button.call_on_size(width, height);
+            button.call_on_size::<T>(width, height);
             return 0;
         }
         _ => {}

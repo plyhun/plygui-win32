@@ -53,20 +53,25 @@ impl WindowsList {
         }
     }
 }
-
+impl<O: controls::List> NewListInner<O> for WindowsList {
+    fn with_uninit(u: &mut mem::MaybeUninit<O>) -> Self {
+        WindowsList {
+            base: WindowsControlBase::with_handler(Some(handler::<O>)),
+            items: vec![],
+            on_item_click: None,
+        }
+    }
+}
 impl ListInner for WindowsList {
     fn with_adapter(adapter: Box<dyn types::Adapter>) -> Box<dyn controls::List> {
+        let len = adapter.len();
         let mut b: Box<mem::MaybeUninit<List>> = Box::new_uninit();
-        let ab = AMember::with_inner(
+        let mut ab = AMember::with_inner(
             AControl::with_inner(
                 AContainer::with_inner(
                     AAdapted::with_inner(
                         AList::with_inner(
-                            WindowsList {
-                                base: WindowsControlBase::new(),
-                                items: Vec::with_capacity(adapter.len()),
-                                on_item_click: None,
-                            }
+                            <Self as NewListInner<List>>::with_uninit(b.as_mut())
                         ),
                         adapter,
                         &mut b,
@@ -75,6 +80,7 @@ impl ListInner for WindowsList {
             ),
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         );
+        ab.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items = Vec::with_capacity(len);
         unsafe {
 	        b.as_mut_ptr().write(ab);
 	        b.assume_init()
@@ -138,7 +144,7 @@ impl ControlInner for WindowsList {
         let (w, h, _) = self.measure(member, control, pw, ph);
         let (hwnd, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
-            common::create_control_hwnd(
+            self.base.create_control_hwnd(
                 px as i32,
                 py as i32,
                 w as i32,
@@ -149,7 +155,6 @@ impl ControlInner for WindowsList {
                 "",
                 winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::LBS_OWNERDRAWVARIABLE | winuser::WS_THICKFRAME | winuser::WS_VSCROLL | winuser::WS_EX_RIGHTSCROLLBAR,
                 selfptr,
-                Some(handler),
             )
         };
         self.base.hwnd = hwnd;
@@ -300,7 +305,7 @@ impl Spawnable for WindowsList {
     }
 }
 
-unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
+unsafe extern "system" fn handler<T: controls::List>(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
     let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
         winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as isize);
@@ -321,7 +326,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             let height = (lparam >> 16) as u16;
 
             let list: &mut List = mem::transmute(param);
-            list.call_on_size(width, height);
+            list.call_on_size::<T>(width, height);
             
             let mut y = 0;
             let i = cmp::max(0, winuser::SendMessageW(hwnd, winuser::LB_GETTOPINDEX, 0, 0)) as usize;

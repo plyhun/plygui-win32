@@ -13,21 +13,30 @@ pub struct WindowsProgressBar {
     base: common::WindowsControlBase<ProgressBar>,
     progress: types::Progress,
 }
-
+impl<O: controls::ProgressBar> NewProgressBarInner<O> for WindowsProgressBar {
+    fn with_uninit(u: &mut mem::MaybeUninit<O>) -> Self {
+        WindowsProgressBar {
+            base: common::WindowsControlBase::with_handler(Some(handler::<O>)),
+            progress: Default::default(),
+        }
+    }
+}
 impl ProgressBarInner for WindowsProgressBar {
     fn with_progress(progress: types::Progress) -> Box<dyn controls::ProgressBar> {
-        let b: Box<ProgressBar> = Box::new(AMember::with_inner(
+        let mut b: Box<mem::MaybeUninit<ProgressBar>> = Box::new_uninit();
+        let mut ab = AMember::with_inner(
             AControl::with_inner(
                 AProgressBar::with_inner(
-                    WindowsProgressBar {
-                        base: common::WindowsControlBase::new(),
-                        progress: progress,
-                    },
+                    <Self as NewProgressBarInner<ProgressBar>>::with_uninit(b.as_mut()),
                 )
             ),
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
-        ));
-        b
+        );
+        controls::HasProgress::set_progress(&mut ab, progress);
+        unsafe {
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        }
     }
 }
 
@@ -70,7 +79,7 @@ impl ControlInner for WindowsProgressBar {
         let (hwnd, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
             let (w, h, _) = self.measure(member, control, pw, ph);
-            common::create_control_hwnd(
+            self.base.create_control_hwnd(
                 x as i32,
                 y as i32,
                 w as i32,
@@ -81,7 +90,6 @@ impl ControlInner for WindowsProgressBar {
                 "",
                 winuser::BS_PUSHBUTTON | winuser::WS_TABSTOP,
                 selfptr,
-                Some(handler),
             )
         };
         self.base.hwnd = hwnd;
@@ -89,7 +97,7 @@ impl ControlInner for WindowsProgressBar {
         self.set_progress(member, self.progress.clone());
     }
     fn on_removed_from_container(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
-        common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, Some(handler));
+        common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, self.base.proc_handler.as_handler());
         self.base.hwnd = 0 as windef::HWND;
         self.base.subclass_id = 0;
     }
@@ -181,7 +189,7 @@ impl Spawnable for WindowsProgressBar {
     }
 }
 
-unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
+unsafe extern "system" fn handler<T: controls::ProgressBar>(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
     let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
         winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as isize);
@@ -192,7 +200,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             let height = (lparam >> 16) as u16;
 
             let progress_bar: &mut ProgressBar = mem::transmute(param);
-            progress_bar.call_on_size(width, height);
+            progress_bar.call_on_size::<T>(width, height);
             return 0;
         }
         _ => {}

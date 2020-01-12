@@ -16,27 +16,37 @@ pub struct WindowsFrame {
     child: Option<Box<dyn controls::Control>>,
 }
 
+impl<O: controls::Frame> NewFrameInner<O> for WindowsFrame {
+    fn with_uninit(u: &mut mem::MaybeUninit<O>) -> Self {
+        WindowsFrame {
+            base: common::WindowsControlBase::with_wndproc(Some(handler::<O>)),
+            child: None,
+            hwnd_gbox: 0 as windef::HWND,
+            label: String::new(),
+            label_padding: 0,
+        }
+    }
+}
 impl FrameInner for WindowsFrame {
     fn with_label<S: AsRef<str>>(label: S) -> Box<dyn controls::Frame> {
-        let b = Box::new(AMember::with_inner(
+        let mut b: Box<mem::MaybeUninit<Frame>> = Box::new_uninit();
+        let mut ab = AMember::with_inner(
             AControl::with_inner(
                 AContainer::with_inner(
                     ASingleContainer::with_inner(
                         AFrame::with_inner(
-                            WindowsFrame {
-                                base: common::WindowsControlBase::new(),
-                                child: None,
-                                hwnd_gbox: 0 as windef::HWND,
-                                label: label.as_ref().to_owned(),
-                                label_padding: 0,
-                            },
+                            <Self as NewFrameInner<Frame>>::with_uninit(b.as_mut())
                         )
                     ),
                 ),
             ),
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
-        ));
-        b
+        );
+        controls::HasLabel::set_label(&mut ab, label.as_ref().into());
+        unsafe {
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        }
     }
 }
 
@@ -363,7 +373,7 @@ unsafe fn register_window_class() -> Vec<u16> {
     let class = winuser::WNDCLASSEXW {
         cbSize: mem::size_of::<winuser::WNDCLASSEXW>() as minwindef::UINT,
         style: winuser::CS_DBLCLKS,
-        lpfnWndProc: Some(whandler),
+        lpfnWndProc: Some(window_handler),
         cbClsExtra: 0,
         cbWndExtra: 0,
         hInstance: libloaderapi::GetModuleHandleW(ptr::null()),
@@ -378,7 +388,7 @@ unsafe fn register_window_class() -> Vec<u16> {
     class_name
 }
 
-unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
+unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
     let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
         if winuser::WM_CREATE == msg {
@@ -387,7 +397,13 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
         }
         return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }
+    
+    let frame: &mut Frame = mem::transmute(ww);
+    frame.inner().inner().inner().inner().inner().base.proc_handler.as_proc().unwrap()(hwnd, msg, wparam, lparam)
+}
 
+unsafe extern "system" fn handler<T: controls::Frame>(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
+    let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     match msg {
         winuser::WM_SIZE => {
             let width = lparam as u16;
@@ -397,7 +413,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
             let hp = DEFAULT_PADDING + DEFAULT_PADDING;
             let vp = DEFAULT_PADDING + DEFAULT_PADDING + label_padding;
             
-            frame.call_on_size(width, height);
+            frame.call_on_size::<T>(width, height);
             
             if let Some(ref mut child) = frame.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().child {
                 child.measure(utils::coord_to_size(width as i32 - hp), utils::coord_to_size(height as i32 - vp));

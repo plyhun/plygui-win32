@@ -30,21 +30,30 @@ impl HasLabelInner for WindowsText {
         }
     }
 }
-
+impl<O: controls::Text> NewTextInner<O> for WindowsText {
+    fn with_uninit(u: &mut mem::MaybeUninit<O>) -> Self {
+        WindowsText {
+            base: common::WindowsControlBase::with_handler(Some(handler::<O>)),
+            text: String::new(),
+        }
+    }
+}
 impl TextInner for WindowsText {
     fn with_text<S: AsRef<str>>(text: S) -> Box<dyn controls::Text> {
-        let b: Box<Text> = Box::new(AMember::with_inner(
+        let mut b: Box<mem::MaybeUninit<Text>> = Box::new_uninit();
+        let mut ab = AMember::with_inner(
             AControl::with_inner(
                 AText::with_inner(
-                    WindowsText {
-                        base: common::WindowsControlBase::new(),
-                        text: text.as_ref().to_owned(),
-                    },
+                    <Self as NewTextInner<Text>>::with_uninit(b.as_mut()),
                 )
             ),
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
-        ));
-        b
+        );
+        controls::HasLabel::set_label(&mut ab, text.as_ref().into());
+        unsafe {
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        }
     }
 }
 
@@ -54,14 +63,14 @@ impl ControlInner for WindowsText {
         let (hwnd, id) = unsafe {
             self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
             let (w, h, _) = self.measure(member, control, pw, ph);
-            common::create_control_hwnd(x as i32, y as i32, w as i32, h as i32, self.base.hwnd, 0, WINDOW_CLASS.as_ptr(), self.text.as_str(), 
-                winuser::WS_TABSTOP | winuser::SS_NOPREFIX, selfptr, Some(handler))
+            self.base.create_control_hwnd(x as i32, y as i32, w as i32, h as i32, self.base.hwnd, 0, WINDOW_CLASS.as_ptr(), self.text.as_str(), 
+                winuser::WS_TABSTOP | winuser::SS_NOPREFIX, selfptr)
         };
         self.base.hwnd = hwnd;
         self.base.subclass_id = id;
     }
     fn on_removed_from_container(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
-        common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, Some(handler));
+        common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, self.base.proc_handler.as_handler());
         self.base.hwnd = 0 as windef::HWND;
         self.base.subclass_id = 0;
     }
@@ -165,7 +174,7 @@ impl Spawnable for WindowsText {
     }
 }
 
-unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
+unsafe extern "system" fn handler<T: controls::Text>(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
     let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
         winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as isize);
@@ -176,7 +185,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             let height = (lparam >> 16) as u16;
 
             let text: &mut Text = mem::transmute(param);
-            text.call_on_size(width, height);
+            text.call_on_size::<T>(width, height);
             return 0;
         }
         /*winuser::WM_PAINT => {

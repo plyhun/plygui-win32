@@ -13,26 +13,35 @@ pub struct WindowsLinearLayout {
     orientation: layout::Orientation,
     children: Vec<Box<dyn controls::Control>>,
 }
-
+impl<O: controls::LinearLayout> NewLinearLayoutInner<O> for WindowsLinearLayout {
+    fn with_uninit(u: &mut mem::MaybeUninit<O>) -> Self {
+        WindowsLinearLayout {
+            base: WindowsControlBase::with_wndproc(Some(handler::<O>)),
+            orientation: layout::Orientation::Vertical,
+            children: Vec::new(),
+        }
+    }
+}
 impl LinearLayoutInner for WindowsLinearLayout {
     fn with_orientation(orientation: layout::Orientation) -> Box<dyn controls::LinearLayout> {
-        let b = Box::new(AMember::with_inner(
+        let mut b: Box<mem::MaybeUninit<LinearLayout>> = Box::new_uninit();
+        let mut ab = AMember::with_inner(
             AControl::with_inner(
                 AContainer::with_inner(
                     AMultiContainer::with_inner(
                         ALinearLayout::with_inner(
-                            WindowsLinearLayout {
-                                base: WindowsControlBase::new(),
-                                orientation: orientation,
-                                children: Vec::new(),
-                            },
+                            <Self as NewLinearLayoutInner<LinearLayout>>::with_uninit(b.as_mut()),
                         )
                     ),
                 )
             ),
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
-        ));
-        b
+        );
+        controls::HasOrientation::set_orientation(&mut ab, orientation);
+        unsafe {
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        }
     }
 }
 
@@ -360,7 +369,7 @@ unsafe fn register_window_class() -> Vec<u16> {
     let class_name = OsStr::new("PlyguiWin32LinearLayout").encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
     let class = winuser::WNDCLASSW {
         style: winuser::CS_DBLCLKS,
-        lpfnWndProc: Some(whandler),
+        lpfnWndProc: Some(window_handler),
         cbClsExtra: 0,
         cbWndExtra: 0,
         hInstance: libloaderapi::GetModuleHandleW(ptr::null()),
@@ -374,7 +383,7 @@ unsafe fn register_window_class() -> Vec<u16> {
     class_name
 }
 
-unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
+unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
     let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
         if winuser::WM_CREATE == msg {
@@ -383,7 +392,13 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
         }
         return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }
+    
+    let frame: &mut LinearLayout = mem::transmute(ww);
+    frame.inner().inner().inner().inner().inner().base.proc_handler.as_proc().unwrap()(hwnd, msg, wparam, lparam)
+}
 
+unsafe extern "system" fn handler<T: controls::LinearLayout>(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
+    let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     match msg {
         winuser::WM_SIZE => {
             let mut width = lparam as u16;
@@ -411,7 +426,7 @@ unsafe extern "system" fn whandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
                 }
             }
 
-            ll.call_on_size(width, height);
+            ll.call_on_size::<T>(width, height);
             return 0;
         }
         winuser::WM_CTLCOLORLISTBOX | winuser::WM_CTLCOLORSTATIC => {

@@ -31,6 +31,26 @@ pub const WM_UPDATE_INNER: u32 = winuser::WM_APP + 1;
 pub type WndHandler = unsafe extern "system" fn(windef::HWND, msg: minwindef::UINT, minwindef::WPARAM, minwindef::LPARAM, usize, usize) -> isize;
 pub type WndProc = unsafe extern "system" fn(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT;
 
+pub enum WndProcHandler {
+    Proc(Option<WndProc>),
+    Handler(Option<WndHandler>)
+}
+
+impl WndProcHandler {
+    pub fn as_proc(&self) -> Option<WndProc> {
+        match self {
+            WndProcHandler::Proc(_proc) => *_proc,
+            _ => panic!("Not a proc!")
+        }
+    }
+    pub fn as_handler(&self) -> Option<WndHandler> {
+        match self {
+            WndProcHandler::Handler(handler) => *handler,
+            _ => panic!("Not a handler!")
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Hfont(windef::HFONT);
 
@@ -115,14 +135,24 @@ impl NativeId for Hwnd {
 pub struct WindowsControlBase<T: controls::Control + Sized> {
     pub hwnd: windef::HWND,
     pub subclass_id: usize,
+    pub proc_handler: WndProcHandler,
     _marker: PhantomData<T>,
 }
 
 impl<T: controls::Control + Sized> WindowsControlBase<T> {
-    pub fn new() -> WindowsControlBase<T> {
+    pub fn with_handler(handler: Option<WndHandler>) -> WindowsControlBase<T> {
         WindowsControlBase {
             hwnd: 0 as windef::HWND,
             subclass_id: 0,
+            proc_handler: WndProcHandler::Handler(handler),
+            _marker: PhantomData,
+        }
+    }
+    pub fn with_wndproc(wndproc: Option<WndProc>) -> WindowsControlBase<T> {
+        WindowsControlBase {
+            hwnd: 0 as windef::HWND,
+            subclass_id: 0,
+            proc_handler: WndProcHandler::Proc(wndproc),
             _marker: PhantomData,
         }
     }
@@ -223,6 +253,21 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
         } else {
             false
         }
+    }
+    pub unsafe fn create_control_hwnd(
+        &self,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        parent: windef::HWND,
+        ex_style: minwindef::DWORD,
+        class_name: ntdef::LPCWSTR,
+        control_name: &str,
+        style: minwindef::DWORD,
+        param: minwindef::LPVOID,
+    ) -> (windef::HWND, usize) {
+        create_control_hwnd(x, y, w, h, parent, ex_style, class_name, control_name, style, param, self.proc_handler.as_handler())  
     }
 }
 
