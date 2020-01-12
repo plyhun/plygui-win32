@@ -54,7 +54,7 @@ impl WindowsList {
     }
 }
 impl<O: controls::List> NewListInner<O> for WindowsList {
-    fn with_uninit(u: &mut mem::MaybeUninit<O>) -> Self {
+    fn with_uninit(_: &mut mem::MaybeUninit<O>) -> Self {
         WindowsList {
             base: WindowsControlBase::with_handler(Some(handler::<O>)),
             items: vec![],
@@ -141,24 +141,20 @@ impl ControlInner for WindowsList {
     }
     fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &dyn controls::Container, px: i32, py: i32, pw: u16, ph: u16) {
         let selfptr = member as *mut _ as *mut c_void;
+        self.base.hwnd = unsafe { parent.native_id() as windef::HWND }; // required for measure, as we don't have own hwnd yet
         let (w, h, _) = self.measure(member, control, pw, ph);
-        let (hwnd, id) = unsafe {
-            self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
-            self.base.create_control_hwnd(
-                px as i32,
-                py as i32,
-                w as i32,
-                h as i32,
-                self.base.hwnd,
-                0,
-                WINDOW_CLASS.as_ptr(),
-                "",
-                winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::LBS_OWNERDRAWVARIABLE | winuser::WS_THICKFRAME | winuser::WS_VSCROLL | winuser::WS_EX_RIGHTSCROLLBAR,
-                selfptr,
-            )
-        };
-        self.base.hwnd = hwnd;
-        self.base.subclass_id = id;
+        self.base.create_control_hwnd(
+            px as i32,
+            py as i32,
+            w as i32,
+            h as i32,
+            self.base.hwnd,
+            0,
+            WINDOW_CLASS.as_ptr(),
+            "",
+            winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::LBS_OWNERDRAWVARIABLE | winuser::WS_THICKFRAME | winuser::WS_VSCROLL | winuser::WS_EX_RIGHTSCROLLBAR,
+            selfptr,
+        );
         control.coords = Some((px as i32, py as i32));
         
         let (member, _, adapter, _) = unsafe { List::adapter_base_parts_mut(member) };

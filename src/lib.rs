@@ -6,6 +6,8 @@
 #![cfg_attr(feature = "cargo-clippy", allow(single_match))]
 
 #![feature(new_uninit)]
+#![allow(invalid_value)]
+
 
 #[macro_use]
 extern crate lazy_static;

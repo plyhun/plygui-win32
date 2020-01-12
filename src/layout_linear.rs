@@ -14,7 +14,7 @@ pub struct WindowsLinearLayout {
     children: Vec<Box<dyn controls::Control>>,
 }
 impl<O: controls::LinearLayout> NewLinearLayoutInner<O> for WindowsLinearLayout {
-    fn with_uninit(u: &mut mem::MaybeUninit<O>) -> Self {
+    fn with_uninit(_: &mut mem::MaybeUninit<O>) -> Self {
         WindowsLinearLayout {
             base: WindowsControlBase::with_wndproc(Some(handler::<O>)),
             orientation: layout::Orientation::Vertical,
@@ -190,9 +190,7 @@ impl ControlInner for WindowsLinearLayout {
             let self2: &mut LinearLayout = unsafe { utils::base_to_impl_mut(member) };
             child.on_removed_from_container(self2);
         }
-        common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, None);
-        self.base.hwnd = 0 as windef::HWND;
-        self.base.subclass_id = 0;
+        self.base.destroy_control_hwnd();
     }
 
     #[cfg(feature = "markup")]

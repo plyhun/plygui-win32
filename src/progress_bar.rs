@@ -14,7 +14,7 @@ pub struct WindowsProgressBar {
     progress: types::Progress,
 }
 impl<O: controls::ProgressBar> NewProgressBarInner<O> for WindowsProgressBar {
-    fn with_uninit(u: &mut mem::MaybeUninit<O>) -> Self {
+    fn with_uninit(_: &mut mem::MaybeUninit<O>) -> Self {
         WindowsProgressBar {
             base: common::WindowsControlBase::with_handler(Some(handler::<O>)),
             progress: Default::default(),
@@ -76,30 +76,24 @@ impl HasProgressInner for WindowsProgressBar {
 impl ControlInner for WindowsProgressBar {
     fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &dyn controls::Container, x: i32, y: i32, pw: u16, ph: u16) {
         let selfptr = member as *mut _ as *mut c_void;
-        let (hwnd, id) = unsafe {
-            self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
-            let (w, h, _) = self.measure(member, control, pw, ph);
-            self.base.create_control_hwnd(
-                x as i32,
-                y as i32,
-                w as i32,
-                h as i32,
-                self.base.hwnd,
-                0,
-                WINDOW_CLASS.as_ptr(),
-                "",
-                winuser::BS_PUSHBUTTON | winuser::WS_TABSTOP,
-                selfptr,
-            )
-        };
-        self.base.hwnd = hwnd;
-        self.base.subclass_id = id;
+        self.base.hwnd = unsafe { parent.native_id() as windef::HWND }; // required for measure, as we don't have own hwnd yet
+        let (w, h, _) = self.measure(member, control, pw, ph);
+        self.base.create_control_hwnd(
+            x as i32,
+            y as i32,
+            w as i32,
+            h as i32,
+            self.base.hwnd,
+            0,
+            WINDOW_CLASS.as_ptr(),
+            "",
+            winuser::BS_PUSHBUTTON | winuser::WS_TABSTOP,
+            selfptr,
+        );
         self.set_progress(member, self.progress.clone());
     }
     fn on_removed_from_container(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
-        common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, self.base.proc_handler.as_handler());
-        self.base.hwnd = 0 as windef::HWND;
-        self.base.subclass_id = 0;
+        self.base.destroy_control_hwnd();
     }
     fn parent(&self) -> Option<&dyn controls::Member> {
         self.base.parent().map(|p| p.as_member())

@@ -254,8 +254,8 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
             false
         }
     }
-    pub unsafe fn create_control_hwnd(
-        &self,
+    pub fn create_control_hwnd(
+        &mut self,
         x: i32,
         y: i32,
         w: i32,
@@ -266,8 +266,20 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
         control_name: &str,
         style: minwindef::DWORD,
         param: minwindef::LPVOID,
-    ) -> (windef::HWND, usize) {
-        create_control_hwnd(x, y, w, h, parent, ex_style, class_name, control_name, style, param, self.proc_handler.as_handler())  
+    ) {
+        let (hwnd, subclass_id) = unsafe { create_control_hwnd(x, y, w, h, parent, ex_style, class_name, control_name, style, param, self.proc_handler.as_handler()) };
+        self.hwnd = hwnd; 
+        self.subclass_id = subclass_id;
+    }
+    pub fn destroy_control_hwnd(&mut self) {
+        match self.proc_handler {
+            WndProcHandler::Handler(h) => {
+                destroy_hwnd(self.hwnd, self.subclass_id, h)
+            }
+            _ => {}
+        }
+        self.hwnd = 0 as windef::HWND;
+        self.subclass_id = 0;
     }
 }
 

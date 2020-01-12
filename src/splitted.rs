@@ -121,7 +121,7 @@ impl WindowsSplitted {
     }
 }
 impl<O: controls::Splitted> NewSplittedInner<O> for WindowsSplitted {
-    fn with_uninit(u: &mut mem::MaybeUninit<O>) -> Self {
+    fn with_uninit(_: &mut mem::MaybeUninit<O>) -> Self {
         WindowsSplitted {
             base: common::WindowsControlBase::with_wndproc(Some(handler::<O>)),
             orientation: layout::Orientation::Horizontal,
@@ -263,9 +263,7 @@ impl ControlInner for WindowsSplitted {
         self.first.on_removed_from_container(self2);
         self.second.on_removed_from_container(self2);
 
-        common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, None);
-        self.base.hwnd = 0 as windef::HWND;
-        self.base.subclass_id = 0;
+        self.base.destroy_control_hwnd();
         self.cursor = ptr::null_mut();
     }
 

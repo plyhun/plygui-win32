@@ -17,7 +17,7 @@ pub struct WindowsFrame {
 }
 
 impl<O: controls::Frame> NewFrameInner<O> for WindowsFrame {
-    fn with_uninit(u: &mut mem::MaybeUninit<O>) -> Self {
+    fn with_uninit(_: &mut mem::MaybeUninit<O>) -> Self {
         WindowsFrame {
             base: common::WindowsControlBase::with_wndproc(Some(handler::<O>)),
             child: None,
@@ -229,11 +229,9 @@ impl ControlInner for WindowsFrame {
             let self2: &mut Frame = unsafe { utils::base_to_impl_mut(member) };
             child.on_removed_from_container(self2);
         }
+        self.base.destroy_control_hwnd();
         common::destroy_hwnd(self.hwnd_gbox, 0, None);
-        common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, None);
-        self.base.hwnd = 0 as windef::HWND;
         self.hwnd_gbox = 0 as windef::HWND;
-        self.base.subclass_id = 0;
     }
 
     fn parent(&self) -> Option<&dyn controls::Member> {
