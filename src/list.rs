@@ -78,7 +78,6 @@ impl ListInner for WindowsList {
                     ),
                 )
             ),
-            MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         );
         ab.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items = Vec::with_capacity(len);
         unsafe {
@@ -351,5 +350,3 @@ unsafe extern "system" fn handler<T: controls::List>(hwnd: windef::HWND, msg: mi
 
     commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
 }
-
-default_impls_as!(List);

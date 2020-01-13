@@ -121,40 +121,34 @@ impl WindowsSplitted {
     }
 }
 impl<O: controls::Splitted> NewSplittedInner<O> for WindowsSplitted {
-    fn with_uninit(_: &mut mem::MaybeUninit<O>) -> Self {
+    fn with_uninit_params(_: &mut mem::MaybeUninit<O>, first: Box<dyn controls::Control>, second: Box<dyn controls::Control>, orientation: layout::Orientation) -> Self {
         WindowsSplitted {
             base: common::WindowsControlBase::with_wndproc(Some(handler::<O>)),
-            orientation: layout::Orientation::Horizontal,
-
+            
             splitter: 0.5,
             cursor: ptr::null_mut(),
             moving: false,
 
-            first: unsafe { mem::zeroed() },
-            second: unsafe { mem::zeroed() },
+            first, second, orientation
         }
     }
 }
 impl SplittedInner for WindowsSplitted {
     fn with_content(first: Box<dyn controls::Control>, second: Box<dyn controls::Control>, orientation: layout::Orientation) -> Box<dyn controls::Splitted> {
         let mut b: Box<mem::MaybeUninit<Splitted>> = Box::new_uninit();
-        let mut ab = AMember::with_inner(
+        let ab = AMember::with_inner(
             AControl::with_inner(
                 AContainer::with_inner(
                     AMultiContainer::with_inner(
                         ASplitted::with_inner(
-                            <Self as NewSplittedInner<Splitted>>::with_uninit(b.as_mut())
+                            <Self as NewSplittedInner<Splitted>>::with_uninit_params(b.as_mut(), first, second, orientation)
                         )
                     ),
                 )
             ),
-            MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         );
-        controls::HasOrientation::set_orientation(&mut ab, orientation);
         unsafe {
-            ptr::write(&mut ab.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().first, first);
-            ptr::write(&mut ab.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().second, second);
-	        b.as_mut_ptr().write(ab);
+            b.as_mut_ptr().write(ab);
 	        b.assume_init()
         }
     }
@@ -651,5 +645,3 @@ unsafe extern "system" fn handler<T: controls::Splitted>(hwnd: windef::HWND, msg
 
     winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
-
-default_impls_as!(Splitted);

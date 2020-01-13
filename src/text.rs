@@ -47,7 +47,6 @@ impl TextInner for WindowsText {
                     <Self as NewTextInner<Text>>::with_uninit(b.as_mut()),
                 )
             ),
-            MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         );
         controls::HasLabel::set_label(&mut ab, text.as_ref().into());
         unsafe {
@@ -217,5 +216,3 @@ unsafe extern "system" fn handler<T: controls::Text>(hwnd: windef::HWND, msg: mi
 
     commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
 }
-
-default_impls_as!(Text);

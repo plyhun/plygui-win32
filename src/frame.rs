@@ -40,7 +40,6 @@ impl FrameInner for WindowsFrame {
                     ),
                 ),
             ),
-            MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         );
         controls::HasLabel::set_label(&mut ab, label.as_ref().into());
         unsafe {
@@ -431,5 +430,3 @@ unsafe extern "system" fn handler<T: controls::Frame>(hwnd: windef::HWND, msg: m
 
     winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
-
-default_impls_as!(Frame);

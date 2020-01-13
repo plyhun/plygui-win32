@@ -30,7 +30,6 @@ impl ProgressBarInner for WindowsProgressBar {
                     <Self as NewProgressBarInner<ProgressBar>>::with_uninit(b.as_mut()),
                 )
             ),
-            MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         );
         controls::HasProgress::set_progress(&mut ab, progress);
         unsafe {
@@ -202,5 +201,3 @@ unsafe extern "system" fn handler<T: controls::ProgressBar>(hwnd: windef::HWND, 
 
     commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
 }
-
-default_impls_as!(ProgressBar);

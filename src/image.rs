@@ -85,7 +85,6 @@ impl ImageInner for WindowsImage {
                     <Self as NewImageInner<Image>>::with_uninit(b.as_mut())
                 )
             ),
-            MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         );
         ab.inner_mut().inner_mut().inner_mut().install_image(content);
         unsafe {
@@ -306,5 +305,3 @@ fn fmin(a: f32, b: f32) -> f32 {
         b
     }
 }*/
-
-default_impls_as!(Image);

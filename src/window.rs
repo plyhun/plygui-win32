@@ -120,7 +120,6 @@ impl WindowInner for WindowsWindow {
                         ),
                     ),
                 ),
-                MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
             ));
 
             let hwnd = winuser::CreateWindowExW(
@@ -310,5 +309,3 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
     }
     winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
-
-default_impls_as!(Window);

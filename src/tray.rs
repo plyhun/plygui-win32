@@ -140,7 +140,6 @@ impl TrayInner for WindowsTray {
                     this: ptr::null_mut(),
                 },
             ),
-            MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
         let this = t.as_mut() as *mut Tray;
         t.inner_mut().inner_mut().this = this;
@@ -204,5 +203,3 @@ impl Drop for WindowsTray {
         }
     }
 }
-
-default_impls_as!(Tray);

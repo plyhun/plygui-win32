@@ -35,7 +35,6 @@ impl LinearLayoutInner for WindowsLinearLayout {
                     ),
                 )
             ),
-            MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         );
         controls::HasOrientation::set_orientation(&mut ab, orientation);
         unsafe {
@@ -440,5 +439,3 @@ unsafe extern "system" fn handler<T: controls::LinearLayout>(hwnd: windef::HWND,
 
     winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
 }
-
-default_impls_as!(LinearLayout);

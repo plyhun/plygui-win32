@@ -65,7 +65,6 @@ impl ButtonInner for WindowsButton {
                     <Self as NewButtonInner<Button>>::with_uninit(b.as_mut())
                 )
             ),
-            MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         );
         controls::HasLabel::set_label(&mut ab, label.as_ref().into());
         unsafe {
@@ -229,5 +228,3 @@ impl Spawnable for WindowsButton {
         Self::with_label("").into_control()
     }
 }
-
-default_impls_as!(Button);

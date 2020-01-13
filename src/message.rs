@@ -64,7 +64,6 @@ impl MessageInner for WindowsMessage {
                     actions: actions.into_iter().map(|a| a.into()).collect(),
                 },
             ),
-            MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
         /*
         if let types::TextContent::Plain(_) = content {
@@ -168,5 +167,3 @@ unsafe extern "system" fn dialog_proc(hwnd: windef::HWND, msg: minwindef::UINT, 
     }
     lr
 }
-
-default_impls_as!(Message);
