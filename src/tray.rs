@@ -145,7 +145,7 @@ impl TrayInner for WindowsTray {
         t.inner_mut().inner_mut().this = this;
 
         let app = super::application::Application::get();
-        let tip_size = t.inner_mut().inner_mut().cfg.szTip.len();
+        let tip_size = unsafe { t.inner_mut().inner_mut().cfg.szTip.len() };
         let title = OsStr::new(t.inner().inner().label.as_str()).encode_wide().take(tip_size - 1).chain(Some(0).into_iter()).collect::<Vec<_>>();
 
         t.inner_mut().inner_mut().cfg.hWnd = unsafe { app.unwrap().native_id() as windef::HWND };
@@ -159,9 +159,9 @@ impl TrayInner for WindowsTray {
 
         t.inner_mut().inner_mut().cfg.uFlags = shellapi::NIF_ICON | shellapi::NIF_TIP | shellapi::NIF_MESSAGE | shellapi::NIF_SHOWTIP;
         t.inner_mut().inner_mut().cfg.uCallbackMessage = MESSAGE;
-        t.inner_mut().inner_mut().cfg.szTip[..title.len()].clone_from_slice(title.as_slice());
         unsafe {
-            if shellapi::Shell_NotifyIconW(shellapi::NIM_ADD, &mut t.inner_mut().inner_mut().cfg) == minwindef::FALSE {
+            t.inner_mut().inner_mut().cfg.szTip[..title.len()].clone_from_slice(title.as_slice());
+	        if shellapi::Shell_NotifyIconW(shellapi::NIM_ADD, &mut t.inner_mut().inner_mut().cfg) == minwindef::FALSE {
                 common::log_error();
             }
             *t.inner_mut().inner_mut().cfg.u.uVersion_mut() = shellapi::NOTIFYICON_VERSION_4;

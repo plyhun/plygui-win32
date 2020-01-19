@@ -28,6 +28,11 @@ pub const DEFAULT_PADDING: i32 = 6;
 pub const DEFAULT_HEIGHT: i32 = 24;
 pub const WM_UPDATE_INNER: u32 = winuser::WM_APP + 1;
 
+#[cfg(not(target_pointer_width = "32"))]
+pub type WinPtr = isize;
+#[cfg(target_pointer_width = "32")]
+pub type WinPtr = i32;
+
 pub type WndHandler = unsafe extern "system" fn(windef::HWND, msg: minwindef::UINT, minwindef::WPARAM, minwindef::LPARAM, usize, usize) -> isize;
 pub type WndProc = unsafe extern "system" fn(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT;
 

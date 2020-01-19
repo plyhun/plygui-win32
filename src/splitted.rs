@@ -540,7 +540,7 @@ unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UIN
     if ww == 0 {
         if winuser::WM_CREATE == msg {
             let cs: &mut winuser::CREATESTRUCTW = mem::transmute(lparam);
-            winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, cs.lpCreateParams as isize);
+            winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, cs.lpCreateParams as WinPtr);
         }
         return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }
@@ -559,7 +559,7 @@ unsafe extern "system" fn handler<T: controls::Splitted>(hwnd: windef::HWND, msg
             {
                 ll.set_skip_draw(true);
                 {
-                    let base = &mem::transmute::<isize, &Splitted>(ww).inner().base;
+                    let base = &mem::transmute::<WinPtr, &Splitted>(ww).inner().base;
                     let ll = ll.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
                     ll.update_children_layout(base);
                     ll.draw_children();
@@ -636,7 +636,7 @@ unsafe extern "system" fn handler<T: controls::Splitted>(hwnd: windef::HWND, msg
         }
         winuser::WM_PAINT => {
             let ll: &mut Splitted = mem::transmute(ww);
-            let base = &mem::transmute::<isize, &Splitted>(ww).inner().base;
+            let base = &mem::transmute::<WinPtr, &Splitted>(ww).inner().base;
             let ll = ll.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
             ll.draw_divider(base);
         }

@@ -49,19 +49,19 @@ impl HasProgressInner for WindowsProgressBar {
             let mut style = unsafe { winuser::GetWindowLongPtrW(self.base.hwnd, winuser::GWL_STYLE) };
             match self.progress {
                 types::Progress::Undefined => unsafe {
-                    style |= commctrl::PBS_MARQUEE as isize;
+                    style |= commctrl::PBS_MARQUEE as WinPtr;
                     winuser::SetWindowLongPtrW(self.base.hwnd, winuser::GWL_STYLE, style);
                     winuser::SendMessageW(self.base.hwnd, commctrl::PBM_SETMARQUEE, 1, 0); 
                 },
                 types::Progress::Value(current, total) => unsafe {
-                    style &= !commctrl::PBS_MARQUEE as isize;
+                    style &= !commctrl::PBS_MARQUEE as WinPtr;
                     winuser::SetWindowLongPtrW(self.base.hwnd, winuser::GWL_STYLE, style);
                     winuser::SendMessageW(self.base.hwnd, commctrl::PBM_SETSTATE, commctrl::PBST_NORMAL as usize, 0);
                     winuser::SendMessageW(self.base.hwnd, commctrl::PBM_SETRANGE32, 0, total as isize);
                     winuser::SendMessageW(self.base.hwnd, commctrl::PBM_SETPOS, current as usize, 0);
                 },
                 types::Progress::None => unsafe {
-                	style &= !commctrl::PBS_MARQUEE as isize;
+                	style &= !commctrl::PBS_MARQUEE as WinPtr;
                     winuser::SetWindowLongPtrW(self.base.hwnd, winuser::GWL_STYLE, style);
                     winuser::SendMessageW(self.base.hwnd, commctrl::PBM_SETSTATE, commctrl::PBST_PAUSED as usize, 0);
                     winuser::SendMessageW(self.base.hwnd, commctrl::PBM_SETRANGE32, 0, 0);
@@ -185,7 +185,7 @@ impl Spawnable for WindowsProgressBar {
 unsafe extern "system" fn handler<T: controls::ProgressBar>(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
     let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
-        winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as isize);
+        winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as WinPtr);
     }
     match msg {
         winuser::WM_SIZE => {

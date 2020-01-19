@@ -390,7 +390,7 @@ unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UIN
     if ww == 0 {
         if winuser::WM_CREATE == msg {
             let cs: &mut winuser::CREATESTRUCTW = mem::transmute(lparam);
-            winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, cs.lpCreateParams as isize);
+            winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, cs.lpCreateParams as WinPtr);
         }
         return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }

@@ -196,7 +196,7 @@ impl Drawable for WindowsButton {
 unsafe extern "system" fn handler<T: controls::Button>(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
     let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
-        winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as isize);
+        winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as WinPtr);
     }
     match msg {
         winuser::WM_LBUTTONUP => {
