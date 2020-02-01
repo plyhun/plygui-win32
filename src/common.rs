@@ -143,7 +143,22 @@ pub struct WindowsControlBase<T: controls::Control + Sized> {
     pub proc_handler: WndProcHandler,
     _marker: PhantomData<T>,
 }
+/* hello 0119
+pub trait HasWindowsControlBase {
+    type T: controls::Control + Sized;
+    
+    fn base(&self) -> &WindowsControlBase<Self::T>;
+    fn base_mut(&mut self) -> &mut WindowsControlBase<Self::T>;
+}
 
+impl <T: controls::Control + Sized, I: HasWindowsControlBase<T=T>> HasNativeIdInner for I {
+    type Id = Hwnd;
+
+    unsafe fn native_id(&self) -> Self::Id {
+        self.base_mut().hwnd.into()
+    }
+}
+*/
 impl<T: controls::Control + Sized> WindowsControlBase<T> {
     pub fn with_handler(handler: Option<WndHandler>) -> WindowsControlBase<T> {
         WindowsControlBase {

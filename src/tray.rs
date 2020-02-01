@@ -145,7 +145,7 @@ impl TrayInner for WindowsTray {
         t.inner_mut().inner_mut().this = this;
 
         let app = super::application::Application::get();
-        let tip_size = unsafe { t.inner_mut().inner_mut().cfg.szTip.len() };
+        let tip_size = t.inner_mut().inner_mut().cfg.szTip.len();
         let title = OsStr::new(t.inner().inner().label.as_str()).encode_wide().take(tip_size - 1).chain(Some(0).into_iter()).collect::<Vec<_>>();
 
         t.inner_mut().inner_mut().cfg.hWnd = unsafe { app.unwrap().native_id() as windef::HWND };
