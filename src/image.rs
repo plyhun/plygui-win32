@@ -68,25 +68,26 @@ impl HasImageInner for WindowsImage {
     }
 }
 impl<O: controls::Image> NewImageInner<O> for WindowsImage {
-    fn with_uninit(_: &mut mem::MaybeUninit<O>) -> Self {
-        WindowsImage {
+    fn with_uninit_params(_: &mut mem::MaybeUninit<O>, content: image::DynamicImage) -> Self {
+        let mut i = WindowsImage {
             base: WindowsControlBase::with_handler(Some(handler::<O>)),
             bmp: ptr::null_mut(),
             scale: types::ImageScalePolicy::FitCenter,
-        }
+        };
+        unsafe { common::image_to_native(&content, &mut i.bmp); }
+        i
     }
 }
 impl ImageInner for WindowsImage {
     fn with_content(content: image::DynamicImage) -> Box<dyn controls::Image> {
         let mut b: Box<mem::MaybeUninit<Image>> = Box::new_uninit();
-        let mut ab = AMember::with_inner(
+        let ab = AMember::with_inner(
             AControl::with_inner(
                 AImage::with_inner(
-                    <Self as NewImageInner<Image>>::with_uninit(b.as_mut())
+                    <Self as NewImageInner<Image>>::with_uninit_params(b.as_mut(), content)
                 )
             ),
         );
-        ab.inner_mut().inner_mut().inner_mut().install_image(content);
         unsafe {
 	        b.as_mut_ptr().write(ab);
 	        b.assume_init()
@@ -213,7 +214,7 @@ impl Drawable for WindowsImage {
 }
 impl Spawnable for WindowsImage {
     fn spawn() -> Box<dyn controls::Control> {
-        Self::with_content(image::DynamicImage::ImageRgba8(image::ImageBuffer::new(0, 0))).into_control()
+        Self::with_content(image::DynamicImage::new_luma8(0, 0)).into_control()
     }
 }
 
