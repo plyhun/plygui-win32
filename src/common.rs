@@ -33,16 +33,16 @@ pub type WinPtr = isize;
 #[cfg(target_pointer_width = "32")]
 pub type WinPtr = i32;
 
-pub type WndHandler = unsafe extern "system" fn(windef::HWND, msg: minwindef::UINT, minwindef::WPARAM, minwindef::LPARAM, usize, usize) -> isize;
-pub type WndProc = unsafe extern "system" fn(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT;
+pub type WndHandler = unsafe extern "system" fn(hwnd: windef::HWND, msg: minwindef::UINT, minwindef::WPARAM, minwindef::LPARAM, usize, usize) -> isize;
+pub type WndProc<O: controls::Control> = unsafe extern "system" fn(&mut O, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT;
 
-pub enum WndProcHandler {
-    Proc(Option<WndProc>),
+pub enum WndProcHandler<O: controls::Control> {
+    Proc(Option<WndProc<O>>),
     Handler(Option<WndHandler>)
 }
 
-impl WndProcHandler {
-    pub fn as_proc(&self) -> Option<WndProc> {
+impl<O: controls::Control> WndProcHandler<O> {
+    pub fn as_proc(&self) -> Option<WndProc<O>> {
         match self {
             WndProcHandler::Proc(_proc) => *_proc,
             _ => panic!("Not a proc!")
@@ -140,8 +140,7 @@ impl NativeId for Hwnd {
 pub struct WindowsControlBase<T: controls::Control + Sized> {
     pub hwnd: windef::HWND,
     pub subclass_id: usize,
-    pub proc_handler: WndProcHandler,
-    _marker: PhantomData<T>,
+    pub proc_handler: WndProcHandler<T>,
 }
 /* hello 0119
 pub trait HasWindowsControlBase {
@@ -160,21 +159,18 @@ impl <T: controls::Control + Sized, I: HasWindowsControlBase<T=T>> HasNativeIdIn
 }
 */
 impl<T: controls::Control + Sized> WindowsControlBase<T> {
-    pub fn with_handler(handler: Option<WndHandler>) -> WindowsControlBase<T> {
-        WindowsControlBase {
+    fn with_wnd_handler(h: WndProcHandler<T>) -> Self {
+        Self {
             hwnd: 0 as windef::HWND,
             subclass_id: 0,
-            proc_handler: WndProcHandler::Handler(handler),
-            _marker: PhantomData,
+            proc_handler: h,
         }
     }
-    pub fn with_wndproc(wndproc: Option<WndProc>) -> WindowsControlBase<T> {
-        WindowsControlBase {
-            hwnd: 0 as windef::HWND,
-            subclass_id: 0,
-            proc_handler: WndProcHandler::Proc(wndproc),
-            _marker: PhantomData,
-        }
+    pub fn with_handler(handler: Option<WndHandler>) -> WindowsControlBase<T> {
+        Self::with_wnd_handler(WndProcHandler::Handler(handler))
+    }
+    pub fn with_wndproc(wndproc: Option<WndProc<T>>) -> WindowsControlBase<T> {
+        Self::with_wnd_handler(WndProcHandler::Proc(wndproc))
     }
 
     pub fn parent_hwnd(&self) -> Option<windef::HWND> {

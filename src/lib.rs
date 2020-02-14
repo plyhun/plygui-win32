@@ -7,7 +7,7 @@
 
 #![feature(new_uninit)]
 #![allow(invalid_value)]
-
+#![allow(type_alias_bounds)]
 
 #[macro_use]
 extern crate lazy_static;

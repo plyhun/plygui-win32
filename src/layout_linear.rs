@@ -390,23 +390,22 @@ unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UIN
     }
     
     let frame: &mut LinearLayout = mem::transmute(ww);
-    frame.inner().inner().inner().inner().inner().base.proc_handler.as_proc().unwrap()(hwnd, msg, wparam, lparam)
+    let frame2: &mut LinearLayout = mem::transmute(ww);
+    frame.inner().inner().inner().inner().inner().base.proc_handler.as_proc().unwrap()(frame2, msg, wparam, lparam)
 }
 
-unsafe extern "system" fn handler<T: controls::LinearLayout>(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
-    let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
+unsafe extern "system" fn handler<T: controls::LinearLayout>(this: &mut LinearLayout, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
     match msg {
         winuser::WM_SIZE => {
             let mut width = lparam as u16;
             let mut height = (lparam >> 16) as u16;
-            let ll: &mut LinearLayout = mem::transmute(ww);
-            let o = ll.inner().inner().inner().inner().inner().orientation;
+            let o = this.inner().inner().inner().inner().inner().orientation;
             let hp = DEFAULT_PADDING + DEFAULT_PADDING;
             let vp = DEFAULT_PADDING + DEFAULT_PADDING;
 
             let mut x = 0;
             let mut y = 0;
-            for child in ll.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().children.as_mut_slice() {
+            for child in this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().children.as_mut_slice() {
                 let (cw, ch, _) = child.measure(cmp::max(0, width as i32 - hp) as u16, cmp::max(0, height as i32 - vp) as u16);
                 child.draw(Some((x + DEFAULT_PADDING, y + DEFAULT_PADDING)));
                 match o {
@@ -422,7 +421,7 @@ unsafe extern "system" fn handler<T: controls::LinearLayout>(hwnd: windef::HWND,
                 }
             }
 
-            ll.call_on_size::<T>(width, height);
+            this.call_on_size::<T>(width, height);
             return 0;
         }
         winuser::WM_CTLCOLORLISTBOX | winuser::WM_CTLCOLORSTATIC => {
@@ -436,5 +435,5 @@ unsafe extern "system" fn handler<T: controls::LinearLayout>(hwnd: windef::HWND,
         _ => {}
     }
 
-    winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
+    winuser::DefWindowProcW(this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().native_id().into(), msg, wparam, lparam)
 }

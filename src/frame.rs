@@ -396,23 +396,22 @@ unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UIN
     }
     
     let frame: &mut Frame = mem::transmute(ww);
-    frame.inner().inner().inner().inner().inner().base.proc_handler.as_proc().unwrap()(hwnd, msg, wparam, lparam)
+    let frame2: &mut Frame = mem::transmute(ww);
+    frame.inner().inner().inner().inner().inner().base.proc_handler.as_proc().unwrap()(frame2, msg, wparam, lparam)
 }
 
-unsafe extern "system" fn handler<T: controls::Frame>(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
-    let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
+unsafe extern "system" fn handler<T: controls::Frame>(this: &mut Frame, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
     match msg {
         winuser::WM_SIZE => {
             let width = lparam as u16;
             let height = (lparam >> 16) as u16;
-            let frame: &mut Frame = mem::transmute(ww);
-            let label_padding = frame.inner().inner().inner().inner().inner().label_padding;
+            let label_padding = this.inner().inner().inner().inner().inner().label_padding;
             let hp = DEFAULT_PADDING + DEFAULT_PADDING;
             let vp = DEFAULT_PADDING + DEFAULT_PADDING + label_padding;
             
-            frame.call_on_size::<T>(width, height);
+            this.call_on_size::<T>(width, height);
             
-            if let Some(ref mut child) = frame.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().child {
+            if let Some(ref mut child) = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().child {
                 child.measure(utils::coord_to_size(width as i32 - hp), utils::coord_to_size(height as i32 - vp));
                 child.draw(Some((DEFAULT_PADDING, DEFAULT_PADDING + label_padding)));
             }
@@ -428,5 +427,5 @@ unsafe extern "system" fn handler<T: controls::Frame>(hwnd: windef::HWND, msg: m
         _ => {}
     }
 
-    winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
+    winuser::DefWindowProcW(this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().native_id().into(), msg, wparam, lparam)
 }
