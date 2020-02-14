@@ -104,7 +104,7 @@ impl HasImageInner for WindowsTray {
     	
     	let i = unsafe {
     		let status_size = winuser::GetSystemMetrics(winuser::SM_CXSMICON) as u32;
-    		self.icon.resize(status_size, status_size, image::FilterType::Lanczos3)
+    		self.icon.resize(status_size, status_size, image::imageops::FilterType::Lanczos3)
     	};
     	
     	let (w,h) = i.dimensions();
