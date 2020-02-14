@@ -8,6 +8,7 @@ pub const MESSAGE: u32 = 0xbaba;
 #[repr(C)]
 pub struct WindowsTray {
     label: String,
+    icon: image::DynamicImage,
     cfg: shellapi::NOTIFYICONDATAW,
     menu: (windef::HMENU, Vec<callbacks::Action>, isize),
     on_close: Option<callbacks::OnClose>,
@@ -93,15 +94,17 @@ impl CloseableInner for WindowsTray {
 
 impl HasImageInner for WindowsTray {
 	fn image(&self, _base: &MemberBase) -> Cow<image::DynamicImage> {
-        unimplemented!()
+        Cow::Borrowed(&self.icon)
     }
     #[inline]
     fn set_image(&mut self, _base: &mut MemberBase, i: Cow<image::DynamicImage>) {
     	use plygui_api::external::image::GenericImageView;
     	
+    	self.icon = i.into_owned();
+    	
     	let i = unsafe {
     		let status_size = winuser::GetSystemMetrics(winuser::SM_CXSMICON) as u32;
-    		i.resize(status_size, status_size, image::FilterType::Lanczos3)
+    		self.icon.resize(status_size, status_size, image::FilterType::Lanczos3)
     	};
     	
     	let (w,h) = i.dimensions();
@@ -134,6 +137,7 @@ impl TrayInner for WindowsTray {
             ATray::with_inner(
                 WindowsTray {
                     label: title.as_ref().into(),
+                    icon: image::DynamicImage::new_luma8(0, 0),
                     cfg: unsafe { mem::zeroed() },
                     menu: (ptr::null_mut(), if menu.is_some() { Vec::new() } else { vec![] }, -2),
                     on_close: None,

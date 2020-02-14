@@ -505,6 +505,44 @@ pub unsafe fn make_menu(menu: windef::HMENU, mut items: Vec<types::MenuItem>, st
     make_special(menu, help, storage);
 }
 
+pub unsafe fn native_to_image(src: windef::HBITMAP) -> image::DynamicImage {
+    let (bm, raw) = {
+        let mut bm =  mem::MaybeUninit::<wingdi::BITMAP>::uninit();
+        wingdi::GetObjectW(src as *mut c_void, mem::size_of::<wingdi::BITMAP>() as i32, bm.as_mut_ptr() as *mut c_void);
+        let bm = bm.assume_init();
+        
+        let mut bminfo = wingdi::BITMAPINFO {
+            bmiHeader: wingdi::BITMAPINFOHEADER {
+                biSize: mem::size_of::<wingdi::BITMAPINFOHEADER>() as u32,
+                biWidth: bm.bmWidth,
+                biHeight: bm.bmHeight,
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: wingdi::BI_RGB,
+                biSizeImage: 0,
+                biXPelsPerMeter: 0,
+                biYPelsPerMeter: 0,
+                biClrUsed: 0,
+                biClrImportant: 0,
+            },
+            bmiColors: mem::zeroed(),
+        };  
+    
+        let mut raw = vec![0u8; bm.bmWidth as usize * bm.bmHeight as usize * 4];
+        let hdc_screen = winuser::GetDC(ptr::null_mut());
+        let ret = wingdi::GetDIBits(hdc_screen, src, 0, bm.bmHeight as u32, raw.as_mut_ptr() as *mut c_void, &mut bminfo, wingdi::DIB_RGB_COLORS);
+        if ret == 0 {
+            log_error();
+        }
+        
+        winuser::ReleaseDC(ptr::null_mut(), hdc_screen);
+        
+        (bm, raw)
+    };
+    let img = image::RgbImage::from_raw(bm.bmWidth as u32, bm.bmHeight as u32, raw).unwrap();
+    image::DynamicImage::ImageRgb8(img).flipv()
+}
+
 pub unsafe fn image_to_native(src: &image::DynamicImage, dst: *mut windef::HBITMAP) {
     use image::GenericImageView;
 
