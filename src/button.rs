@@ -126,7 +126,7 @@ impl HasLayoutInner for WindowsButton {
 impl HasNativeIdInner for WindowsButton {
     type Id = common::Hwnd;
 
-    unsafe fn native_id(&self) -> Self::Id {
+    fn native_id(&self) -> Self::Id {
         self.base.hwnd.into()
     }
 }

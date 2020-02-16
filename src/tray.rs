@@ -48,6 +48,37 @@ impl WindowsTray {
         }
         self.menu.2 = -2;
     }
+    fn install_image(&mut self) {
+    	use plygui_api::external::image::GenericImageView;
+    	
+    	let i = unsafe {
+    		let status_size = winuser::GetSystemMetrics(winuser::SM_CXSMICON) as u32;
+    		self.icon.resize(status_size, status_size, image::imageops::FilterType::Lanczos3)
+    	};
+    	
+    	let (w,h) = i.dimensions();
+    	let mut mask = image::ImageBuffer::new(w, h);
+	    for x in 0..w {
+	        for y in 0..h {
+	            let bright = std::u8::MAX;
+	            mask.put_pixel(x, y, image::Rgba([bright, bright, bright, 0x0]));
+	        }
+	    }
+    	unsafe {
+    		if !self.cfg.hIcon.is_null() {
+    			winuser::DestroyIcon(self.cfg.hIcon);
+    		}
+	        let mut ii: winuser::ICONINFO = mem::zeroed();
+	        ii.fIcon = minwindef::TRUE;
+	        common::image_to_native(&image::DynamicImage::ImageRgba8(mask), &mut ii.hbmMask);
+	        common::image_to_native(&i, &mut ii.hbmColor);
+	        self.cfg.hIcon = winuser::CreateIconIndirect(&mut ii);
+	        if shellapi::Shell_NotifyIconW(shellapi::NIM_MODIFY, &mut self.cfg) == minwindef::FALSE {
+                common::log_error();
+            }
+    	}
+
+    }
 }
 
 impl HasLabelInner for WindowsTray {
@@ -83,7 +114,7 @@ impl CloseableInner for WindowsTray {
                 common::log_error();
             }
         }
-        app.inner_mut().remove_tray((self.this as windef::HWND).into());
+        app.inner_mut().unregister_tray(unsafe { &mut *self.this });
 
         true
     }
@@ -98,61 +129,47 @@ impl HasImageInner for WindowsTray {
     }
     #[inline]
     fn set_image(&mut self, _base: &mut MemberBase, i: Cow<image::DynamicImage>) {
-    	use plygui_api::external::image::GenericImageView;
-    	
     	self.icon = i.into_owned();
-    	
-    	let i = unsafe {
-    		let status_size = winuser::GetSystemMetrics(winuser::SM_CXSMICON) as u32;
-    		self.icon.resize(status_size, status_size, image::imageops::FilterType::Lanczos3)
-    	};
-    	
-    	let (w,h) = i.dimensions();
-    	let mut mask = image::ImageBuffer::new(w, h);
-	    for x in 0..w {
-	        for y in 0..h {
-	            let bright = std::u8::MAX;
-	            mask.put_pixel(x, y, image::Rgba([bright, bright, bright, 0x0]));
-	        }
-	    }
-    	unsafe {
-    		if !self.cfg.hIcon.is_null() {
-    			winuser::DestroyIcon(self.cfg.hIcon);
-    		}
-	        let mut ii: winuser::ICONINFO = mem::zeroed();
-	        ii.fIcon = minwindef::TRUE;
-	        common::image_to_native(&image::DynamicImage::ImageRgba8(mask), &mut ii.hbmMask);
-	        common::image_to_native(&i, &mut ii.hbmColor);
-	        self.cfg.hIcon = winuser::CreateIconIndirect(&mut ii);
-	        if shellapi::Shell_NotifyIconW(shellapi::NIM_MODIFY, &mut self.cfg) == minwindef::FALSE {
-                common::log_error();
-            }
-    	}
+    	self.install_image();
     }
 }
 
+impl<O: controls::Tray> NewTrayInner<O> for WindowsTray {
+    fn with_uninit_params(u: &mut mem::MaybeUninit<O>, title: &str, icon: image::DynamicImage, menu: types::Menu) -> Self {
+        WindowsTray {
+            label: title.into(),
+            icon: icon,
+            cfg: unsafe { mem::zeroed() },
+            menu: (ptr::null_mut(), if menu.is_some() { Vec::new() } else { vec![] }, -2),
+            on_close: None,
+            this: u as *mut _ as *mut Tray,
+        }
+    }
+}
 impl TrayInner for WindowsTray {
-    fn with_params<S: AsRef<str>>(title: S, menu: types::Menu) -> Box<dyn controls::Tray> {
-        let mut t = Box::new(AMember::with_inner(
+    fn with_params<S: AsRef<str>>(title: S, icon: image::DynamicImage, menu: types::Menu) -> Box<dyn controls::Tray> {
+        let mut b: Box<mem::MaybeUninit<Tray>> = Box::new_uninit();
+        let app = crate::application::Application::get().unwrap();
+        let ab = AMember::with_inner(
             ATray::with_inner(
-                WindowsTray {
-                    label: title.as_ref().into(),
-                    icon: image::DynamicImage::new_luma8(0, 0),
-                    cfg: unsafe { mem::zeroed() },
-                    menu: (ptr::null_mut(), if menu.is_some() { Vec::new() } else { vec![] }, -2),
-                    on_close: None,
-                    this: ptr::null_mut(),
-                },
-            ),
-        ));
+                <Self as NewTrayInner<Tray>>::with_uninit_params(b.as_mut(), title.as_ref(), icon, types::Menu::None),
+	            app,
+            )
+        );
+        let mut t = unsafe {
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        };
         let this = t.as_mut() as *mut Tray;
         t.inner_mut().inner_mut().this = this;
 
-        let app = super::application::Application::get();
+        let app = super::application::Application::get().unwrap();
+        let mut app = app.into_any().downcast::<crate::application::Application>().unwrap();
+        
         let tip_size = t.inner_mut().inner_mut().cfg.szTip.len();
         let title = OsStr::new(t.inner().inner().label.as_str()).encode_wide().take(tip_size - 1).chain(Some(0).into_iter()).collect::<Vec<_>>();
 
-        t.inner_mut().inner_mut().cfg.hWnd = unsafe { app.unwrap().native_id() as windef::HWND };
+        t.inner_mut().inner_mut().cfg.hWnd = app.inner().native_id().into();
         t.inner_mut().inner_mut().cfg.cbSize = mem::size_of::<shellapi::NOTIFYICONDATAW>() as u32;
         t.inner_mut().inner_mut().cfg.uID = unsafe { controls::Member::id(t.as_ref()).into_raw() as u32 };
         //t.inner_mut().inner_mut().cfg.hIcon = unsafe { winuser::GetClassLongW(app.inner().root.into(), winuser::GCL_HICON) as windef::HICON };
@@ -180,7 +197,9 @@ impl TrayInner for WindowsTray {
                 t.inner_mut().inner_mut().menu.0 = menu;
             }
         }
-
+        t.inner_mut().inner_mut().install_image();
+        let mut t: Box<dyn controls::Tray> = t;
+        app.inner_mut().register_tray(&mut t);
         t
     }
 }
@@ -188,7 +207,7 @@ impl TrayInner for WindowsTray {
 impl HasNativeIdInner for WindowsTray {
     type Id = common::Hwnd;
 
-    unsafe fn native_id(&self) -> Self::Id {
+    fn native_id(&self) -> Self::Id {
         self.cfg.hWnd.into()
     }
 }

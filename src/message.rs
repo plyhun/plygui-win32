@@ -128,7 +128,7 @@ impl MessageInner for WindowsMessage {
 impl HasNativeIdInner for WindowsMessage {
     type Id = common::Hwnd;
 
-    unsafe fn native_id(&self) -> Self::Id {
+    fn native_id(&self) -> Self::Id {
         self.hwnd.into()
     }
 }

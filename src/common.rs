@@ -435,7 +435,7 @@ pub fn member_base_from_hwnd<'a>(hwnd: windef::HWND) -> Option<&'a mut MemberBas
     unsafe { cast_hwnd(hwnd) }
 }
 
-pub unsafe fn make_menu(menu: windef::HMENU, mut items: Vec<types::MenuItem>, storage: &mut Vec<callbacks::Action>) {
+pub fn make_menu(menu: windef::HMENU, mut items: Vec<types::MenuItem>, storage: &mut Vec<callbacks::Action>) {
     let mut options = Vec::new();
     let mut help = Vec::new();
 
@@ -443,13 +443,13 @@ pub unsafe fn make_menu(menu: windef::HMENU, mut items: Vec<types::MenuItem>, st
         let wlabel = str_to_wchar(label);
         let id = storage.len();
         storage.push(action);
-        winuser::AppendMenuW(menu, winuser::MF_STRING, id, wlabel.as_ptr());
+        unsafe { winuser::AppendMenuW(menu, winuser::MF_STRING, id, wlabel.as_ptr()); }
     };
     let append_level = |menu, label, items, storage: &mut Vec<callbacks::Action>| {
         let wlabel = str_to_wchar(label);
-        let submenu = winuser::CreateMenu();
+        let submenu = unsafe { winuser::CreateMenu() };
         make_menu(submenu, items, storage);
-        winuser::AppendMenuW(menu, winuser::MF_POPUP, submenu as usize, wlabel.as_ptr());
+        unsafe { winuser::AppendMenuW(menu, winuser::MF_POPUP, submenu as usize, wlabel.as_ptr()); }
     };
     let make_special = |menu, mut special: Vec<types::MenuItem>, storage: &mut Vec<callbacks::Action>| {
         for item in special.drain(..) {
@@ -461,7 +461,7 @@ pub unsafe fn make_menu(menu: windef::HMENU, mut items: Vec<types::MenuItem>, st
                     append_level(menu, label, items, storage);
                 }
                 types::MenuItem::Delimiter => {
-                    winuser::AppendMenuW(menu, winuser::MF_SEPARATOR, 0, ptr::null_mut());
+                    unsafe { winuser::AppendMenuW(menu, winuser::MF_SEPARATOR, 0, ptr::null_mut()); }
                 }
             }
         }
@@ -492,7 +492,7 @@ pub unsafe fn make_menu(menu: windef::HMENU, mut items: Vec<types::MenuItem>, st
                 }
             },
             types::MenuItem::Delimiter => {
-                winuser::AppendMenuW(menu, winuser::MF_SEPARATOR, 0, ptr::null_mut());
+                unsafe { winuser::AppendMenuW(menu, winuser::MF_SEPARATOR, 0, ptr::null_mut()); }
             }
         }
     }

@@ -176,7 +176,7 @@ impl SplittedInner for WindowsSplitted {
 impl HasNativeIdInner for WindowsSplitted {
     type Id = common::Hwnd;
 
-    unsafe fn native_id(&self) -> Self::Id {
+    fn native_id(&self) -> Self::Id {
         self.base.hwnd.into()
     }
 }

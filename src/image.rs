@@ -158,7 +158,7 @@ impl HasLayoutInner for WindowsImage {
 impl HasNativeIdInner for WindowsImage {
     type Id = common::Hwnd;
 
-    unsafe fn native_id(&self) -> Self::Id {
+    fn native_id(&self) -> Self::Id {
         self.base.hwnd.into()
     }
 }

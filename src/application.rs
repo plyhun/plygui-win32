@@ -57,24 +57,19 @@ impl ApplicationInner for WindowsApplication {
         a.inner_mut().root = hwnd;
         a
     }
-    fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::Menu) -> Box<dyn controls::Window> {
-        let w = window::WindowsWindow::with_params(title, size, menu);
-        unsafe {
-            self.windows.push(w.native_id() as windef::HWND);
-        }
-        w
+    fn register_window(&mut self, window: &mut Box<dyn controls::Window>) {
+    	let id = HasNativeIdInner::native_id(window.as_any().downcast_ref::<crate::window::Window>().unwrap());
+        self.windows.push(id.into());
     }
-    fn new_tray(&mut self, title: &str, menu: types::Menu) -> Box<dyn controls::Tray> {
-        let mut tray = tray::WindowsTray::with_params(title, menu);
-        self.trays.push(tray.as_any_mut().downcast_mut::<tray::Tray>().unwrap() as *mut crate::tray::Tray);
-        tray
+    fn register_tray(&mut self, tray: &mut Box<dyn controls::Tray>) {
+        self.trays.push(tray.as_any_mut().downcast_mut::<crate::tray::Tray>().unwrap());
     }
-    fn remove_window(&mut self, _: Self::Id) {
+    fn unregister_window(&mut self, _: &mut dyn controls::Window) {
         // Better not to remove directly, as is breaks the wndproc loop.
     }
-    fn remove_tray(&mut self, id: Self::Id) {
-        let id = windef::HWND::from(id) as *mut tray::Tray;
-        self.trays.retain(|t| *t != id);
+    fn unregister_tray(&mut self, tray: &mut dyn controls::Tray) {
+    	let tray = tray.as_any_mut().downcast_mut::<crate::tray::Tray>().unwrap();
+        self.trays.retain(|t| *t != tray);
     }
     fn name<'a>(&'a self) -> Cow<'a, str> {
         Cow::Borrowed(self.name.as_str())
@@ -252,7 +247,7 @@ impl ApplicationInner for WindowsApplication {
 impl HasNativeIdInner for WindowsApplication {
     type Id = common::Hwnd;
 
-    unsafe fn native_id(&self) -> Self::Id {
+    fn native_id(&self) -> Self::Id {
         self.root.into()
     }
 }

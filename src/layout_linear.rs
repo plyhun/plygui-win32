@@ -213,7 +213,7 @@ impl HasLayoutInner for WindowsLinearLayout {
 impl HasNativeIdInner for WindowsLinearLayout {
     type Id = common::Hwnd;
 
-    unsafe fn native_id(&self) -> Self::Id {
+    fn native_id(&self) -> Self::Id {
         self.base.hwnd.into()
     }
 }

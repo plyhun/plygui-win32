@@ -108,7 +108,7 @@ impl HasVisibilityInner for WindowsText {
 impl HasNativeIdInner for WindowsText {
     type Id = common::Hwnd;
 
-    unsafe fn native_id(&self) -> Self::Id {
+    fn native_id(&self) -> Self::Id {
         self.base.hwnd.into()
     }
 }

@@ -7,6 +7,8 @@ lazy_static! {
 #[repr(C)]
 pub struct WindowsWindow {
     hwnd: windef::HWND,
+    hwnd_menu: windef::HMENU,
+    wndproc: unsafe extern "system" fn(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT,  
     msg: winuser::MSG,
     child: Option<Box<dyn controls::Control>>,
     menu: Vec<callbacks::Action>,
@@ -73,56 +75,72 @@ impl HasSizeInner for WindowsWindow {
         common::draw(self.hwnd, Some(common::pos_hwnd(self.hwnd)), value)
     }
 }
-
+impl<O: controls::Window> NewWindowInner<O> for WindowsWindow {
+    fn with_uninit_params(_: &mut mem::MaybeUninit<O>, _: &str, _: types::WindowStartSize, menu: types::Menu) -> Self {
+   		let mut w = WindowsWindow {
+            hwnd: ptr::null_mut(),
+            hwnd_menu: if menu.is_some() { unsafe { winuser::CreateMenu() } } else { ptr::null_mut() },
+            wndproc: handler::<O>,
+            msg: unsafe { mem::zeroed() },
+            child: None,
+            menu: if menu.is_some() { Vec::new() } else { vec![] },
+            on_close: None,
+            skip_callbacks: false,
+        };
+		if let Some(items) = menu {
+            common::make_menu(w.hwnd_menu, items, &mut w.menu);
+        }
+		w
+    }
+}
 impl WindowInner for WindowsWindow {
     fn with_params<S: AsRef<str>>(title: S, window_size: types::WindowStartSize, menu: types::Menu) -> Box<dyn controls::Window> {
-        unsafe {
-            let mut rect = match window_size {
-                types::WindowStartSize::Exact(width, height) => windef::RECT {
-                    left: 0,
-                    top: 0,
-                    right: width as i32,
-                    bottom: height as i32,
-                },
-                types::WindowStartSize::Fullscreen => {
-                    let mut rect = windef::RECT { left: 0, right: 0, top: 0, bottom: 0 };
-                    if winuser::SystemParametersInfoW(winuser::SPI_GETWORKAREA, 0, &mut rect as *mut _ as *mut c_void, 0) == 0 {
-                        log_error();
-                        windef::RECT { left: 0, top: 0, right: 640, bottom: 480 }
-                    } else {
-                        windef::RECT {
-                            left: 0,
-                            top: 0,
-                            right: rect.right,
-                            bottom: rect.bottom,
-                        }
+        let mut rect = match window_size {
+            types::WindowStartSize::Exact(width, height) => windef::RECT {
+                left: 0,
+                top: 0,
+                right: width as i32,
+                bottom: height as i32,
+            },
+            types::WindowStartSize::Fullscreen => {
+                let mut rect = windef::RECT { left: 0, right: 0, top: 0, bottom: 0 };
+                if unsafe { winuser::SystemParametersInfoW(winuser::SPI_GETWORKAREA, 0, &mut rect as *mut _ as *mut c_void, 0) } == 0 {
+                    unsafe { log_error(); }
+                    windef::RECT { left: 0, top: 0, right: 640, bottom: 480 }
+                } else {
+                    windef::RECT {
+                        left: 0,
+                        top: 0,
+                        right: rect.right,
+                        bottom: rect.bottom,
                     }
                 }
-            };
-            let style = winuser::WS_OVERLAPPEDWINDOW;
-            let exstyle = winuser::WS_EX_APPWINDOW | winuser::WS_EX_COMPOSITED;
+            }
+        };
+        let style = winuser::WS_OVERLAPPEDWINDOW;
+        let exstyle = winuser::WS_EX_APPWINDOW | winuser::WS_EX_COMPOSITED;
 
-            winuser::AdjustWindowRectEx(&mut rect, style, minwindef::FALSE, exstyle);
-            let window_name = OsStr::new(title.as_ref()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+        unsafe {winuser::AdjustWindowRectEx(&mut rect, style, minwindef::FALSE, exstyle); }
+        let window_name = OsStr::new(title.as_ref()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
 
-            let mut w: Box<Window> = Box::new(AMember::with_inner(
-                AContainer::with_inner(
-                    ASingleContainer::with_inner(
-                        AWindow::with_inner(
-                            WindowsWindow {
-                                hwnd: 0 as windef::HWND,
-                                msg: mem::zeroed(),
-                                child: None,
-                                menu: if menu.is_some() { Vec::new() } else { vec![] },
-                                on_close: None,
-                                skip_callbacks: false,
-                            },
-                        ),
+		let mut b: Box<mem::MaybeUninit<Window>> = Box::new_uninit();
+        let app = crate::application::Application::get().unwrap();
+        let ab = AMember::with_inner(
+            AContainer::with_inner(
+                ASingleContainer::with_inner(
+                    plygui_api::development::AWindow::with_inner(
+                        <Self as NewWindowInner<Window>>::with_uninit_params(b.as_mut(), title.as_ref(), window_size, menu),
+	                    app,
                     ),
-                ),
-            ));
-
-            let hwnd = winuser::CreateWindowExW(
+                )
+            )
+        );
+        let mut w = unsafe {
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        };
+        w.inner_mut().inner_mut().inner_mut().inner_mut().hwnd = unsafe { 
+        	winuser::CreateWindowExW(
                 exstyle,
                 WINDOW_CLASS.as_ptr(),
                 window_name.as_ptr() as ntdef::LPCWSTR,
@@ -135,17 +153,19 @@ impl WindowInner for WindowsWindow {
                 ptr::null_mut(),
                 hinstance(),
                 w.as_mut() as *mut _ as *mut c_void,
-            );
-            w.inner_mut().inner_mut().inner_mut().inner_mut().hwnd = hwnd;
-
-            if let Some(items) = menu {
-                let menu = winuser::CreateMenu();
-                common::make_menu(menu, items, &mut w.inner_mut().inner_mut().inner_mut().inner_mut().menu);
-                winuser::SetMenu(hwnd, menu);
+            )
+        };
+        if !w.inner().inner().inner().inner().hwnd_menu.is_null() {
+        	unsafe {
+        	    winuser::SetMenu(w.inner().inner().inner().inner().hwnd, w.inner().inner().inner().inner().hwnd_menu);
             }
-
-            w
         }
+        
+        let mut w: Box<dyn controls::Window> = w;
+        let app = crate::application::Application::get().unwrap();
+        let mut app = app.into_any().downcast::<crate::application::Application>().unwrap();
+        app.inner_mut().register_window(&mut w);
+        w
     }
     fn size(&self) -> (u16, u16) {
         common::size_hwnd(self.hwnd)
@@ -221,7 +241,7 @@ impl CloseableInner for WindowsWindow {
 impl HasNativeIdInner for WindowsWindow {
     type Id = common::Hwnd;
 
-    unsafe fn native_id(&self) -> Self::Id {
+    fn native_id(&self) -> Self::Id {
         self.hwnd.into()
     }
 }
@@ -242,7 +262,7 @@ unsafe fn register_window_class() -> Vec<u16> {
     let class = winuser::WNDCLASSEXW {
         cbSize: mem::size_of::<winuser::WNDCLASSEXW>() as minwindef::UINT,
         style: winuser::CS_DBLCLKS,
-        lpfnWndProc: Some(handler),
+        lpfnWndProc: Some(window_handler),
         cbClsExtra: 0,
         cbWndExtra: 0,
         hInstance: libloaderapi::GetModuleHandleW(ptr::null()),
@@ -257,7 +277,7 @@ unsafe fn register_window_class() -> Vec<u16> {
     class_name
 }
 
-unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
+unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
     let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
         if winuser::WM_CREATE == msg {
@@ -266,30 +286,34 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
         }
         return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }
+    
+    let w: &mut Window = mem::transmute(ww);
+    (w.inner().inner().inner().inner().wndproc)(hwnd, msg, wparam, lparam)
+}
 
+unsafe extern "system" fn handler<O: controls::Window>(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
+    let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
+    let w: &mut Window = mem::transmute(ww);
     match msg {
         winuser::WM_SIZE => {
             let width = minwindef::LOWORD(lparam as u32);
             let height = minwindef::HIWORD(lparam as u32);
-            let w: &mut Window = mem::transmute(ww);
 
             w.inner_mut().inner_mut().inner_mut().inner_mut().redraw();
 
             winuser::InvalidateRect(w.inner().inner().inner().inner().hwnd, ptr::null_mut(), minwindef::TRUE);
 
-            w.call_on_size(width, height);
+            w.call_on_size::<O>(width, height);
             return 0;
         }
         winuser::WM_DESTROY => {
-            let w: &mut Window = mem::transmute(ww);
             w.inner_mut().inner_mut().inner_mut().inner_mut().hwnd = ptr::null_mut();
             //return 0;
         }
         winuser::WM_CLOSE => {
-            let w: &mut Window = mem::transmute(ww);
             if !w.inner_mut().inner_mut().inner_mut().inner_mut().skip_callbacks {
                 if let Some(ref mut on_close) = w.inner_mut().inner_mut().inner_mut().inner_mut().on_close {
-                    let w2: &mut Window = mem::transmute(ww);
+                    let w2: &mut O = mem::transmute(ww);
                     if !(on_close.as_mut())(w2) {
                         return 0;
                     }
@@ -299,8 +323,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
         winuser::WM_COMMAND => {
             let id = minwindef::LOWORD(wparam as u32);
             let _evt = minwindef::HIWORD(wparam as u32);
-            let w: &mut Window = mem::transmute(ww);
-            let w2: &mut Window = mem::transmute(ww);
+            let w2: &mut O = mem::transmute(ww);
             if let Some(a) = w.inner_mut().inner_mut().inner_mut().inner_mut().menu.get_mut(id as usize) {
                 (a.as_mut())(w2);
             }
