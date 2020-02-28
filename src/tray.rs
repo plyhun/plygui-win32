@@ -1,4 +1,3 @@
-use crate::application::Application;
 use crate::common::{self, *};
 
 use winapi::um::shellapi;
@@ -15,13 +14,13 @@ pub struct WindowsTray {
     this: *mut Tray,
 }
 
-pub type Tray = AMember<ATray<WindowsTray>>;
+pub type Tray = AMember<ACloseable<ATray<WindowsTray>>>;
 
 impl WindowsTray {
     pub(crate) fn toggle_menu(&mut self) {
         if !self.menu.0.is_null() {
             unsafe {
-                let hwnd = Application::get().unwrap().native_id() as windef::HWND;
+                let hwnd = (&*self.this).native_id().into();
                 if self.menu.2 > -2 {
                     self.menu.2 = -2;
                     winuser::SendMessageW(hwnd, winuser::WM_CANCELMODE, 0, 0);
@@ -105,21 +104,21 @@ impl CloseableInner for WindowsTray {
                 }
             }
         }
-
-        let mut app = Application::get().unwrap();
-        let app = app.as_any_mut().downcast_mut::<Application>().unwrap();
-
         unsafe {
             if shellapi::Shell_NotifyIconW(shellapi::NIM_DELETE, &mut self.cfg) == minwindef::FALSE {
                 common::log_error();
             }
         }
-        app.inner_mut().unregister_tray(unsafe { &mut *self.this });
-
         true
     }
     fn on_close(&mut self, callback: Option<callbacks::OnClose>) {
         self.on_close = callback;
+    }
+    fn application<'a>(&'a self, base: &'a MemberBase) -> &'a dyn controls::Application {
+        unsafe { utils::base_to_impl::<Tray>(base) }.inner().application_impl::<crate::application::Application>()
+    }
+    fn application_mut<'a>(&'a mut self, base: &'a mut MemberBase) -> &'a mut dyn controls::Application {
+        unsafe { utils::base_to_impl_mut::<Tray>(base) }.inner_mut().application_impl_mut::<crate::application::Application>()
     }
 }
 
@@ -147,59 +146,57 @@ impl<O: controls::Tray> NewTrayInner<O> for WindowsTray {
     }
 }
 impl TrayInner for WindowsTray {
-    fn with_params<S: AsRef<str>>(title: S, icon: image::DynamicImage, menu: types::Menu) -> Box<dyn controls::Tray> {
+    fn with_params<S: AsRef<str>>(app: &mut dyn controls::Application, title: S, icon: image::DynamicImage, menu: types::Menu) -> Box<dyn controls::Tray> {
         let mut b: Box<mem::MaybeUninit<Tray>> = Box::new_uninit();
-        let app = crate::application::Application::get().unwrap();
         let ab = AMember::with_inner(
-            ATray::with_inner(
-                <Self as NewTrayInner<Tray>>::with_uninit_params(b.as_mut(), title.as_ref(), icon, types::Menu::None),
-	            app,
+            ACloseable::with_inner(
+                ATray::with_inner(
+                    <Self as NewTrayInner<Tray>>::with_uninit_params(b.as_mut(), title.as_ref(), icon, types::Menu::None),
+                ),
+	            app.as_any_mut().downcast_mut::<crate::application::Application>().unwrap()
             )
         );
         let mut t = unsafe {
 	        b.as_mut_ptr().write(ab);
 	        b.assume_init()
         };
-        let this = t.as_mut() as *mut Tray;
-        t.inner_mut().inner_mut().this = this;
-
-        let app = super::application::Application::get().unwrap();
-        let mut app = app.into_any().downcast::<crate::application::Application>().unwrap();
-        
-        let tip_size = t.inner_mut().inner_mut().cfg.szTip.len();
-        let title = OsStr::new(t.inner().inner().label.as_str()).encode_wide().take(tip_size - 1).chain(Some(0).into_iter()).collect::<Vec<_>>();
-
-        t.inner_mut().inner_mut().cfg.hWnd = app.inner().native_id().into();
-        t.inner_mut().inner_mut().cfg.cbSize = mem::size_of::<shellapi::NOTIFYICONDATAW>() as u32;
-        t.inner_mut().inner_mut().cfg.uID = unsafe { controls::Member::id(t.as_ref()).into_raw() as u32 };
-        //t.inner_mut().inner_mut().cfg.hIcon = unsafe { winuser::GetClassLongW(app.inner().root.into(), winuser::GCL_HICON) as windef::HICON };
-
-        unsafe {
-            commctrl::LoadIconMetric(ptr::null_mut(), winuser::MAKEINTRESOURCEW(32512), commctrl::LIM_SMALL as i32, &mut t.inner_mut().inner_mut().cfg.hIcon);
-        }
-
-        t.inner_mut().inner_mut().cfg.uFlags = shellapi::NIF_ICON | shellapi::NIF_TIP | shellapi::NIF_MESSAGE | shellapi::NIF_SHOWTIP;
-        t.inner_mut().inner_mut().cfg.uCallbackMessage = MESSAGE;
-        unsafe {
-            t.inner_mut().inner_mut().cfg.szTip[..title.len()].clone_from_slice(title.as_slice());
-	        if shellapi::Shell_NotifyIconW(shellapi::NIM_ADD, &mut t.inner_mut().inner_mut().cfg) == minwindef::FALSE {
-                common::log_error();
-            }
-            *t.inner_mut().inner_mut().cfg.u.uVersion_mut() = shellapi::NOTIFYICON_VERSION_4;
-            if shellapi::Shell_NotifyIconW(shellapi::NIM_SETVERSION, &mut t.inner_mut().inner_mut().cfg) == minwindef::FALSE {
-                common::log_error();
-            }
-        }
-        if let Some(items) = menu {
+        {
+            let app = app.as_any_mut().downcast_mut::<crate::application::Application>().unwrap();
+            let id = unsafe { controls::Member::id(t.as_ref()).into_raw() as u32 };
+            let tt = t.inner_mut().inner_mut().inner_mut();
+            let tip_size = tt.cfg.szTip.len();
+            let title = OsStr::new(tt.label.as_str()).encode_wide().take(tip_size - 1).chain(Some(0).into_iter()).collect::<Vec<_>>();
+    
+            tt.cfg.hWnd = app.inner().native_id().into();
+            tt.cfg.cbSize = mem::size_of::<shellapi::NOTIFYICONDATAW>() as u32;
+            tt.cfg.uID = id;
+            //t.inner_mut().inner_mut().cfg.hIcon = unsafe { winuser::GetClassLongW(app.inner().root.into(), winuser::GCL_HICON) as windef::HICON };
+    
             unsafe {
-                let menu = winuser::CreatePopupMenu();
-                common::make_menu(menu, items, &mut t.inner_mut().inner_mut().menu.1);
-                t.inner_mut().inner_mut().menu.0 = menu;
+                commctrl::LoadIconMetric(ptr::null_mut(), winuser::MAKEINTRESOURCEW(32512), commctrl::LIM_SMALL as i32, &mut tt.cfg.hIcon);
             }
+    
+            tt.cfg.uFlags = shellapi::NIF_ICON | shellapi::NIF_TIP | shellapi::NIF_MESSAGE | shellapi::NIF_SHOWTIP;
+            tt.cfg.uCallbackMessage = MESSAGE;
+            unsafe {
+                tt.cfg.szTip[..title.len()].clone_from_slice(title.as_slice());
+    	        if shellapi::Shell_NotifyIconW(shellapi::NIM_ADD, &mut tt.cfg) == minwindef::FALSE {
+                    common::log_error();
+                }
+                *tt.cfg.u.uVersion_mut() = shellapi::NOTIFYICON_VERSION_4;
+                if shellapi::Shell_NotifyIconW(shellapi::NIM_SETVERSION, &mut tt.cfg) == minwindef::FALSE {
+                    common::log_error();
+                }
+            }
+            if let Some(items) = menu {
+                unsafe {
+                    let menu = winuser::CreatePopupMenu();
+                    common::make_menu(menu, items, &mut tt.menu.1);
+                    tt.menu.0 = menu;
+                }
+            }
+            tt.install_image();
         }
-        t.inner_mut().inner_mut().install_image();
-        let mut t: Box<dyn controls::Tray> = t;
-        app.inner_mut().register_tray(&mut t);
         t
     }
 }

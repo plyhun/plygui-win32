@@ -16,7 +16,7 @@ pub struct WindowsWindow {
     skip_callbacks: bool,
 }
 
-pub type Window = AMember<AContainer<ASingleContainer<AWindow<WindowsWindow>>>>;
+pub type Window = AMember<AContainer<ASingleContainer<ACloseable<AWindow<WindowsWindow>>>>>;
 
 impl WindowsWindow {
     pub(crate) fn dispatch(&mut self) -> i32 {
@@ -94,7 +94,7 @@ impl<O: controls::Window> NewWindowInner<O> for WindowsWindow {
     }
 }
 impl WindowInner for WindowsWindow {
-    fn with_params<S: AsRef<str>>(title: S, window_size: types::WindowStartSize, menu: types::Menu) -> Box<dyn controls::Window> {
+    fn with_params<S: AsRef<str>>(app: &mut dyn controls::Application, title: S, window_size: types::WindowStartSize, menu: types::Menu) -> Box<dyn controls::Window> {
         let mut rect = match window_size {
             types::WindowStartSize::Exact(width, height) => windef::RECT {
                 left: 0,
@@ -124,14 +124,15 @@ impl WindowInner for WindowsWindow {
         let window_name = OsStr::new(title.as_ref()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
 
 		let mut b: Box<mem::MaybeUninit<Window>> = Box::new_uninit();
-        let app = crate::application::Application::get().unwrap();
         let ab = AMember::with_inner(
             AContainer::with_inner(
                 ASingleContainer::with_inner(
-                    plygui_api::development::AWindow::with_inner(
-                        <Self as NewWindowInner<Window>>::with_uninit_params(b.as_mut(), title.as_ref(), window_size, menu),
-	                    app,
-                    ),
+                    ACloseable::with_inner(
+                        AWindow::with_inner(
+                            <Self as NewWindowInner<Window>>::with_uninit_params(b.as_mut(), title.as_ref(), window_size, menu),
+    	                ),
+                        app.as_any_mut().downcast_mut::<crate::application::Application>().unwrap()
+                    )
                 )
             )
         );
@@ -139,7 +140,7 @@ impl WindowInner for WindowsWindow {
 	        b.as_mut_ptr().write(ab);
 	        b.assume_init()
         };
-        w.inner_mut().inner_mut().inner_mut().inner_mut().hwnd = unsafe { 
+        w.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().hwnd = unsafe { 
         	winuser::CreateWindowExW(
                 exstyle,
                 WINDOW_CLASS.as_ptr(),
@@ -155,16 +156,11 @@ impl WindowInner for WindowsWindow {
                 w.as_mut() as *mut _ as *mut c_void,
             )
         };
-        if !w.inner().inner().inner().inner().hwnd_menu.is_null() {
+        if !w.inner().inner().inner().inner().inner().hwnd_menu.is_null() {
         	unsafe {
-        	    winuser::SetMenu(w.inner().inner().inner().inner().hwnd, w.inner().inner().inner().inner().hwnd_menu);
+        	    winuser::SetMenu(w.inner().inner().inner().inner().inner().hwnd, w.inner().inner().inner().inner().inner().hwnd_menu);
             }
         }
-        
-        let mut w: Box<dyn controls::Window> = w;
-        let app = crate::application::Application::get().unwrap();
-        let mut app = app.into_any().downcast::<crate::application::Application>().unwrap();
-        app.inner_mut().register_window(&mut w);
         w
     }
     fn size(&self) -> (u16, u16) {
@@ -237,6 +233,12 @@ impl CloseableInner for WindowsWindow {
     fn on_close(&mut self, callback: Option<callbacks::OnClose>) {
         self.on_close = callback;
     }
+    fn application<'a>(&'a self, base: &'a MemberBase) -> &'a dyn controls::Application {
+        unsafe { utils::base_to_impl::<Window>(base) }.inner().inner().inner().application_impl::<crate::application::Application>()
+    }
+    fn application_mut<'a>(&'a mut self, base: &'a mut MemberBase) -> &'a mut dyn controls::Application {
+        unsafe { utils::base_to_impl_mut::<Window>(base) }.inner_mut().inner_mut().inner_mut().application_impl_mut::<crate::application::Application>()
+    }
 }
 impl HasNativeIdInner for WindowsWindow {
     type Id = common::Hwnd;
@@ -288,7 +290,7 @@ unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UIN
     }
     
     let w: &mut Window = mem::transmute(ww);
-    (w.inner().inner().inner().inner().wndproc)(hwnd, msg, wparam, lparam)
+    (w.inner().inner().inner().inner().inner().wndproc)(hwnd, msg, wparam, lparam)
 }
 
 unsafe extern "system" fn handler<O: controls::Window>(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
@@ -299,20 +301,20 @@ unsafe extern "system" fn handler<O: controls::Window>(hwnd: windef::HWND, msg: 
             let width = minwindef::LOWORD(lparam as u32);
             let height = minwindef::HIWORD(lparam as u32);
 
-            w.inner_mut().inner_mut().inner_mut().inner_mut().redraw();
+            w.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().redraw();
 
-            winuser::InvalidateRect(w.inner().inner().inner().inner().hwnd, ptr::null_mut(), minwindef::TRUE);
+            winuser::InvalidateRect(w.inner().inner().inner().inner().inner().hwnd, ptr::null_mut(), minwindef::TRUE);
 
             w.call_on_size::<O>(width, height);
             return 0;
         }
         winuser::WM_DESTROY => {
-            w.inner_mut().inner_mut().inner_mut().inner_mut().hwnd = ptr::null_mut();
+            w.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().hwnd = ptr::null_mut();
             //return 0;
         }
         winuser::WM_CLOSE => {
-            if !w.inner_mut().inner_mut().inner_mut().inner_mut().skip_callbacks {
-                if let Some(ref mut on_close) = w.inner_mut().inner_mut().inner_mut().inner_mut().on_close {
+            if !w.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().skip_callbacks {
+                if let Some(ref mut on_close) = w.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().on_close {
                     let w2: &mut O = mem::transmute(ww);
                     if !(on_close.as_mut())(w2) {
                         return 0;
@@ -324,7 +326,7 @@ unsafe extern "system" fn handler<O: controls::Window>(hwnd: windef::HWND, msg: 
             let id = minwindef::LOWORD(wparam as u32);
             let _evt = minwindef::HIWORD(wparam as u32);
             let w2: &mut O = mem::transmute(ww);
-            if let Some(a) = w.inner_mut().inner_mut().inner_mut().inner_mut().menu.get_mut(id as usize) {
+            if let Some(a) = w.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().menu.get_mut(id as usize) {
                 (a.as_mut())(w2);
             }
         }

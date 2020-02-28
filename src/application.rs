@@ -7,6 +7,8 @@ use plygui_api::types;
 use winapi::shared::windef;
 use winapi::um::commctrl;
 
+use std::any::TypeId;
+
 lazy_static! {
     pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
 }
@@ -15,34 +17,20 @@ const DEFAULT_FRAME_SLEEP_MS: u32 = 10;
 
 pub struct WindowsApplication {
     pub(crate) root: windef::HWND,
-    name: String,
     sleep: u32,
-    windows: Vec<windef::HWND>,
-    trays: Vec<*mut crate::tray::Tray>,
 }
 
-pub type Application = ::plygui_api::development::AApplication<WindowsApplication>;
+pub type Application = AApplication<WindowsApplication>;
 
-impl ApplicationInner for WindowsApplication {
-    fn get() -> Box<dyn controls::Application> {
+impl<O: controls::Application> NewApplicationInner<O> for WindowsApplication {
+    fn with_uninit_params(u: &mut mem::MaybeUninit<O>, name: &str) -> Self {
         init_comctl();
-
-        let mut a = Box::new(AApplication::with_inner(
-            WindowsApplication {
-                name: String::new(), //name.into(), // TODO later
-                sleep: DEFAULT_FRAME_SLEEP_MS,
-                windows: Vec::with_capacity(1),
-                trays: Vec::with_capacity(0),
-                root: 0 as windef::HWND,
-            },
-        ));
-
-        let name = OsStr::new(a.inner().name.as_str()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+        let osname = OsStr::new(name).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
         let hwnd = unsafe {
             winuser::CreateWindowExW(
                 0,
                 WINDOW_CLASS.as_ptr(),
-                name.as_ptr() as ntdef::LPCWSTR,
+                osname.as_ptr() as ntdef::LPCWSTR,
                 0,
                 winuser::CW_USEDEFAULT,
                 winuser::CW_USEDEFAULT,
@@ -51,28 +39,35 @@ impl ApplicationInner for WindowsApplication {
                 ptr::null_mut(),
                 ptr::null_mut(),
                 hinstance(),
-                a.as_mut() as *mut _ as *mut c_void,
+                u as *mut _ as *mut c_void,
             )
         };
-        a.inner_mut().root = hwnd;
-        a
+        WindowsApplication {
+            sleep: DEFAULT_FRAME_SLEEP_MS,
+            root: hwnd,
+        }
     }
-    fn register_window(&mut self, window: &mut Box<dyn controls::Window>) {
-    	let id = HasNativeIdInner::native_id(window.as_any().downcast_ref::<crate::window::Window>().unwrap());
-        self.windows.push(id.into());
+}
+
+impl ApplicationInner for WindowsApplication {
+    fn with_name<S: AsRef<str>>(name: S) -> Box<dyn controls::Application> {
+        let mut b: Box<mem::MaybeUninit<Application>> = Box::new_uninit();
+        let ab = AApplication::with_inner(
+            <Self as NewApplicationInner<Application>>::with_uninit_params(b.as_mut(), name.as_ref()),
+        );
+        unsafe {
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        }
     }
-    fn register_tray(&mut self, tray: &mut Box<dyn controls::Tray>) {
-        self.trays.push(tray.as_any_mut().downcast_mut::<crate::tray::Tray>().unwrap());
-    }
-    fn unregister_window(&mut self, _: &mut dyn controls::Window) {
-        // Better not to remove directly, as is breaks the wndproc loop.
-    }
-    fn unregister_tray(&mut self, tray: &mut dyn controls::Tray) {
-    	let tray = tray.as_any_mut().downcast_mut::<crate::tray::Tray>().unwrap();
-        self.trays.retain(|t| *t != tray);
-    }
-    fn name<'a>(&'a self) -> Cow<'a, str> {
-        Cow::Borrowed(self.name.as_str())
+    fn name(&self) -> Cow<str> {
+        if self.root != 0 as windef::HWND {
+            let mut wbuffer = vec![0u16; 4096];
+            let len = unsafe { winuser::GetWindowTextW(self.root, wbuffer.as_mut_slice().as_mut_ptr(), 4096) };
+            Cow::Owned(String::from_utf16_lossy(&wbuffer.as_slice()[..len as usize]))
+        } else {
+            unreachable!();
+        }
     }
     fn frame_sleep(&self) -> u32 {
         self.sleep
@@ -101,35 +96,36 @@ impl ApplicationInner for WindowsApplication {
                         },
                     }
                 }
-            }
-            unsafe {
-                synchapi::Sleep(self.sleep);
-
-                if winuser::PeekMessageW(&mut msg, ptr::null_mut(), 0, 0, winuser::PM_REMOVE) > 0 {
-                    winuser::TranslateMessage(&mut msg);
-                    winuser::DispatchMessageW(&mut msg);
-                }
-            }
-
-            i = 0;
-            while i < self.windows.len() {
-                if dispatch_window(self.windows[i]) < 0 {
-                    self.windows.remove(i);
-                } else {
-                    i += 1;
-                }
-            }
-            if self.windows.len() < 1 && self.trays.len() < 1 {
                 unsafe {
-                    winuser::DestroyWindow(self.root);
+                    synchapi::Sleep(self.sleep);
+    
+                    if winuser::PeekMessageW(&mut msg, ptr::null_mut(), 0, 0, winuser::PM_REMOVE) > 0 {
+                        winuser::TranslateMessage(&mut msg);
+                        winuser::DispatchMessageW(&mut msg);
+                    }
                 }
-                break;
+    
+                i = 0;
+                while i < w.windows.len() {
+                    if dispatch_window(w.windows[i].as_any_mut().downcast_mut::<crate::window::Window>().unwrap().inner_mut().inner_mut().inner_mut().inner_mut().native_id().into()) < 0 {
+                        w.windows.remove(i);
+                    } else {
+                        i += 1;
+                    }
+                }
+                if w.windows.len() < 1 && w.trays.len() < 1 {
+                    unsafe {
+                        winuser::DestroyWindow(self.root);
+                    }
+                    break;
+                }
             }
         }
     }
     fn find_member_mut(&mut self, arg: types::FindBy) -> Option<&mut dyn controls::Member> {
-        for window in self.windows.as_mut_slice() {
-            if let Some(window) = common::member_from_hwnd::<window::Window>(*window) {
+        if let Some(w) = unsafe { cast_hwnd::<Application>(self.root) } {
+            let w = w.base_mut();
+            for window in w.windows.as_mut_slice() {
                 match arg {
                     types::FindBy::Id(id) => {
                         if window.id() == id {
@@ -144,24 +140,24 @@ impl ApplicationInner for WindowsApplication {
                         }
                     }
                 }
-                let found = controls::Container::find_control_mut(window, arg.clone()).map(|control| control.as_member_mut());
+                let found = controls::Container::find_control_mut(window.as_mut(), arg.clone()).map(|control| control.as_member_mut());
                 if found.is_some() {
                     return found;
                 }
             }
-        }
-        for tray in self.trays.as_mut_slice() {
-            let tray = unsafe { &mut **tray };
-            match arg {
-                types::FindBy::Id(ref id) => {
-                    if tray.id() == *id {
-                        return Some(tray.as_member_mut());
-                    }
-                }
-                types::FindBy::Tag(ref tag) => {
-                    if let Some(mytag) = tray.tag() {
-                        if tag.as_str() == mytag {
+            for tray in w.trays.as_mut_slice() {
+                let tray = &mut **tray;
+                match arg {
+                    types::FindBy::Id(ref id) => {
+                        if tray.id() == *id {
                             return Some(tray.as_member_mut());
+                        }
+                    }
+                    types::FindBy::Tag(ref tag) => {
+                        if let Some(mytag) = tray.tag() {
+                            if tag.as_str() == mytag {
+                                return Some(tray.as_member_mut());
+                            }
                         }
                     }
                 }
@@ -170,8 +166,9 @@ impl ApplicationInner for WindowsApplication {
         None
     }
     fn find_member(&self, arg: types::FindBy) -> Option<&dyn controls::Member> {
-        for window in self.windows.as_slice() {
-            if let Some(window) = common::member_from_hwnd::<window::Window>(*window) {
+        if let Some(w) = unsafe { cast_hwnd::<Application>(self.root) } {
+            let w = w.base();
+            for window in w.windows.as_slice() {
                 match arg {
                     types::FindBy::Id(id) => {
                         if window.id() == id {
@@ -186,24 +183,23 @@ impl ApplicationInner for WindowsApplication {
                         }
                     }
                 }
-                let found = controls::Container::find_control(window, arg.clone()).map(|control| control.as_member());
+                let found = controls::Container::find_control(window.as_ref(), arg.clone()).map(|control| control.as_member());
                 if found.is_some() {
                     return found;
                 }
             }
-        }
-        for tray in self.trays.as_slice() {
-            let tray = unsafe { &mut **tray };
-            match arg {
-                types::FindBy::Id(ref id) => {
-                    if tray.id() == *id {
-                        return Some(tray.as_member());
-                    }
-                }
-                types::FindBy::Tag(ref tag) => {
-                    if let Some(mytag) = tray.tag() {
-                        if tag.as_str() == mytag {
+            for tray in w.trays.as_slice() {
+                match arg {
+                    types::FindBy::Id(ref id) => {
+                        if tray.id() == *id {
                             return Some(tray.as_member());
+                        }
+                    }
+                    types::FindBy::Tag(ref tag) => {
+                        if let Some(mytag) = tray.tag() {
+                            if tag.as_str() == mytag {
+                                return Some(tray.as_member());
+                            }
                         }
                     }
                 }
@@ -211,31 +207,86 @@ impl ApplicationInner for WindowsApplication {
         }
         None
     }
-    fn exit(&mut self, skip_on_close: bool) -> bool {
-        for window in self.windows.as_mut_slice() {
-            if !controls::Closeable::close(common::member_from_hwnd::<window::Window>(*window).unwrap(), skip_on_close) {
-                return false;
-            }
+    fn add_root(&mut self, m: Box<dyn controls::Closeable>) -> &mut dyn controls::Member {
+        let base = unsafe { cast_hwnd::<Application>(self.root) }.unwrap().base_mut(); 
+        
+        let is_window = m.as_any().type_id() == TypeId::of::<crate::window::Window>();
+        let is_tray = m.as_any().type_id() == TypeId::of::<crate::tray::Tray>();
+        
+        if is_window {
+            let i = base.windows.len();
+            base.windows.push(m.into_any().downcast::<crate::window::Window>().unwrap());
+            return base.windows[i].as_mut().as_member_mut();
         }
-        for tray in self.trays.as_mut_slice() {
-            if !(controls::Closeable::close(unsafe { &mut **tray }, skip_on_close)) {
-                return false;
-            }
+        
+        if is_tray {
+            let i = base.trays.len();
+            base.trays.push(m.into_any().downcast::<crate::tray::Tray>().unwrap());
+            return base.trays[i].as_mut().as_member_mut();
         }
-        true
+        
+        panic!("Unsupported Closeable: {:?}", m.as_any().type_id());
     }
-    fn members<'a>(&'a self) -> Box<dyn Iterator<Item = &'a (dyn controls::Member)> + 'a> {
+    fn close_root(&mut self, arg: types::FindBy, skip_callbacks: bool) -> bool {
+        let base = unsafe { cast_hwnd::<Application>(self.root) }.unwrap().base_mut(); 
+        match arg {
+            types::FindBy::Id(id) => {
+                (0..base.windows.len()).into_iter().find(|i| if base.windows[*i].id() == id 
+                    && base.windows[*i].as_any_mut().downcast_mut::<crate::window::Window>().unwrap().inner_mut().inner_mut().inner_mut().inner_mut().close(skip_callbacks) {
+                        base.windows.remove(*i);
+                        true
+                    } else {
+                        false
+                }).is_some()
+                || 
+                (0..base.trays.len()).into_iter().find(|i| if base.trays[*i].id() == id 
+                    && base.trays[*i].as_any_mut().downcast_mut::<crate::tray::Tray>().unwrap().inner_mut().close(skip_callbacks) {
+                        base.trays.remove(*i);
+                        true
+                    } else {
+                        false
+                }).is_some()
+            }
+            types::FindBy::Tag(ref tag) => {
+                (0..base.windows.len()).into_iter().find(|i| if base.windows[*i].tag().is_some() && base.windows[*i].tag().unwrap() == Cow::Borrowed(tag.into()) 
+                    && base.windows[*i].as_any_mut().downcast_mut::<crate::window::Window>().unwrap().inner_mut().inner_mut().inner_mut().inner_mut().close(skip_callbacks) {
+                        base.windows.remove(*i);
+                        true
+                    } else {
+                        false
+                }).is_some()
+                || 
+                (0..base.trays.len()).into_iter().find(|i| if base.trays[*i].tag().is_some() && base.trays[*i].tag().unwrap() == Cow::Borrowed(tag.into()) 
+                    && base.trays[*i].as_any_mut().downcast_mut::<crate::tray::Tray>().unwrap().inner_mut().close(skip_callbacks) {
+                        base.trays.remove(*i);
+                        true
+                    } else {
+                        false
+                }).is_some()
+            }
+        }
+    }
+    fn exit(&mut self) {
+        let base = unsafe { cast_hwnd::<Application>(self.root) }.unwrap().base_mut(); 
+        for mut window in base.windows.drain(..) {
+            window.as_any_mut().downcast_mut::<crate::window::Window>().unwrap().inner_mut().inner_mut().inner_mut().inner_mut().close(true);
+        }
+        for mut tray in base.trays.drain(..) {
+            tray.as_any_mut().downcast_mut::<crate::tray::Tray>().unwrap().inner_mut().close(true);
+        }
+    }
+    fn roots<'a>(&'a self) -> Box<dyn Iterator<Item = &'a (dyn controls::Member)> + 'a> {
         Box::new(MemberIterator {
-            inner: self,
+            inner: unsafe { cast_hwnd::<Application>(self.root) }.unwrap().base(),
             is_tray: false,
             index: 0,
             needs_window: true,
             needs_tray: true,
         })
     }
-    fn members_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut (dyn controls::Member)> + 'a> {
+    fn roots_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut (dyn controls::Member)> + 'a> {
         Box::new(MemberIteratorMut {
-            inner: self,
+            inner: unsafe { cast_hwnd::<Application>(self.root) }.unwrap().base_mut(),
             is_tray: false,
             index: 0,
             needs_window: true,
@@ -254,23 +305,19 @@ impl HasNativeIdInner for WindowsApplication {
 
 impl Drop for WindowsApplication {
     fn drop(&mut self) {
-        for w in self.windows.drain(..) {
-            destroy_hwnd(w, 0, None);
-        }
-        for _ in self.trays.drain(..) {}
         destroy_hwnd(self.root, 0, None);
     }
 }
 
 struct MemberIterator<'a> {
-    inner: &'a WindowsApplication,
+    inner: &'a ApplicationBase,
     needs_window: bool,
     needs_tray: bool,
     is_tray: bool,
     index: usize,
 }
 impl<'a> Iterator for MemberIterator<'a> {
-    type Item = &'a (dyn controls::Member + 'static);
+    type Item = &'a (dyn controls::Member);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index >= self.inner.windows.len() {
@@ -278,9 +325,9 @@ impl<'a> Iterator for MemberIterator<'a> {
             self.index = 0;
         }
         let ret = if self.needs_tray && self.is_tray {
-            self.inner.trays.get(self.index).map(|tray| unsafe { &**tray } as &dyn controls::Member)
+            self.inner.trays.get(self.index).map(|tray| tray.as_member())
         } else if self.needs_window {
-            self.inner.windows.get(self.index).map(|window| common::member_from_hwnd::<window::Window>(*window).unwrap() as &dyn controls::Member)
+            self.inner.windows.get(self.index).map(|window| window.as_member())
         } else {
             return None;
         };
@@ -290,14 +337,14 @@ impl<'a> Iterator for MemberIterator<'a> {
 }
 
 struct MemberIteratorMut<'a> {
-    inner: &'a mut WindowsApplication,
+    inner: &'a mut ApplicationBase,
     needs_window: bool,
     needs_tray: bool,
     is_tray: bool,
     index: usize,
 }
 impl<'a> Iterator for MemberIteratorMut<'a> {
-    type Item = &'a mut dyn (controls::Member);
+    type Item = &'a mut (dyn controls::Member);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.needs_tray && self.index >= self.inner.windows.len() {
@@ -305,15 +352,19 @@ impl<'a> Iterator for MemberIteratorMut<'a> {
             self.index = 0;
         }
         let ret = if self.needs_tray && self.is_tray {
-            self.inner.trays.get_mut(self.index).map(|tray| unsafe { &mut **tray } as &mut dyn controls::Member)
+            bck_is_immensely_stupid(self.inner.trays.get_mut(self.index).map(|tray| tray.as_member_mut()))
         } else if self.needs_window {
-            self.inner.windows.get_mut(self.index).map(|window| common::member_from_hwnd::<window::Window>(*window).unwrap() as &mut dyn controls::Member)
+            bck_is_immensely_stupid(self.inner.windows.get_mut(self.index).map(|window| window.as_member_mut()))
         } else {
             return None;
         };
         self.index += 1;
         ret
     }
+}
+
+fn bck_is_immensely_stupid<'a>(a: Option<&'a mut (dyn controls::Member)>) -> Option<&'static mut (dyn controls::Member)> {
+    unsafe { mem::transmute(a) }
 }
 
 unsafe fn register_window_class() -> Vec<u16> {
@@ -337,6 +388,7 @@ unsafe fn register_window_class() -> Vec<u16> {
     class_name
 }
 
+// TODO <O: controls::Application>
 unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
     let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
@@ -354,8 +406,8 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             //let flags = minwindef::HIWORD(wparam as u32);
 
             let w: &mut application::Application = mem::transmute(ww);
-            let tray = if let Some(tray) = w.inner_mut().trays.iter().find(|tray| (&mut ***tray).inner_mut().inner_mut().is_menu_shown()) {
-                &mut **tray
+            let tray = if let Some(tray) = w.base_mut().trays.iter_mut().find(|tray| tray.as_any().downcast_ref::<crate::tray::Tray>().unwrap().inner().inner().inner().is_menu_shown()) {
+                tray.as_any_mut().downcast_mut::<crate::tray::Tray>().unwrap()
             } else {
                 return 0;
             };
@@ -363,15 +415,15 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
             if lparam == 0 {
                 let w2: &mut application::Application = mem::transmute(ww);
 
-                let tray2 = if let Some(tray) = w2.inner_mut().trays.iter().find(|tray| (&mut ***tray).inner_mut().inner_mut().is_menu_shown()) {
-                    &mut **tray
+                let tray2 = if let Some(tray) = w2.base_mut().trays.iter_mut().find(|tray| tray.as_any().downcast_ref::<crate::tray::Tray>().unwrap().inner().inner().inner().is_menu_shown()) {
+                    tray.as_any_mut().downcast_mut::<crate::tray::Tray>().unwrap()
                 } else {
                     return 0;
                 };
-                tray.inner_mut().inner_mut().run_menu(tray2);
+                tray.inner_mut().inner_mut().inner_mut().run_menu(tray2);
             } else {
                 let item = minwindef::LOWORD(wparam as u32);
-                tray.inner_mut().inner_mut().select_menu(item as usize);
+                tray.inner_mut().inner_mut().inner_mut().select_menu(item as usize);
             }
         }
         crate::tray::MESSAGE => {
@@ -380,15 +432,15 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
 
             let w: &mut application::Application = mem::transmute(ww);
 
-            let tray = if let Some(tray) = w.inner_mut().trays.iter().find(|tray| (&***tray).id() == ids::Id::from_raw(id as usize)) {
-                &mut **tray
+            let tray = if let Some(tray) = w.base_mut().trays.iter_mut().find(|tray| tray.id() == ids::Id::from_raw(id as usize)) {
+                tray.as_any_mut().downcast_mut::<crate::tray::Tray>().unwrap()
             } else {
                 return 0;
             };
 
             match evt as u32 {
                 winuser::WM_CONTEXTMENU => {
-                    tray.inner_mut().inner_mut().toggle_menu();
+                    tray.inner_mut().inner_mut().inner_mut().toggle_menu();
                 }
                 _ => {}
             }
@@ -400,7 +452,7 @@ unsafe extern "system" fn handler(hwnd: windef::HWND, msg: minwindef::UINT, wpar
 
 fn dispatch_window(hwnd: windef::HWND) -> i32 {
     if let Some(w) = common::member_from_hwnd::<window::Window>(hwnd) {
-        w.inner_mut().inner_mut().inner_mut().inner_mut().dispatch()
+        w.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().dispatch()
     } else {
         -1
     }
