@@ -76,7 +76,7 @@ impl HasSizeInner for WindowsWindow {
     }
 }
 impl<O: controls::Window> NewWindowInner<O> for WindowsWindow {
-    fn with_uninit_params(_: &mut mem::MaybeUninit<O>, _: &str, _: types::WindowStartSize, menu: types::Menu) -> Self {
+    fn with_uninit_params(_: &mut mem::MaybeUninit<O>, _: &mut dyn controls::Application, _: &str, _: types::WindowStartSize, menu: types::Menu) -> Self {
    		let mut w = WindowsWindow {
             hwnd: ptr::null_mut(),
             hwnd_menu: if menu.is_some() { unsafe { winuser::CreateMenu() } } else { ptr::null_mut() },
@@ -129,7 +129,7 @@ impl WindowInner for WindowsWindow {
                 ASingleContainer::with_inner(
                     ACloseable::with_inner(
                         AWindow::with_inner(
-                            <Self as NewWindowInner<Window>>::with_uninit_params(b.as_mut(), title.as_ref(), window_size, menu),
+                            <Self as NewWindowInner<Window>>::with_uninit_params(b.as_mut(), app, title.as_ref(), window_size, menu),
     	                ),
                         app.as_any_mut().downcast_mut::<crate::application::Application>().unwrap()
                     )

@@ -134,7 +134,7 @@ impl HasImageInner for WindowsTray {
 }
 
 impl<O: controls::Tray> NewTrayInner<O> for WindowsTray {
-    fn with_uninit_params(u: &mut mem::MaybeUninit<O>, title: &str, icon: image::DynamicImage, menu: types::Menu) -> Self {
+    fn with_uninit_params(u: &mut mem::MaybeUninit<O>, _: &mut dyn controls::Application, title: &str, icon: image::DynamicImage, menu: types::Menu) -> Self {
         WindowsTray {
             label: title.into(),
             icon: icon,
@@ -151,7 +151,7 @@ impl TrayInner for WindowsTray {
         let ab = AMember::with_inner(
             ACloseable::with_inner(
                 ATray::with_inner(
-                    <Self as NewTrayInner<Tray>>::with_uninit_params(b.as_mut(), title.as_ref(), icon, types::Menu::None),
+                    <Self as NewTrayInner<Tray>>::with_uninit_params(b.as_mut(), app, title.as_ref(), icon, types::Menu::None),
                 ),
 	            app.as_any_mut().downcast_mut::<crate::application::Application>().unwrap()
             )
