@@ -16,21 +16,23 @@ pub struct WindowsList {
 }
 
 impl WindowsList {
-    fn add_item_inner(&mut self, base: &mut MemberBase, i: usize, y: &mut i32) {
+    fn add_item_inner(&mut self, base: &mut MemberBase, indexes: &[usize], y: &mut i32) {
         let (member, control, adapter, _) = unsafe { List::adapter_base_parts_mut(base) };
         let (pw, ph) = control.measured;
         let scroll_width = unsafe { winuser::GetSystemMetrics(winuser::SM_CXVSCROLL) };
         let this: &mut List = unsafe { utils::base_to_impl_mut(member) };
         
-        let mut item = adapter.adapter.spawn_item_view(i, this);
+        let mut item = adapter.adapter.spawn_item_view(indexes, this).unwrap();
         item.on_added_to_container(this, 0, *y, utils::coord_to_size(pw as i32 - scroll_width - 14 /*TODO: WHY???*/ - DEFAULT_PADDING) as u16, utils::coord_to_size(ph as i32) as u16);
                 
         let (_, yy) = item.size();
         self.items.push(item);
         *y += yy as i32;
         
+        let i = indexes[0];
+        
         unsafe {
-            if i as isize != winuser::SendMessageW(self.base.hwnd, winuser::LB_ADDSTRING, 0, WINDOW_CLASS.as_ptr() as isize) {
+            if i as isize != winuser::SendMessageW(self.base.hwnd, winuser::LB_INSERTSTRING, i, WINDOW_CLASS.as_ptr() as isize) {
                 common::log_error();
             }
             if winuser::LB_ERR == winuser::SendMessageW(self.base.hwnd, winuser::LB_SETITEMHEIGHT, i, yy as isize) {
@@ -38,11 +40,12 @@ impl WindowsList {
             }
         }
     }
-    fn remove_item_inner(&mut self, base: &mut MemberBase, i: usize) {
+    fn remove_item_inner(&mut self, base: &mut MemberBase, indexes: &[usize]) {
         let this: &mut List = unsafe { utils::base_to_impl_mut(base) };
-        self.items.remove(i).on_removed_from_container(this); 
+        self.items.remove(indexes[0]).on_removed_from_container(this); 
+        let i = indexes[0];
         unsafe {
-            if i as isize != winuser::SendMessageW(self.base.hwnd, winuser::LB_DELETESTRING, 0, WINDOW_CLASS.as_ptr() as isize) {
+            if i as isize != winuser::SendMessageW(self.base.hwnd, winuser::LB_DELETESTRING, i, WINDOW_CLASS.as_ptr() as isize) {
                 common::log_error();
             }
         }
@@ -64,7 +67,6 @@ impl<O: controls::List> NewListInner<O> for WindowsList {
 }
 impl ListInner for WindowsList {
     fn with_adapter(adapter: Box<dyn types::Adapter>) -> Box<dyn controls::List> {
-        let len = adapter.len();
         let mut b: Box<mem::MaybeUninit<List>> = Box::new_uninit();
         let mut ab = AMember::with_inner(
             AControl::with_inner(
@@ -79,7 +81,7 @@ impl ListInner for WindowsList {
                 )
             ),
         );
-        ab.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items = Vec::with_capacity(len);
+        ab.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items = Vec::new();
         unsafe {
 	        b.as_mut_ptr().write(ab);
 	        b.assume_init()
@@ -87,11 +89,11 @@ impl ListInner for WindowsList {
     }
 }
 impl ItemClickableInner for WindowsList {
-    fn item_click(&mut self, i: usize, item_view: &mut dyn controls::Control, skip_callbacks: bool) {
+    fn item_click(&mut self, indexes: &[usize], item_view: &mut dyn controls::Control, skip_callbacks: bool) {
         if !skip_callbacks{
             let self2 = self.base.as_outer_mut();
             if let Some(ref mut callback) = self.on_item_click {
-                (callback.as_mut())(self2, i, item_view)
+                (callback.as_mut())(self2, indexes, item_view)
             }
         }
     }
@@ -100,7 +102,7 @@ impl ItemClickableInner for WindowsList {
     }
 }
 impl AdaptedInner for WindowsList {
-    fn on_item_change(&mut self, base: &mut MemberBase, value: types::Change) {
+    fn on_item_change(&mut self, base: &mut MemberBase, value: adapter::Change) {
         if !self.base.hwnd.is_null() {
             let mut y = 0;
             {
@@ -110,13 +112,13 @@ impl AdaptedInner for WindowsList {
                 }
             }
             match value {
-                types::Change::Added(at) => {
+                adapter::Change::Added(at, _) => {
                     self.add_item_inner(base, at, &mut y);
                 },
-                types::Change::Removed(at) => {
+                adapter::Change::Removed(at) => {
                     self.remove_item_inner(base, at);
                 },
-                types::Change::Edited(_) => {
+                adapter::Change::Edited(at, _) => {
                 },
             }
             self.base.invalidate();
@@ -159,9 +161,9 @@ impl ControlInner for WindowsList {
         let (member, _, adapter, _) = unsafe { List::adapter_base_parts_mut(member) };
 
         let mut y = 0;
-        for i in 0..adapter.adapter.len() {
-            self.add_item_inner(member, i, &mut y);
-        }
+        adapter.adapter.for_each(&mut (|indexes, _node| {
+            self.add_item_inner(member, indexes, &mut y);
+        }));
         self.force_scrollbar();
     }
     fn on_removed_from_container(&mut self, member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
@@ -183,7 +185,7 @@ impl ControlInner for WindowsList {
     }
 }
 impl ContainerInner for WindowsList {
-    fn find_control_mut(&mut self, arg: types::FindBy) -> Option<&mut dyn controls::Control> {
+    fn find_control_mut<'a>(&'a mut self, arg: types::FindBy<'a>) -> Option<&'a mut dyn controls::Control> {
         for child in self.items.as_mut_slice() {
             match arg {
                 types::FindBy::Id(ref id) => {
@@ -191,9 +193,9 @@ impl ContainerInner for WindowsList {
                         return Some(child.as_mut());
                     }
                 }
-                types::FindBy::Tag(ref tag) => {
+                types::FindBy::Tag(tag) => {
                     if let Some(mytag) = child.as_member_mut().tag() {
-                        if tag.as_str() == mytag {
+                        if tag == mytag {
                             return Some(child.as_mut());
                         }
                     }
@@ -209,7 +211,7 @@ impl ContainerInner for WindowsList {
         }
         None
     }
-    fn find_control(&self, arg: types::FindBy) -> Option<&dyn controls::Control> {
+    fn find_control<'a>(&'a self, arg: types::FindBy<'a>) -> Option<&'a dyn controls::Control> {
         for child in self.items.as_slice() {
             match arg {
                 types::FindBy::Id(ref id) => {
@@ -217,9 +219,9 @@ impl ContainerInner for WindowsList {
                         return Some(child.as_ref());
                     }
                 }
-                types::FindBy::Tag(ref tag) => {
+                types::FindBy::Tag(tag) => {
                     if let Some(mytag) = child.as_member().tag() {
-                        if tag.as_str() == mytag {
+                        if tag == mytag {
                             return Some(child.as_ref());
                         }
                     }
@@ -313,7 +315,7 @@ unsafe extern "system" fn handler<T: controls::List>(hwnd: windef::HWND, msg: mi
             let list: &mut List = mem::transmute(param); // bck is stupid
             if let Some(ref mut callback) = list.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().on_item_click {
                 let list: &mut List = mem::transmute(param); // bck is still stupid
-                (callback.as_mut())(list, i as usize, item_view.as_mut());
+                (callback.as_mut())(list, &[i as usize], item_view.as_mut());
             }
         }
         winuser::WM_SIZE => {

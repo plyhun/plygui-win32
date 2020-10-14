@@ -122,8 +122,8 @@ impl ApplicationInner for WindowsApplication {
             }
         }
     }
-    fn find_member_mut(&mut self, arg: types::FindBy) -> Option<&mut dyn controls::Member> {
-        if let Some(w) = unsafe { cast_hwnd::<Application>(self.root) } {
+    fn find_member_mut<'a>(&'a mut self, arg: types::FindBy<'a>) -> Option<&'a mut dyn Member> {
+    	if let Some(w) = unsafe { cast_hwnd::<Application>(self.root) } {
             let w = &mut w.base;
             for window in w.windows.as_mut_slice() {
                 match arg {
@@ -132,9 +132,9 @@ impl ApplicationInner for WindowsApplication {
                             return Some(window.as_member_mut());
                         }
                     }
-                    types::FindBy::Tag(ref tag) => {
+                    types::FindBy::Tag(tag) => {
                         if let Some(mytag) = window.tag() {
-                            if tag.as_str() == mytag {
+                            if tag == mytag {
                                 return Some(window.as_member_mut());
                             }
                         }
@@ -153,9 +153,9 @@ impl ApplicationInner for WindowsApplication {
                             return Some(tray.as_member_mut());
                         }
                     }
-                    types::FindBy::Tag(ref tag) => {
+                    types::FindBy::Tag(tag) => {
                         if let Some(mytag) = tray.tag() {
-                            if tag.as_str() == mytag {
+                            if tag == mytag {
                                 return Some(tray.as_member_mut());
                             }
                         }
@@ -165,7 +165,7 @@ impl ApplicationInner for WindowsApplication {
         }
         None
     }
-    fn find_member(&self, arg: types::FindBy) -> Option<&dyn controls::Member> {
+    fn find_member<'a>(&'a self, arg: types::FindBy<'a>) -> Option<&'a dyn Member> {
         if let Some(w) = unsafe { cast_hwnd::<Application>(self.root) } {
             let w = &w.base;
             for window in w.windows.as_slice() {
@@ -175,9 +175,9 @@ impl ApplicationInner for WindowsApplication {
                             return Some(window.as_member());
                         }
                     }
-                    types::FindBy::Tag(ref tag) => {
+                    types::FindBy::Tag(tag) => {
                         if let Some(mytag) = window.tag() {
-                            if tag.as_str() == mytag {
+                            if tag == mytag {
                                 return Some(window.as_member());
                             }
                         }
@@ -195,9 +195,9 @@ impl ApplicationInner for WindowsApplication {
                             return Some(tray.as_member());
                         }
                     }
-                    types::FindBy::Tag(ref tag) => {
+                    types::FindBy::Tag(tag) => {
                         if let Some(mytag) = tray.tag() {
-                            if tag.as_str() == mytag {
+                            if tag == mytag {
                                 return Some(tray.as_member());
                             }
                         }
@@ -247,7 +247,7 @@ impl ApplicationInner for WindowsApplication {
                         false
                 }).is_some()
             }
-            types::FindBy::Tag(ref tag) => {
+            types::FindBy::Tag(tag) => {
                 (0..base.windows.len()).into_iter().find(|i| if base.windows[*i].tag().is_some() && base.windows[*i].tag().unwrap() == Cow::Borrowed(tag.into()) 
                     && base.windows[*i].as_any_mut().downcast_mut::<crate::window::Window>().unwrap().inner_mut().inner_mut().inner_mut().inner_mut().close(skip_callbacks) {
                         base.windows.remove(*i);
