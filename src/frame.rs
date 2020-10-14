@@ -120,7 +120,7 @@ impl SingleContainerInner for WindowsFrame {
 }
 
 impl ContainerInner for WindowsFrame {
-    fn find_control_mut(&mut self, arg: types::FindBy) -> Option<&mut dyn controls::Control> {
+    fn find_control_mut<'a>(&'a mut self, arg: types::FindBy<'a>) -> Option<&'a mut dyn controls::Control> {
         if let Some(child) = self.child.as_mut() {
             match arg {
                 types::FindBy::Id(id) => {
@@ -128,9 +128,9 @@ impl ContainerInner for WindowsFrame {
                         return Some(child.as_mut());
                     }
                 }
-                types::FindBy::Tag(ref tag) => {
+                types::FindBy::Tag(tag) => {
                     if let Some(mytag) = child.as_member_mut().tag() {
-                        if tag.as_str() == mytag {
+                        if tag == mytag {
                             return Some(child.as_mut());
                         }
                     }
@@ -145,7 +145,7 @@ impl ContainerInner for WindowsFrame {
             None
         }
     }
-    fn find_control(&self, arg: types::FindBy) -> Option<&dyn controls::Control> {
+    fn find_control<'a>(&'a self, arg: types::FindBy<'a>) -> Option<&'a dyn controls::Control> {
         if let Some(child) = self.child.as_ref() {
             match arg {
                 types::FindBy::Id(id) => {
@@ -153,9 +153,9 @@ impl ContainerInner for WindowsFrame {
                         return Some(child.as_ref());
                     }
                 }
-                types::FindBy::Tag(ref tag) => {
+                types::FindBy::Tag(tag) => {
                     if let Some(mytag) = child.as_member().tag() {
-                        if tag.as_str() == mytag {
+                        if tag == mytag {
                             return Some(child.as_ref());
                         }
                     }
