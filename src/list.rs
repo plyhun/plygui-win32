@@ -81,7 +81,6 @@ impl ListInner for WindowsList {
                 )
             ),
         );
-        ab.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items = Vec::new();
         unsafe {
 	        b.as_mut_ptr().write(ab);
 	        b.assume_init()
