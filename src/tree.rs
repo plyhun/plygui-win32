@@ -1,9 +1,8 @@
 use crate::common::{self, *};
 
-const CLASS_ID: &str = commctrl::WC_TREEVIEW;
-
 lazy_static! {
-    pub static ref WINDOW_CLASS: Vec<u16> = OsStr::new(CLASS_ID).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+    pub static ref WINDOW_CLASS_TREE: Vec<u16> = OsStr::new(commctrl::WC_TREEVIEW).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+    pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
 }
 
 pub type Tree = AMember<AControl<AContainer<AAdapted<ATree<WindowsTree>>>>>;
@@ -18,6 +17,7 @@ struct TreeNode {
 #[repr(C)]
 pub struct WindowsTree {
     base: WindowsControlBase<Tree>,
+    hwnd_tree: windef::HWND,
     items: Vec<TreeNode>,
     on_item_click: Option<callbacks::OnItemClick>,
 }
@@ -40,11 +40,14 @@ impl WindowsTree {
                 let insert_struct = unsafe {
 		        	let mut insert_struct = winapi::um::commctrl::TVINSERTSTRUCTW {
 			        	hParent: parent.unwrap_or(ptr::null_mut()),
-			        	hInsertAfter: if index == 0 { ptr::null_mut() } else { items[index-1].item },
+			        	hInsertAfter: if index == 0 { winapi::um::commctrl::TVI_ROOT } else { items[index-1].item },
 			        	u: mem::zeroed()
 		        	};
 		        	
 		        	let insert_item = winapi::um::commctrl::TVITEMEXW {
+		        		mask: winapi::um::commctrl::TVIF_TEXT | winapi::um::commctrl::TVIF_PARAM,
+		        		pszText: WINDOW_CLASS.as_ptr() as *const _ as *mut u16,
+		        		lParam: index as isize,
 		        		..Default::default()
 		        	};
 		        	
@@ -63,16 +66,16 @@ impl WindowsTree {
                     },
                     branches: vec![],
                     item: unsafe {
-                    	winuser::SendMessageW(self.base.hwnd, winapi::um::commctrl::TVM_INSERTITEMW, 0, &insert_struct as *const winapi::um::commctrl::TVINSERTSTRUCTW as isize) as *mut winapi::um::commctrl::TREEITEM
+                    	winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_INSERTITEMW, 0, &insert_struct as *const winapi::um::commctrl::TVINSERTSTRUCTW as isize) as *mut winapi::um::commctrl::TREEITEM
                     },
                 });
-                let (_, yy) = items[index].root.size();
+/*                let (_, yy) = items[index].root.size();
 		        unsafe {
 		        	if 0 > winuser::SendMessageW(self.base.hwnd, winapi::um::commctrl::TVM_SETITEMHEIGHT, i, yy as isize) {
 		                common::log_error();
 		            }
 		        }
-                /*match items[index].node {
+                match items[index].node {
                 	adapter::Node::Branch(expanded) => {
                 		let path = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().store.get_path(iter.as_ref().unwrap()).unwrap();
                 		if expanded {
@@ -122,7 +125,8 @@ impl WindowsTree {
 impl<O: controls::Tree> NewTreeInner<O> for WindowsTree {
     fn with_uninit(_: &mut mem::MaybeUninit<O>) -> Self {
         WindowsTree {
-            base: WindowsControlBase::with_handler(Some(handler::<O>)),
+            base: common::WindowsControlBase::with_wndproc(Some(handler::<O>)),
+            hwnd_tree: 0 as windef::HWND,
             items: vec![],
             on_item_click: None,
         }
@@ -209,21 +213,43 @@ impl ControlInner for WindowsTree {
     }
     fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &dyn controls::Container, px: i32, py: i32, pw: u16, ph: u16) {
         let selfptr = member as *mut _ as *mut c_void;
-        self.base.hwnd = unsafe { parent.native_id() as windef::HWND }; // required for measure, as we don't have own hwnd yet
-        let (w, h, _) = self.measure(member, control, pw, ph);
-        self.base.create_control_hwnd(
-            px as i32,
-            py as i32,
-            w as i32,
-            h as i32,
-            self.base.hwnd,
-            0,
-            WINDOW_CLASS.as_ptr(),
-            "",
-            winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::LBS_OWNERDRAWVARIABLE | winuser::WS_THICKFRAME | winuser::WS_VSCROLL | winuser::WS_EX_RIGHTSCROLLBAR,
-            selfptr,
-        );
-        control.coords = Some((px as i32, py as i32));
+        let (hwnd, hwnd_tree, id) = unsafe {
+            self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
+            let (width, height, _) = self.measure(member, control, pw, ph);
+            let (hwnd, id) = common::create_control_hwnd(
+                px,
+                py,
+                width as i32,
+                height as i32,
+                self.base.hwnd,
+                winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN,
+                WINDOW_CLASS.as_ptr(),
+                "",
+                0,
+                selfptr,
+                None,
+            );
+            let hwnd_tree = winuser::CreateWindowExW(
+                0,
+                WINDOW_CLASS_TREE.as_ptr(),
+                WINDOW_CLASS.as_ptr(),
+                winuser::BS_GROUPBOX | winuser::WS_CHILD | winuser::WS_VISIBLE,
+                px,
+                py,
+                width as i32,
+                height as i32,
+                hwnd,
+                ptr::null_mut(),
+                common::hinstance(),
+                ptr::null_mut(),
+            );
+            //common::set_default_font(hwnd_gbox);
+            (hwnd, hwnd_tree, id)
+        };
+        self.base.hwnd = hwnd;
+        self.hwnd_tree = hwnd_tree;
+        self.base.subclass_id = id;
+        control.coords = Some((px, py));
         
         let (member, _, adapter, _) = unsafe { Tree::adapter_base_parts_mut(member) };
 
@@ -365,12 +391,86 @@ impl Spawnable for WindowsTree {
     }
 }
 
-unsafe extern "system" fn handler<T: controls::Tree>(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
+unsafe fn register_window_class() -> Vec<u16> {
+    let class_name = OsStr::new("PlyguiWin32Tree").encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+    let class = winuser::WNDCLASSEXW {
+        cbSize: mem::size_of::<winuser::WNDCLASSEXW>() as minwindef::UINT,
+        style: winuser::CS_DBLCLKS,
+        lpfnWndProc: Some(window_handler),
+        cbClsExtra: 0,
+        cbWndExtra: 0,
+        hInstance: libloaderapi::GetModuleHandleW(ptr::null()),
+        hIcon: winuser::LoadIconW(ptr::null_mut(), winuser::IDI_APPLICATION),
+        hCursor: winuser::LoadCursorW(ptr::null_mut(), winuser::IDC_ARROW),
+        hbrBackground: ptr::null_mut(),
+        lpszMenuName: ptr::null(),
+        lpszClassName: class_name.as_ptr(),
+        hIconSm: ptr::null_mut(),
+    };
+    winuser::RegisterClassExW(&class);
+    class_name
+}
+
+unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
     let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
-        winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as WinPtr);
+        if winuser::WM_CREATE == msg {
+            let cs: &mut winuser::CREATESTRUCTW = mem::transmute(lparam);
+            winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, cs.lpCreateParams as WinPtr);
+        }
+        return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }
-    match msg {/*
+    
+    let tree: &mut Tree = mem::transmute(ww);
+    let tree2: &mut Tree = mem::transmute(ww);
+    tree.inner().inner().inner().inner().inner().base.proc_handler.as_proc().unwrap()(tree2, msg, wparam, lparam)
+}
+
+unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
+	//let hwnd = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().native_id().into();
+	let hwnd_tree = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().hwnd_tree;
+    match msg {
+    	winuser::WM_NOTIFY => {
+    		if (&*(lparam as winuser::LPNMHDR)).code == winapi::um::commctrl::NM_DBLCLK {
+    			dbg!((&*(lparam as winuser::LPNMHDR)).code);
+		   		let mut item_view = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items.as_mut_slice();
+	            
+	            let mut clicked = winuser::SendMessageW(hwnd_tree, winapi::um::commctrl::TVM_GETNEXTITEM, winapi::um::commctrl::TVGN_CARET, 0) as *mut winapi::um::commctrl::TREEITEM;
+	            if clicked.is_null() {
+	                common::log_error();
+	            } 
+			    let mut indexes = Vec::new();
+			    
+			    let mut retrieve_item = winapi::um::commctrl::TVITEMEXW {
+	        		mask: winapi::um::commctrl::TVIF_PARAM,
+	        		hItem: clicked,
+	        		cchTextMax: 0,
+	        		..Default::default()
+	        	};
+			    
+			    let mut parent = None;
+                
+                while {
+                	if 0 == winuser::SendMessageW(hwnd_tree, winapi::um::commctrl::TVM_GETITEMW, 0, &mut retrieve_item as *mut _ as isize) {
+                    	common::log_error();
+                    	parent = None;
+                    } else {
+                    	let parent1 = winuser::SendMessageW(hwnd_tree, winapi::um::commctrl::TVM_GETNEXTITEM, winapi::um::commctrl::TVGN_PARENT, clicked as *mut _ as isize) as *mut winapi::um::commctrl::TREEITEM;
+	                    parent = if parent1.is_null() { None } else { Some(parent1) };
+                    }
+                    
+                    let i = retrieve_item.lParam;
+	                if let Some(parent) = parent {
+		                clicked = parent;
+		                retrieve_item.hItem = clicked;
+	                };
+	                indexes.insert(0, i as usize);
+	                parent.is_some()
+                } {}
+                
+            dbg!(indexes.as_slice());    
+    		}
+    	}/*
         winuser::WM_LBUTTONUP => {
             let i = winuser::SendMessageW(hwnd, winapi::um::commctrl::TVM_ITEMFROMPOINT, 0, lparam);
             let tree: &mut Tree = mem::transmute(param);
@@ -400,18 +500,18 @@ unsafe extern "system" fn handler<T: controls::Tree>(hwnd: windef::HWND, msg: mi
             winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::FALSE);
             tree.force_scrollbar();
         }
+        winuser::WM_VSCROLL | winuser::WM_MOUSEWHEEL => {
+            winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::FALSE);
+        }*/
         winuser::WM_CTLCOLORSTATIC => {
             let hdc = wparam as windef::HDC;
             wingdi::SetTextColor(hdc, wingdi::RGB(0, 0, 0));
             wingdi::SetBkMode(hdc, wingdi::TRANSPARENT as i32);
 
             return wingdi::GetStockObject(wingdi::NULL_BRUSH as i32) as isize;
-        }*/
-        winuser::WM_VSCROLL | winuser::WM_MOUSEWHEEL => {
-            winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::FALSE);
         }
         _ => {}
     }
 
-    commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
+    winuser::DefWindowProcW(this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().native_id().into(), msg, wparam, lparam)
 }
