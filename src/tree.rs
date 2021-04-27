@@ -26,6 +26,7 @@ impl WindowsTree {
         
         let mut items = &mut self.items.0;
         let mut parent = None;
+        dbg!(&indexes);
         for i in 0..indexes.len() {
             let index = indexes[i];
             let end = i+1 >= indexes.len();
@@ -40,7 +41,7 @@ impl WindowsTree {
 		        	let insert_item = winapi::um::commctrl::TVITEMEXW {
 		        		mask: winapi::um::commctrl::TVIF_TEXT | winapi::um::commctrl::TVIF_PARAM,
 		        		pszText: WINDOW_CLASS.as_ptr() as *const _ as *mut u16,
-		        		lParam: index as isize,
+		        		//lParam: index as isize,
 		        		..Default::default()
 		        	};
 		        	
@@ -91,6 +92,7 @@ impl WindowsTree {
     fn remove_item_inner(&mut self, base: &mut MemberBase, indexes: &[usize]) {
         let this: &mut Tree = unsafe { utils::base_to_impl_mut(base) };
         let mut items = &mut self.items.0;
+        dbg!(&indexes);
         for i in 0..indexes.len() {
             let index = indexes[i];
                 
@@ -430,7 +432,7 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
     				 match custom_draw.nmcd.dwDrawStage {               
 		                winapi::um::commctrl::CDDS_PREPAINT => return winapi::um::commctrl::CDRF_NOTIFYITEMDRAW,
 		                winapi::um::commctrl::CDDS_ITEMPREPAINT => {
-		                	dbg!(custom_draw.nmcd.rc, custom_draw.nmcd.lItemlParam);
+		                	//dbg!(custom_draw.nmcd.rc, custom_draw.nmcd.lItemlParam);
 		                	
 		                	let item_view = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items.0.as_mut_slice();
 		            
@@ -455,7 +457,14 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
 				                    parent = if parent1.is_null() { None } else { Some(parent1) };
 			                    }
 			                    
-			                    let i = retrieve_item.lParam;
+			                    let mut i = 0;
+			                    let mut index_current = drawn;
+			                    while {
+			                    	index_current = winuser::SendMessageW(hwnd_tree, winapi::um::commctrl::TVM_GETNEXTITEM, winapi::um::commctrl::TVGN_PREVIOUS, index_current as *mut _ as isize) as *mut winapi::um::commctrl::TREEITEM;
+			                    	!index_current.is_null()
+			                    } {
+				                    i += 1;
+			                    }
 				                if let Some(parent) = parent {
 					                drawn = parent;
 					                retrieve_item.hItem = drawn;
@@ -464,7 +473,7 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
 				                parent.is_some()
 			                } {}
 			                
-				            dbg!("drawn", indexes.as_slice());    
+				            //dbg!("drawn", indexes.as_slice());    
 		                }
 		                _ => {}
     				 }
@@ -494,7 +503,14 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
 		                    parent = if parent1.is_null() { None } else { Some(parent1) };
 	                    }
 	                    
-	                    let i = retrieve_item.lParam;
+	                    let mut i = 0;
+	                    let mut index_current = clicked;
+	                    while {
+	                    	index_current = winuser::SendMessageW(hwnd_tree, winapi::um::commctrl::TVM_GETNEXTITEM, winapi::um::commctrl::TVGN_PREVIOUS, index_current as *mut _ as isize) as *mut winapi::um::commctrl::TREEITEM;
+	                    	!index_current.is_null()
+	                    } {
+		                    i += 1;
+	                    }
 		                if let Some(parent) = parent {
 			                clicked = parent;
 			                retrieve_item.hItem = clicked;
@@ -502,6 +518,8 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
 		                indexes.insert(0, i as usize);
 		                parent.is_some()
 	                } {}
+	                
+	                dbg!(&indexes);
 	                
 			        let item_view = &mut this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items;
 		            let this = common::member_from_hwnd::<Tree>(hwnd).unwrap();
