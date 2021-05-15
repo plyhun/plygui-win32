@@ -26,7 +26,6 @@ impl WindowsTree {
         
         let mut items = &mut self.items.0;
         let mut parent = None;
-        dbg!(&indexes);
         for i in 0..indexes.len() {
             let index = indexes[i];
             let end = i+1 >= indexes.len();
@@ -59,10 +58,11 @@ impl WindowsTree {
                         item.take().unwrap()
                     },
                     branches: vec![],
-                    native: unsafe {
-                    	winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_INSERTITEMW, 0, &insert_struct as *const winapi::um::commctrl::TVINSERTSTRUCTW as isize) as *mut winapi::um::commctrl::TREEITEM
-                    },
+                    native: ptr::null_mut(),
                 });
+                items[index].native = unsafe {
+                	winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_INSERTITEMW, 0, &insert_struct as *const winapi::um::commctrl::TVINSERTSTRUCTW as isize) as *mut winapi::um::commctrl::TREEITEM
+                };
 /*                let (_, yy) = items[index].root.size();
 		        unsafe {
 		        	if 0 > winuser::SendMessageW(self.base.hwnd, winapi::um::commctrl::TVM_SETITEMHEIGHT, i, yy as isize) {
@@ -92,7 +92,6 @@ impl WindowsTree {
     fn remove_item_inner(&mut self, base: &mut MemberBase, indexes: &[usize]) {
         let this: &mut Tree = unsafe { utils::base_to_impl_mut(base) };
         let mut items = &mut self.items.0;
-        dbg!(&indexes);
         for i in 0..indexes.len() {
             let index = indexes[i];
                 
@@ -113,7 +112,7 @@ impl WindowsTree {
     }
     fn force_scrollbar(&mut self) {
         unsafe {
-            winuser::ShowScrollBar(self.base.hwnd, winuser::SB_VERT as i32, minwindef::TRUE);
+            winuser::ShowScrollBar(self.hwnd_tree, winuser::SB_VERT as i32, minwindef::TRUE);
         }
     }
 }
@@ -209,7 +208,7 @@ impl ControlInner for WindowsTree {
     fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &dyn controls::Container, px: i32, py: i32, pw: u16, ph: u16) {
         let selfptr = member as *mut _ as *mut c_void;
         let (hwnd, hwnd_tree, id) = unsafe {
-            self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
+            self.base.hwnd = parent.native_container_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
             let (width, height, _) = self.measure(member, control, pw, ph);
             let (hwnd, id) = common::create_control_hwnd(
                 px,
@@ -228,9 +227,9 @@ impl ControlInner for WindowsTree {
                 0,
                 WINDOW_CLASS_TREE.as_ptr(),
                 WINDOW_CLASS.as_ptr(),
-                winuser::BS_GROUPBOX | winuser::WS_CHILD | winuser::WS_VISIBLE,
-                px,
-                py,
+                winuser::BS_GROUPBOX | winuser::WS_CLIPCHILDREN | winuser::WS_CHILD | winuser::WS_VISIBLE,
+                0,
+                0,
                 width as i32,
                 height as i32,
                 hwnd,
@@ -246,6 +245,8 @@ impl ControlInner for WindowsTree {
         self.base.subclass_id = id;
         control.coords = Some((px, py));
         
+        unsafe { winuser::SetWindowLongPtrW(self.hwnd_tree, winuser::GWLP_USERDATA, selfptr as WinPtr); }
+        
         let (member, _, adapter, _) = unsafe { Tree::adapter_base_parts_mut(member) };
 
         let mut y = 0;
@@ -255,7 +256,8 @@ impl ControlInner for WindowsTree {
         self.force_scrollbar();
     }
     fn on_removed_from_container(&mut self, member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
-        common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, None);
+        common::destroy_hwnd(self.hwnd_tree, self.base.subclass_id, None);
+        self.base.destroy_control_hwnd();
         self.base.hwnd = 0 as windef::HWND;
         self.base.subclass_id = 0;
     }
@@ -321,6 +323,9 @@ impl ContainerInner for WindowsTree {
         }
         None
     }
+    fn native_container_id(&self) -> Self::Id {
+        self.hwnd_tree.into()
+    }
 }
 impl HasLayoutInner for WindowsTree {
     fn on_layout_changed(&mut self, _base: &mut MemberBase) {
@@ -354,7 +359,12 @@ impl HasVisibilityInner for WindowsTree {
 
 impl Drawable for WindowsTree {
     fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase) {
-        self.base.draw(control.coords, control.measured);
+        if let Some((x, y)) = control.coords {
+            unsafe {
+                winuser::SetWindowPos(self.base.hwnd, ptr::null_mut(), x, y, control.measured.0 as i32, control.measured.1 as i32, 0);
+                winuser::SetWindowPos(self.hwnd_tree, ptr::null_mut(), x, y, control.measured.0 as i32, control.measured.1 as i32, 0);
+            }
+        }
     }
     fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
         let old_size = control.measured;
@@ -377,7 +387,8 @@ impl Drawable for WindowsTree {
         (control.measured.0, control.measured.1, control.measured != old_size)
     }
     fn invalidate(&mut self, _member: &mut MemberBase, _control: &mut ControlBase) {
-        self.base.invalidate()
+        unsafe { winuser::RedrawWindow(self.hwnd_tree, ptr::null_mut(), ptr::null_mut(), winuser::RDW_INVALIDATE | winuser::RDW_UPDATENOW) };
+        self.base.invalidate();
     }
 }
 impl Spawnable for WindowsTree {
@@ -432,12 +443,14 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
     				 match custom_draw.nmcd.dwDrawStage {               
 		                winapi::um::commctrl::CDDS_PREPAINT => return winapi::um::commctrl::CDRF_NOTIFYITEMDRAW,
 		                winapi::um::commctrl::CDDS_ITEMPREPAINT => {
-		                	//dbg!(custom_draw.nmcd.rc, custom_draw.nmcd.lItemlParam);
+		                	let mut rc: windef::RECT = Default::default();
+		                	let mut drawn = custom_draw.nmcd.dwItemSpec as winapi::um::commctrl::HTREEITEM;
+						    *(&mut rc as *mut _ as *mut winapi::um::commctrl::HTREEITEM) = drawn;
+							
+							winuser::SendMessageW(hwnd, winapi::um::commctrl::TVM_GETITEMRECT, minwindef::TRUE as usize, &rc as *const _ as isize);
+		                	dbg!(&rc);
 		                	
-		                	let item_view = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items.0.as_mut_slice();
-		            
-				            let mut drawn = custom_draw.nmcd.dwItemSpec as winapi::um::commctrl::HTREEITEM;
-						    let mut indexes = Vec::new();
+		                	let mut indexes = Vec::new();
 						    
 						    let mut retrieve_item = winapi::um::commctrl::TVITEMEXW {
 				        		mask: winapi::um::commctrl::TVIF_PARAM,
@@ -473,7 +486,11 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
 				                parent.is_some()
 			                } {}
 			                
-				            //dbg!("drawn", indexes.as_slice());    
+			                let item_view = &mut this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items;
+				            let item = &mut item_view[indexes.as_slice()];
+				            
+				            let _ = item.root.measure(cmp::max(0, rc.right - rc.left) as u16, cmp::max(0, rc.bottom - rc.top) as u16);
+			                item.root.draw(Some((rc.left + (indexes.len() as i32 * 10), rc.top)));                					          
 		                }
 		                _ => {}
     				 }
@@ -519,9 +536,7 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
 		                parent.is_some()
 	                } {}
 	                
-	                dbg!(&indexes);
-	                
-			        let item_view = &mut this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items;
+	                let item_view = &mut this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items;
 		            let this = common::member_from_hwnd::<Tree>(hwnd).unwrap();
 	                let clicked = &mut item_view[indexes.as_slice()];
 			        if let Some(ref mut cb) = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().on_item_click {
