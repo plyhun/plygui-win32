@@ -139,7 +139,7 @@ impl ControlInner for WindowsLinearLayout {
         let selfptr = member as *mut _ as *mut c_void;
         let (width, height, _) = self.measure(member, control, pw, ph);
         let (hwnd, id) = unsafe {
-            self.base.hwnd = parent.native_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
+            self.base.hwnd = parent.native_container_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
             common::create_control_hwnd(
                 px as i32,
                 py as i32,
