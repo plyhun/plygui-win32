@@ -30,6 +30,9 @@ impl WindowsTree {
             let index = indexes[i];
             let end = i+1 >= indexes.len();
             if end {
+            	let item_width = utils::coord_to_size(pw as i32 - scroll_width - 14 /*TODO: WHY???*/ - DEFAULT_PADDING) as u16;
+            	let valid_utf8 = vec![b' '; item_width as usize / 32];
+				let cstring = CString::new(valid_utf8).unwrap();
                 let insert_struct = unsafe {
 		        	let mut insert_struct = winapi::um::commctrl::TVINSERTSTRUCTW {
 			        	hParent: parent.unwrap_or(ptr::null_mut()),
@@ -39,7 +42,7 @@ impl WindowsTree {
 		        	
 		        	let insert_item = winapi::um::commctrl::TVITEMEXW {
 		        		mask: winapi::um::commctrl::TVIF_TEXT | winapi::um::commctrl::TVIF_PARAM,
-		        		pszText: WINDOW_CLASS.as_ptr() as *const _ as *mut u16,
+		        		pszText: cstring.as_ptr() as *const _ as *mut u16,
 		        		//lParam: index as isize,
 		        		..Default::default()
 		        	};
@@ -54,7 +57,7 @@ impl WindowsTree {
                         item.as_mut().map(|item| {
                                 item.set_layout_width(layout::Size::WrapContent);
                                 item.as_mut()
-                            }).unwrap().on_added_to_container(this, 0, *y, utils::coord_to_size(pw as i32 - scroll_width - 14 /*TODO: WHY???*/ - DEFAULT_PADDING) as u16, utils::coord_to_size(ph as i32) as u16);
+                            }).unwrap().on_added_to_container(this, 0, *y, item_width, utils::coord_to_size(ph as i32) as u16);
                         item.take().unwrap()
                     },
                     branches: vec![],
@@ -443,14 +446,9 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
     				 match custom_draw.nmcd.dwDrawStage {               
 		                winapi::um::commctrl::CDDS_PREPAINT => return winapi::um::commctrl::CDRF_NOTIFYITEMDRAW,
 		                winapi::um::commctrl::CDDS_ITEMPREPAINT => {
-		                	let mut rc: windef::RECT = Default::default();
 		                	let mut drawn = custom_draw.nmcd.dwItemSpec as winapi::um::commctrl::HTREEITEM;
-						    *(&mut rc as *mut _ as *mut winapi::um::commctrl::HTREEITEM) = drawn;
-							
-							winuser::SendMessageW(hwnd, winapi::um::commctrl::TVM_GETITEMRECT, minwindef::TRUE as usize, &rc as *const _ as isize);
-		                	dbg!(&rc);
-		                	
-		                	let mut indexes = Vec::new();
+						    
+							let mut indexes = Vec::new();
 						    
 						    let mut retrieve_item = winapi::um::commctrl::TVITEMEXW {
 				        		mask: winapi::um::commctrl::TVIF_PARAM,
@@ -458,6 +456,7 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
 				        		cchTextMax: 0,
 				        		..Default::default()
 				        	};
+						    dbg!(&custom_draw.nmcd.rc);
 						    
 						    let mut parent = None;
 			                
@@ -489,8 +488,9 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
 			                let item_view = &mut this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items;
 				            let item = &mut item_view[indexes.as_slice()];
 				            
-				            let _ = item.root.measure(cmp::max(0, rc.right - rc.left) as u16, cmp::max(0, rc.bottom - rc.top) as u16);
-			                item.root.draw(Some((rc.left + (indexes.len() as i32 * 10), rc.top)));                					          
+				            let _ = item.root.measure(cmp::max(0, custom_draw.nmcd.rc.right - custom_draw.nmcd.rc.left) as u16, cmp::max(0, custom_draw.nmcd.rc.bottom - custom_draw.nmcd.rc.top) as u16);
+			                item.root.draw(Some((custom_draw.nmcd.rc.left + (indexes.len() as i32 * 20), custom_draw.nmcd.rc.top)));
+			                return winapi::um::commctrl::CDRF_SKIPDEFAULT;                 					          
 		                }
 		                _ => {}
     				 }
@@ -547,16 +547,6 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
     			_ => {}
     		}
     	}/*
-        winuser::WM_LBUTTONUP => {
-            let i = winuser::SendMessageW(hwnd, winapi::um::commctrl::TVM_ITEMFROMPOINT, 0, lparam);
-            let tree: &mut Tree = mem::transmute(param);
-            let item_view = tree.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items.get_mut(i as usize).unwrap();
-            let tree: &mut Tree = mem::transmute(param); // bck is stupid
-            if let Some(ref mut callback) = tree.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().on_item_click {
-                let tree: &mut Tree = mem::transmute(param); // bck is still stupid
-                (callback.as_mut())(tree, &[i as usize], item_view.as_mut());
-            }
-        }
         winuser::WM_SIZE => {
             let width = lparam as u16;
             let height = (lparam >> 16) as u16;
