@@ -11,7 +11,7 @@ pub type Tree = AMember<AControl<AContainer<AAdapted<ATree<WindowsTree>>>>>;
 pub struct WindowsTree {
     base: WindowsControlBase<Tree>,
     hwnd_tree: windef::HWND,
-    items: TreeNodeList<*mut winapi::um::commctrl::TREEITEM>,
+    items: TreeNodeList<winapi::um::commctrl::HTREEITEM>,
     on_item_click: Option<callbacks::OnItemClick>,
 }
 
@@ -66,23 +66,20 @@ impl WindowsTree {
                 items[index].native = unsafe {
                 	winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_INSERTITEMW, 0, &insert_struct as *const winapi::um::commctrl::TVINSERTSTRUCTW as isize) as *mut winapi::um::commctrl::TREEITEM
                 };
-/*                let (_, yy) = items[index].root.size();
+	            let (_, yy) = items[index].root.size();
 		        unsafe {
-		        	if 0 > winuser::SendMessageW(self.base.hwnd, winapi::um::commctrl::TVM_SETITEMHEIGHT, i, yy as isize) {
+		        	if 0 > winuser::SendMessageW(self.base.hwnd, winapi::um::commctrl::TVM_SETITEMHEIGHT, yy as usize, 0) {
 		                common::log_error();
 		            }
 		        }
                 match items[index].node {
-                	adapter::Node::Branch(expanded) => {
-                		let path = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().store.get_path(iter.as_ref().unwrap()).unwrap();
-                		if expanded {
-                			this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().boxc.expand_row(&path, false); 
-                		} else {
-                			this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().boxc.collapse_row(&path); 
-                		}
+                	adapter::Node::Branch(expanded) => unsafe {
+                		if 0 == winuser::PostMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_EXPAND, if expanded { winapi::um::commctrl::TVE_EXPAND } else { winapi::um::commctrl::TVE_COLLAPSE }, items[index].native as isize) {
+			                common::log_error();
+			            }
                 	},
                 	_ => {}
-                }*/
+                }
                 
                 return;
             } else {
@@ -240,7 +237,6 @@ impl ControlInner for WindowsTree {
                 common::hinstance(),
                 ptr::null_mut(),
             );
-            //common::set_default_font(hwnd_gbox);
             (hwnd, hwnd_tree, id)
         };
         self.base.hwnd = hwnd;
@@ -365,7 +361,7 @@ impl Drawable for WindowsTree {
         if let Some((x, y)) = control.coords {
             unsafe {
                 winuser::SetWindowPos(self.base.hwnd, ptr::null_mut(), x, y, control.measured.0 as i32, control.measured.1 as i32, 0);
-                winuser::SetWindowPos(self.hwnd_tree, ptr::null_mut(), x, y, control.measured.0 as i32, control.measured.1 as i32, 0);
+                winuser::SetWindowPos(self.hwnd_tree, ptr::null_mut(), 0, 0, control.measured.0 as i32, control.measured.1 as i32, 0);
             }
         }
     }
@@ -456,7 +452,6 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
 				        		cchTextMax: 0,
 				        		..Default::default()
 				        	};
-						    dbg!(&custom_draw.nmcd.rc);
 						    
 						    let mut parent = None;
 			                
@@ -490,7 +485,7 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
 				            
 				            let _ = item.root.measure(cmp::max(0, custom_draw.nmcd.rc.right - custom_draw.nmcd.rc.left) as u16, cmp::max(0, custom_draw.nmcd.rc.bottom - custom_draw.nmcd.rc.top) as u16);
 			                item.root.draw(Some((custom_draw.nmcd.rc.left + (indexes.len() as i32 * 20), custom_draw.nmcd.rc.top)));
-			                return winapi::um::commctrl::CDRF_SKIPDEFAULT;                 					          
+			                //return winapi::um::commctrl::CDRF_SKIPDEFAULT;                 					          
 		                }
 		                _ => {}
     				 }
