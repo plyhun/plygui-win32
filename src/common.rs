@@ -333,14 +333,6 @@ pub unsafe fn create_control_hwnd(
     if (style & winuser::WS_TABSTOP) != 0 {
         style |= winuser::WS_GROUP;
     }
-    let subclass_id = {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::Hasher;
-
-        let mut hasher = DefaultHasher::new();
-        hasher.write_usize(class_name as usize);
-        hasher.finish()
-    };
     let os_control_name = OsStr::new(control_name).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
     let hwnd = winuser::CreateWindowExW(
         ex_style,
@@ -360,10 +352,19 @@ pub unsafe fn create_control_hwnd(
         log_error();
         panic!("Cannot create window {}", control_name);
     }
-    commctrl::SetWindowSubclass(hwnd, handler, subclass_id as usize, param as usize);
+    commctrl::SetWindowSubclass(hwnd, handler, subclass_id(class_name) as usize, param as usize);
     set_default_font(hwnd);
     (hwnd, subclass_id as usize)
 }
+
+pub fn subclass_id(class_name: ntdef::LPCWSTR) -> u64 {
+	use std::collections::hash_map::DefaultHasher;
+    use std::hash::Hasher;
+
+    let mut hasher = DefaultHasher::new();
+    hasher.write_usize(class_name as usize);
+    hasher.finish()
+}    
 
 pub fn str_to_wchar<S: AsRef<str>>(a: S) -> Vec<u16> {
     OsStr::new(a.as_ref()).encode_wide().chain(Some(0).into_iter()).collect()
