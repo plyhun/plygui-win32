@@ -96,17 +96,17 @@ impl WindowsTree {
             let index = indexes[i];
                 
             if i+1 >= indexes.len() {
-                let mut item = items.remove(index);
-                item.root.on_removed_from_container(this);
-                unsafe {
-		            if minwindef::TRUE as isize != winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_DELETEITEM, 0, item.native as isize) {
-		                common::log_error();
-		            }
-		        }
+                if minwindef::TRUE as isize != unsafe { winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_DELETEITEM, 0, items[index].native as isize) } {
+	                unsafe { common::log_error(); }
+	            } else {
+	            	let mut item = items.remove(index);
+	                item.root.on_removed_from_container(this);
+	            }
             } else {
                 items = &mut items[index].branches;
             }
         }
+        unsafe { self.redraw_visible() }
     }
     fn update_item_inner(&mut self, base: &mut MemberBase, indexes: &[usize], node: &adapter::Node) {
     }
@@ -140,23 +140,23 @@ impl WindowsTree {
 			if 0 == winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_GETITEMRECT, minwindef::TRUE as usize, &rc as *const _ as isize) {
 				common::log_error();
 			}
-        	let indexes = index_from_hitem(current_visible, self.hwnd_tree);
-        	                
-			let item = common::member_base_from_hwnd(retrieve_item.lParam as windef::HWND).unwrap().as_member_mut().is_control_mut().unwrap();
-            //let _ = item.measure(cmp::max(0, custom_draw.nmcd.rc.right - custom_draw.nmcd.rc.left) as u16, cmp::max(0, custom_draw.nmcd.rc.bottom - custom_draw.nmcd.rc.top) as u16);
-            winuser::SetWindowPos(
-            	item.native_id() as windef::HWND, 
-            	ptr::null_mut(), 
-            	rc.left + indexes_to_offset(indexes.as_slice()), 
-            	rc.top, 
-            	cmp::max(0, rc.right - rc.left), 
-            	cmp::max(0, rc.bottom - rc.top), 
-            	winuser::SWP_NOSIZE | winuser::SWP_NOSENDCHANGING | winuser::SWP_NOREDRAW);
-    
+        	if let Some(item) = common::member_base_from_hwnd(retrieve_item.lParam as windef::HWND) {
+		    	let item = item.as_member_mut().is_control_mut().unwrap();
+	            //let _ = item.measure(cmp::max(0, custom_draw.nmcd.rc.right - custom_draw.nmcd.rc.left) as u16, cmp::max(0, custom_draw.nmcd.rc.bottom - custom_draw.nmcd.rc.top) as u16);
+	            let indexes = index_from_hitem(current_visible, self.hwnd_tree);
+	        	winuser::SetWindowPos(
+	            	item.native_id() as windef::HWND, 
+	            	ptr::null_mut(), 
+	            	rc.left + indexes_to_offset(indexes.as_slice()), 
+	            	rc.top, 
+	            	cmp::max(0, rc.right - rc.left), 
+	            	cmp::max(0, rc.bottom - rc.top), 
+	            	winuser::SWP_NOSIZE | winuser::SWP_NOSENDCHANGING | winuser::SWP_NOREDRAW);
+
+		    }    
             current_visible = winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_GETNEXTITEM, winapi::um::commctrl::TVGN_NEXTVISIBLE, current_visible as isize) as *mut winapi::um::commctrl::TREEITEM;
 		    !current_visible.is_null()
         } {}
-	    
     }
 }
 impl<O: controls::Tree> NewTreeInner<O> for WindowsTree {
@@ -482,7 +482,7 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
     				 let custom_draw = &*(lparam as winapi::um::commctrl::LPNMTVCUSTOMDRAW);
     				 match custom_draw.nmcd.dwDrawStage {               
 		                winapi::um::commctrl::CDDS_PREPAINT => return winapi::um::commctrl::CDRF_NOTIFYITEMDRAW,
-		                winapi::um::commctrl::CDDS_ITEMPREPAINT | winapi::um::commctrl::CDDS_SUBITEM =>return winapi::um::commctrl::CDRF_NOTIFYSUBITEMDRAW | winapi::um::commctrl::CDRF_NOTIFYPOSTPAINT,
+		                winapi::um::commctrl::CDDS_ITEMPREPAINT | winapi::um::commctrl::CDDS_SUBITEM => return /*winapi::um::commctrl::CDRF_SKIPDEFAULT |*/ winapi::um::commctrl::CDRF_NOTIFYSUBITEMDRAW | winapi::um::commctrl::CDRF_NOTIFYPOSTPAINT,
 		                winapi::um::commctrl::CDDS_ITEMPOSTPAINT => {
 		                	let drawn = custom_draw.nmcd.dwItemSpec as winapi::um::commctrl::HTREEITEM;
 						    
@@ -536,11 +536,7 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
     			_ => {}
     		}
     	}
-    	winuser::WM_VSCROLL | winuser::WM_MOUSEWHEEL => {
-    		dbg!("scroll", hwnd);
-            winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::FALSE);
-        }
-        winuser::WM_SIZE => {
+    	winuser::WM_SIZE => {
             let width = lparam as u16;
             let height = (lparam >> 16) as u16;
             
@@ -556,7 +552,7 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
 
             return wingdi::GetStockObject(wingdi::NULL_BRUSH as i32) as isize;
         }
-        _ => {}
+         _ => {}
     }
 
     winuser::DefWindowProcW(this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().native_id().into(), msg, wparam, lparam)
@@ -567,11 +563,20 @@ unsafe extern "system" fn ahandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
         winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as WinPtr);
     }
     match msg {
-        winuser::WM_VSCROLL | winuser::WM_MOUSEWHEEL => {
+	    winuser::WM_VSCROLL |
+	    winuser::WM_HSCROLL |
+	    winuser::WM_MOUSEWHEEL|
+	    winuser::WM_KEYDOWN |
+	    winapi::um::commctrl::TVM_INSERTITEMW |
+	    winapi::um::commctrl::TVM_DELETEITEM |
+	    winapi::um::commctrl::TVM_SELECTITEM |
+	    winapi::um::commctrl::TVM_EXPAND |
+	    winapi::um::commctrl::TVM_ENSUREVISIBLE => {
     		let tree: &mut Tree = mem::transmute(ww);
 		    let tree = tree.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
 			tree.redraw_visible();
         }
+	    
         _ => {}
     }
     commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
