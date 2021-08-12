@@ -45,13 +45,13 @@ impl<O: controls::Control> WndProcHandler<O> {
     pub fn as_proc(&self) -> Option<WndProc<O>> {
         match self {
             WndProcHandler::Proc(_proc) => *_proc,
-            _ => panic!("Not a proc!")
+            _ => None
         }
     }
     pub fn as_handler(&self) -> Option<WndHandler> {
         match self {
             WndProcHandler::Handler(handler) => *handler,
-            _ => panic!("Not a handler!")
+            _ => None
         }
     }
 }
