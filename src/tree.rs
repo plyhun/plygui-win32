@@ -469,7 +469,11 @@ unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UIN
     }
     let tree: &mut Tree = mem::transmute(ww);
     let tree2: &mut Tree = mem::transmute(ww);
-    tree.inner().inner().inner().inner().inner().base.proc_handler.as_proc().unwrap()(tree2, msg, wparam, lparam)
+    if let Some(proc) = tree.inner().inner().inner().inner().inner().base.proc_handler.as_proc() {
+        proc(tree2, msg, wparam, lparam)
+    } else {
+        winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
+    }
 }
 
 unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
