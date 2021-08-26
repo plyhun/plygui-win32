@@ -121,6 +121,7 @@ impl WindowsTree {
 		let mut rc: windef::RECT = Default::default();
     	let mut current_visible = winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_GETNEXTITEM, winapi::um::commctrl::TVGN_FIRSTVISIBLE, 0) as *mut winapi::um::commctrl::TREEITEM;
 	    if current_visible.is_null() {
+            dbg!("no visible");
         	return;
         }
 	    
@@ -140,7 +141,7 @@ impl WindowsTree {
 			if 0 == winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_GETITEMRECT, minwindef::TRUE as usize, &rc as *const _ as isize) {
 				common::log_error();
 			}
-        	if let Some(item) = common::member_base_from_hwnd(retrieve_item.lParam as windef::HWND) {
+            if let Some(item) = common::member_base_from_hwnd(retrieve_item.lParam as windef::HWND) {
 		    	let item = item.as_member_mut().is_control_mut().unwrap();
 	            //let _ = item.measure(cmp::max(0, custom_draw.nmcd.rc.right - custom_draw.nmcd.rc.left) as u16, cmp::max(0, custom_draw.nmcd.rc.bottom - custom_draw.nmcd.rc.top) as u16);
 	            let indexes = index_from_hitem(current_visible, self.hwnd_tree);
@@ -435,7 +436,7 @@ impl Spawnable for WindowsTree {
 }
 
 fn indexes_to_offset(indexes: &[usize]) -> i32 {
-	indexes.len() as i32 * 20
+	0 //indexes.len() as i32 * 20
 }
 
 unsafe fn register_window_class() -> Vec<u16> {
@@ -483,10 +484,15 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
     	winuser::WM_NOTIFY => {
     		match (&*(lparam as winuser::LPNMHDR)).code {
     			winapi::um::commctrl::NM_CUSTOMDRAW => {
-    				 let custom_draw = &*(lparam as winapi::um::commctrl::LPNMTVCUSTOMDRAW);
+    				 let custom_draw = &mut *(lparam as winapi::um::commctrl::LPNMTVCUSTOMDRAW);
     				 match custom_draw.nmcd.dwDrawStage {               
 		                winapi::um::commctrl::CDDS_PREPAINT => return winapi::um::commctrl::CDRF_NOTIFYITEMDRAW,
-		                winapi::um::commctrl::CDDS_ITEMPREPAINT | winapi::um::commctrl::CDDS_SUBITEM => return /*winapi::um::commctrl::CDRF_SKIPDEFAULT |*/ winapi::um::commctrl::CDRF_NOTIFYSUBITEMDRAW | winapi::um::commctrl::CDRF_NOTIFYPOSTPAINT,
+		                winapi::um::commctrl::CDDS_ITEMPREPAINT => {
+                            custom_draw.clrText = 0;
+                            custom_draw.clrTextBk = 0;
+                            return winapi::um::commctrl::CDRF_NOTIFYPOSTPAINT;
+                        
+                        },
 		                winapi::um::commctrl::CDDS_ITEMPOSTPAINT => {
 		                	let drawn = custom_draw.nmcd.dwItemSpec as winapi::um::commctrl::HTREEITEM;
 						    
@@ -508,8 +514,12 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
 				            //let item = &mut item_view[indexes.as_slice()];
 				            
 				            //let _ = item.root.measure(cmp::max(0, custom_draw.nmcd.rc.right - custom_draw.nmcd.rc.left) as u16, cmp::max(0, custom_draw.nmcd.rc.bottom - custom_draw.nmcd.rc.top) as u16);
-			                
-			                let item = common::member_base_from_hwnd(retrieve_item.lParam as windef::HWND).unwrap().as_member_mut().is_control_mut().unwrap();
+			                *(&mut custom_draw.nmcd.rc as *mut _ as *mut winapi::um::commctrl::HTREEITEM) = custom_draw.nmcd.dwItemSpec as winapi::um::commctrl::HTREEITEM;
+                            if 0 == winuser::SendMessageW(hwnd_tree, winapi::um::commctrl::TVM_GETITEMRECT, minwindef::TRUE as usize, &custom_draw.nmcd.rc as *const _ as isize) {
+                                common::log_error();
+                            }
+
+                            let item = common::member_base_from_hwnd(retrieve_item.lParam as windef::HWND).unwrap().as_member_mut().is_control_mut().unwrap();
 			                //let _ = item.measure(cmp::max(0, custom_draw.nmcd.rc.right - custom_draw.nmcd.rc.left) as u16, cmp::max(0, custom_draw.nmcd.rc.bottom - custom_draw.nmcd.rc.top) as u16);
 			                winuser::SetWindowPos(
 			                	item.native_id() as windef::HWND, 
@@ -579,8 +589,7 @@ unsafe extern "system" fn ahandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
     		let tree: &mut Tree = mem::transmute(ww);
 		    let tree = tree.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
 			tree.redraw_visible();
-        }
-	    
+        }	    
         _ => {}
     }
     commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
@@ -601,8 +610,7 @@ fn index_from_hitem(hitem: winapi::um::commctrl::HTREEITEM, hwnd_tree: windef::H
     	panic!("Cannot find TreeView item");
     }
 	
-	let mut indexes = Vec::new();
-    
+	let mut indexes = Vec::new();    
     let mut parent = None;
     
     while {
