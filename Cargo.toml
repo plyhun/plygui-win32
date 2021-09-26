@@ -10,7 +10,7 @@ path = "src/lib.rs"
 
 [dependencies]
 plygui-api = {version = "0.0.1", path = "../plygui/api"}
-winapi = { version = "~0.3", features = ["windef", "minwindef", "winuser", "winbase", "commctrl", "winerror", "winnls", "stringapiset", "shellapi", "errhandlingapi", "libloaderapi", "wingdi", "synchapi"] }
+winapi = { version = "~0.3", features = ["windef", "minwindef", "winuser", "winbase", "commctrl", "winerror", "winnls", "stringapiset", "shellapi", "errhandlingapi", "libloaderapi", "wingdi", "synchapi", "uxtheme"] }
 lazy_static = "~1.4"
 derive_builder = "~0.9"
 

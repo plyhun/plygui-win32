@@ -20,6 +20,7 @@ pub struct WindowsSplitted {
     splitter: f32,
     moving: bool,
     cursor: windef::HCURSOR,
+    default_cursor: windef::HCURSOR,
 
     first: Box<dyn controls::Control>,
     second: Box<dyn controls::Control>,
@@ -127,6 +128,12 @@ impl<O: controls::Splitted> NewSplittedInner<O> for WindowsSplitted {
             
             splitter: 0.5,
             cursor: ptr::null_mut(),
+            default_cursor: unsafe {
+	            winuser::LoadCursorW(
+	                ptr::null_mut(),
+	                winuser::IDC_ARROW,
+	            )
+	        },
             moving: false,
 
             first, second, orientation
@@ -596,6 +603,8 @@ unsafe extern "system" fn handler<T: controls::Splitted>(this: &mut Splitted, ms
                             this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().splitter = x as f32 / width as f32;
                             updated = true;
                         }
+                    } else {
+	                    winuser::SetCursor(this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().default_cursor);	
                     }
                 }
                 layout::Orientation::Vertical => {
@@ -606,6 +615,8 @@ unsafe extern "system" fn handler<T: controls::Splitted>(this: &mut Splitted, ms
                             this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().splitter = y as f32 / height as f32;
                             updated = true;
                         }
+                    } else {
+                    	winuser::SetCursor(this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().default_cursor);
                     }
                 }
             }
