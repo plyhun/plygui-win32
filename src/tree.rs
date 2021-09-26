@@ -117,9 +117,25 @@ impl WindowsTree {
     }
     unsafe fn redraw_visible(&mut self) {
     	winuser::InvalidateRect(self.base.hwnd, ptr::null_mut(), minwindef::FALSE);
+    	/*
+    	// TODO optimize this globally
+    	let mut theme_file = vec![0u16; 256];
+    	let mut color = vec![0u16; 256];
+    	let mut size = vec![0u16; 256];
+    	
+    	if winerror::S_OK != winapi::um::uxtheme::GetCurrentThemeName(
+	    		theme_file.as_mut_ptr(), 256,
+		    	color.as_mut_ptr(), 256,
+		    	size.as_mut_ptr(), 256,
+    	) {
+    		common::log_error();
+    	}*/
+    	
+    	let htheme = winapi::um::uxtheme::GetWindowTheme(self.hwnd_tree);
+    	let hdc = winuser::GetDC(self.hwnd_tree);
         
 		let mut rc: windef::RECT = Default::default();
-    	let mut current_visible = winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_GETNEXTITEM, winapi::um::commctrl::TVGN_FIRSTVISIBLE, 0) as *mut winapi::um::commctrl::TREEITEM;
+    	let mut current_visible = winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_GETNEXTITEM, winapi::um::commctrl::TVGN_FIRSTVISIBLE, 0) as winapi::um::commctrl::HTREEITEM;
 	    if current_visible.is_null() {
             dbg!("no visible");
         	return;
@@ -145,7 +161,8 @@ impl WindowsTree {
 		    	let item = item.as_member_mut().is_control_mut().unwrap();
 	            //let _ = item.measure(cmp::max(0, custom_draw.nmcd.rc.right - custom_draw.nmcd.rc.left) as u16, cmp::max(0, custom_draw.nmcd.rc.bottom - custom_draw.nmcd.rc.top) as u16);
 	            let indexes = index_from_hitem(current_visible, self.hwnd_tree);
-	        	winuser::SetWindowPos(
+	            
+	            winuser::SetWindowPos(
 	            	item.native_id() as windef::HWND, 
 	            	ptr::null_mut(), 
 	            	rc.left + indexes_to_offset(indexes.as_slice()), 
@@ -153,11 +170,17 @@ impl WindowsTree {
 	            	cmp::max(0, rc.right - rc.left), 
 	            	cmp::max(0, rc.bottom - rc.top), 
 	            	winuser::SWP_NOSIZE | winuser::SWP_NOSENDCHANGING | winuser::SWP_NOREDRAW);
-
+	            
+				if winerror::S_OK == winapi::um::uxtheme::DrawThemeBackground(htheme, hdc, /*TVP_GLYPH*/ 2, /*GLPS_CLOSED*/ 1, &mut rc, ptr::null_mut()) {
+	            	common::log_error();
+	            }
+	            
 		    }    
             current_visible = winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_GETNEXTITEM, winapi::um::commctrl::TVGN_NEXTVISIBLE, current_visible as isize) as *mut winapi::um::commctrl::TREEITEM;
 		    !current_visible.is_null()
         } {}
+	    
+	    winuser::ReleaseDC(self.hwnd_tree, hdc);
     }
 }
 impl<O: controls::Tree> NewTreeInner<O> for WindowsTree {
@@ -260,7 +283,7 @@ impl ControlInner for WindowsTree {
                 winapi::um::commctrl::TVS_EX_DOUBLEBUFFER,
                 WINDOW_CLASS_TREE.as_ptr(),
                 WINDOW_CLASS.as_ptr(),
-                winapi::um::commctrl::TVS_NONEVENHEIGHT | winuser::BS_GROUPBOX | winuser::WS_CLIPCHILDREN | winuser::WS_THICKFRAME | winuser::WS_CHILD | winuser::WS_VISIBLE ,
+                winapi::um::commctrl::TVS_NONEVENHEIGHT | winuser::BS_GROUPBOX | winuser::WS_CLIPCHILDREN | winuser::WS_BORDER | winuser::WS_CHILD | winuser::WS_VISIBLE ,
                 0,
                 0,
                 width as i32,
@@ -468,12 +491,15 @@ unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UIN
         }
         return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }
+    
     let tree: &mut Tree = mem::transmute(ww);
     let tree2: &mut Tree = mem::transmute(ww);
-    if let Some(proc) = tree.inner().inner().inner().inner().inner().base.proc_handler.as_proc() {
-        proc(tree2, msg, wparam, lparam)
+    if let Some(wproc) = tree.inner().inner().inner().inner().inner().base.proc_handler.as_proc() {
+	    wproc(tree2, msg, wparam, lparam)
+    } else if let Some(whandler) = tree.inner().inner().inner().inner().inner().base.proc_handler.as_handler() {
+    	whandler(hwnd, msg, wparam, lparam, 0, 0)
     } else {
-        winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
+	    winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
     }
 }
 
@@ -520,7 +546,7 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
                             }
 
                             let item = common::member_base_from_hwnd(retrieve_item.lParam as windef::HWND).unwrap().as_member_mut().is_control_mut().unwrap();
-			                //let _ = item.measure(cmp::max(0, custom_draw.nmcd.rc.right - custom_draw.nmcd.rc.left) as u16, cmp::max(0, custom_draw.nmcd.rc.bottom - custom_draw.nmcd.rc.top) as u16);
+
 			                winuser::SetWindowPos(
 			                	item.native_id() as windef::HWND, 
 			                	ptr::null_mut(), 

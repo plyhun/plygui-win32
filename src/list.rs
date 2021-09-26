@@ -152,7 +152,7 @@ impl ControlInner for WindowsList {
             0,
             WINDOW_CLASS.as_ptr(),
             "",
-            winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::LBS_OWNERDRAWVARIABLE | winuser::WS_THICKFRAME | winuser::WS_VSCROLL | winuser::WS_EX_RIGHTSCROLLBAR,
+            winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::LBS_OWNERDRAWVARIABLE | winuser::WS_BORDER | winuser::WS_VSCROLL | winuser::WS_EX_RIGHTSCROLLBAR,
             selfptr,
         );
         control.coords = Some((px as i32, py as i32));
