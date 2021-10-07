@@ -117,7 +117,9 @@ impl WindowsTree {
     }
     unsafe fn redraw_visible(&mut self) {
     	winuser::InvalidateRect(self.base.hwnd, ptr::null_mut(), minwindef::FALSE);
-    	/*
+    	let color = winuser::GetSysColor(winuser::COLOR_3DFACE);
+		winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_SETBKCOLOR, 0, color as isize);
+    /*
     	// TODO optimize this globally
     	let mut theme_file = vec![0u16; 256];
     	let mut color = vec![0u16; 256];
