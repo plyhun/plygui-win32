@@ -32,9 +32,7 @@ impl WindowsTree {
             if end {
             	let offset = -9 /*TODO WHY???*/;
             	let item_width = utils::coord_to_size(pw as i32 - scroll_width - offset) as u16;
-            	let valid_utf8 = vec![b'i'; item_width as usize / 8];
-				let cstring = CString::new(valid_utf8).unwrap();
-				let root = {
+            	let root = {
                         item.as_mut().map(|item| {
                                 item.set_layout_width(layout::Size::MatchParent);
                                 item.as_mut()
@@ -49,9 +47,11 @@ impl WindowsTree {
 			        	u: mem::zeroed()
 		        	};
 		        	
+		        	let label = root.is_has_label().map(|label| OsStr::new(label.label().as_ref()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>());
+		        	
 		        	let insert_item = winapi::um::commctrl::TVITEMEXW {
 		        		mask: /*winapi::um::commctrl::TVIF_INTEGRAL |*/ winapi::um::commctrl::TVIF_TEXT | winapi::um::commctrl::TVIF_PARAM,
-		        		pszText: cstring.as_ptr() as *const _ as *mut u16,
+		        		pszText: label.map(|label| label.as_ptr()).unwrap_or(WINDOW_CLASS.as_ptr()) as *const _ as *mut u16,
 		        		iIntegral: yy as i32,
 		        		lParam: root.native_id() as isize,
 		        		..Default::default()
@@ -293,7 +293,10 @@ impl ControlInner for WindowsTree {
                 winapi::um::commctrl::TVS_EX_DOUBLEBUFFER,
                 WINDOW_CLASS_TREE.as_ptr(),
                 WINDOW_CLASS.as_ptr(),
-                winapi::um::commctrl::TVS_NONEVENHEIGHT | winuser::BS_GROUPBOX | winuser::WS_CLIPCHILDREN | winuser::WS_BORDER | winuser::WS_CHILD | winuser::WS_VISIBLE ,
+                winapi::um::commctrl::TVS_NONEVENHEIGHT | winuser::BS_GROUPBOX | 
+	                winuser::WS_CLIPCHILDREN | winuser::WS_BORDER | winuser::WS_CHILD | 
+	                winuser::WS_VISIBLE | winapi::um::commctrl::TVS_TRACKSELECT | 
+	                winapi::um::commctrl::TVS_EX_FADEINOUTEXPANDOS | winapi::um::commctrl::TVS_EX_DOUBLEBUFFER,
                 0,
                 0,
                 width as i32,
@@ -313,6 +316,7 @@ impl ControlInner for WindowsTree {
         
         unsafe { 
         	winuser::SetWindowLongPtrW(self.hwnd_tree, winuser::GWLP_USERDATA, selfptr as WinPtr); 
+        	winapi::um::uxtheme::SetWindowTheme(self.hwnd_tree, common::THEME_EXPLORER.as_ptr(), ptr::null_mut());
         	if 0 > winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_SETITEMHEIGHT, 1, 0) {
                 common::log_error();
             }
