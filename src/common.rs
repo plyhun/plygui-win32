@@ -24,6 +24,10 @@ pub use std::marker::PhantomData;
 pub use std::os::windows::ffi::OsStrExt;
 pub use std::{cmp, mem, ops, ptr, str, sync::mpsc};
 
+lazy_static! {
+	pub static ref THEME_EXPLORER: Vec<u16> = OsStr::new("EXPLORER").encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+}
+
 pub const DEFAULT_PADDING: i32 = 6;
 pub const DEFAULT_HEIGHT: i32 = 24;
 pub const WM_UPDATE_INNER: u32 = winuser::WM_APP + 1;
