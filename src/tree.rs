@@ -129,19 +129,8 @@ impl WindowsTree {
     	winuser::InvalidateRect(self.base.hwnd, ptr::null_mut(), minwindef::FALSE);
     	let color = winuser::GetSysColor(winuser::COLOR_3DFACE);
 		winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_SETBKCOLOR, 0, color as isize);
-    /*
-    	// TODO optimize this globally
-    	let mut theme_file = vec![0u16; 256];
-    	let mut color = vec![0u16; 256];
-    	let mut size = vec![0u16; 256];
-    	
-    	if winerror::S_OK != winapi::um::uxtheme::GetCurrentThemeName(
-	    		theme_file.as_mut_ptr(), 256,
-		    	color.as_mut_ptr(), 256,
-		    	size.as_mut_ptr(), 256,
-    	) {
-    		common::log_error();
-    	}*/
+		
+		let (w, h) = common::size_hwnd(self.hwnd_tree);
     	
     	let mut rc: windef::RECT = Default::default();
     	let mut current_visible = winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_GETNEXTITEM, winapi::um::commctrl::TVGN_FIRSTVISIBLE, 0) as winapi::um::commctrl::HTREEITEM;
@@ -176,7 +165,7 @@ impl WindowsTree {
 	            	ptr::null_mut(), 
 	            	rc.left + 1, 
 	            	rc.top + 1, 
-	            	cmp::max(0, rc.right - rc.left), 
+	            	cmp::max(0, w as i32 - rc.left), 
 	            	cmp::max(0, rc.bottom - rc.top), 
 	            	winuser::SWP_NOSIZE | winuser::SWP_NOSENDCHANGING | winuser::SWP_NOREDRAW);
 	            
