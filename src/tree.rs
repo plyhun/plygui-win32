@@ -34,9 +34,9 @@ impl WindowsTree {
             	let item_width = utils::coord_to_size(pw as i32 - scroll_width - offset) as u16;
             	let root = {
                         item.as_mut().map(|item| {
-                                item.set_layout_width(layout::Size::MatchParent);
+                                item.set_layout_width(layout::Size::WrapContent);
                                 item.as_mut()
-                            }).unwrap().on_added_to_container(this, offset, 0, item_width - indexes_to_offset(indexes) as u16, utils::coord_to_size(ph as i32) as u16);
+                            }).unwrap().on_added_to_container(this, offset, -(ph as i32), item_width - indexes_to_offset(indexes) as u16, utils::coord_to_size(ph as i32) as u16);
                         item.take().unwrap()
                     };
                 let (_, yy) = root.size();
@@ -97,7 +97,7 @@ impl WindowsTree {
                 items = &mut items[index].branches;
             }
         }
-        
+        unsafe { self.redraw_visible() }
     }
     fn remove_item_inner(&mut self, base: &mut MemberBase, indexes: &[usize]) {
         let this: &mut Tree = unsafe { utils::base_to_impl_mut(base) };
@@ -119,6 +119,31 @@ impl WindowsTree {
         unsafe { self.redraw_visible() }
     }
     fn update_item_inner(&mut self, base: &mut MemberBase, indexes: &[usize], node: &adapter::Node) {
+    	/*let this: &mut Tree = unsafe { utils::base_to_impl_mut(base) };
+        let mut items = &mut self.items.0;
+        for i in 0..indexes.len() {
+            let index = indexes[i];
+                
+            if i+1 >= indexes.len() {
+                if minwindef::TRUE as isize != unsafe { winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_DELETEITEM, 0, items[index].native as isize) } {
+	                unsafe { common::log_error(); }
+	            } else {
+	            	//items[index].node.on_removed_from_container(this);
+	            	items[index].node = node.clone();
+	                match items[index].node {
+	                	adapter::Node::Branch(expanded) => unsafe {
+	                		if 0 == winuser::PostMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_EXPAND, if expanded { winapi::um::commctrl::TVE_EXPAND } else { winapi::um::commctrl::TVE_COLLAPSE }, items[index].native as isize) {
+				                common::log_error();
+				            }
+	                	},
+	                	_ => {}
+	                }
+	            }
+            } else {
+                items = &mut items[index].branches;
+            }
+        }
+        unsafe { self.redraw_visible() }*/
     }
     fn force_scrollbar(&mut self) {
        /* unsafe {
@@ -130,7 +155,7 @@ impl WindowsTree {
     	let color = winuser::GetSysColor(winuser::COLOR_3DFACE);
 		winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_SETBKCOLOR, 0, color as isize);
 		
-		let (w, h) = common::size_hwnd(self.hwnd_tree);
+		let (w, _) = common::size_hwnd(self.hwnd_tree);
     	
     	let mut rc: windef::RECT = Default::default();
     	let mut current_visible = winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_GETNEXTITEM, winapi::um::commctrl::TVGN_FIRSTVISIBLE, 0) as winapi::um::commctrl::HTREEITEM;
@@ -168,18 +193,18 @@ impl WindowsTree {
 	            	cmp::max(0, w as i32 - rc.left), 
 	            	cmp::max(0, rc.bottom - rc.top), 
 	            	winuser::SWP_NOSIZE | winuser::SWP_NOSENDCHANGING | winuser::SWP_NOREDRAW);
-	            
-				let htheme = winapi::um::uxtheme::GetWindowTheme(self.hwnd_tree);
-		    	let hdc = winuser::GetDC(self.hwnd_tree);
-		        
-				if winerror::S_OK != winapi::um::uxtheme::DrawThemeBackground(htheme, hdc, /*TVP_GLYPH*/ 2, /*GLPS_CLOSED*/ 1, &mut rc, ptr::null_mut()) {
-	            	common::log_error();
-				}
-				winuser::ReleaseDC(self.hwnd_tree, hdc);
 		    }    
             current_visible = winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_GETNEXTITEM, winapi::um::commctrl::TVGN_NEXTVISIBLE, current_visible as isize) as *mut winapi::um::commctrl::TREEITEM;
 		    !current_visible.is_null()
         } {}
+	    	            
+		let htheme = winapi::um::uxtheme::GetWindowTheme(self.hwnd_tree);
+    	let hdc = winuser::GetDC(self.hwnd_tree);
+        
+		if winerror::S_OK != winapi::um::uxtheme::DrawThemeBackground(htheme, hdc, /*TVP_GLYPH*/ 2, /*GLPS_CLOSED*/ 1, &mut rc, ptr::null_mut()) {
+        	common::log_error();
+		}
+		winuser::ReleaseDC(self.hwnd_tree, hdc);
     }
 }
 impl<O: controls::Tree> NewTreeInner<O> for WindowsTree {
@@ -537,13 +562,7 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
 		                    	panic!("Cannot find TreeView item");
 		                    }
 		                	
-		                	//let indexes = index_from_hitem(drawn, hwnd_tree);
-			                
-			                //let item_view = &mut this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items;
-				            //let item = &mut item_view[indexes.as_slice()];
-				            
-				            //let _ = item.root.measure(cmp::max(0, custom_draw.nmcd.rc.right - custom_draw.nmcd.rc.left) as u16, cmp::max(0, custom_draw.nmcd.rc.bottom - custom_draw.nmcd.rc.top) as u16);
-			                *(&mut custom_draw.nmcd.rc as *mut _ as *mut winapi::um::commctrl::HTREEITEM) = custom_draw.nmcd.dwItemSpec as winapi::um::commctrl::HTREEITEM;
+		                	*(&mut custom_draw.nmcd.rc as *mut _ as *mut winapi::um::commctrl::HTREEITEM) = custom_draw.nmcd.dwItemSpec as winapi::um::commctrl::HTREEITEM;
                             if 0 == winuser::SendMessageW(hwnd_tree, winapi::um::commctrl::TVM_GETITEMRECT, minwindef::TRUE as usize, &custom_draw.nmcd.rc as *const _ as isize) {
                                 common::log_error();
                             }
