@@ -158,47 +158,31 @@ impl WindowsTree {
 		let (w, _) = common::size_hwnd(self.hwnd_tree);
     	
     	let mut rc: windef::RECT = Default::default();
-    	let mut current_visible = winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_GETNEXTITEM, winapi::um::commctrl::TVGN_FIRSTVISIBLE, 0) as winapi::um::commctrl::HTREEITEM;
-	    if current_visible.is_null() {
-            dbg!("no visible");
-        	return;
-        }
-	    
-	    while {
-			let mut retrieve_item = winapi::um::commctrl::TVITEMEXW {
-        		mask: winapi::um::commctrl::TVIF_PARAM,
-        		hItem: current_visible,
-        		cchTextMax: 0,
-        		..Default::default()
-        	};
-		    if 0 == winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_GETITEMW, 0, &mut retrieve_item as *mut _ as isize) {
-            	common::log_error();
-            	panic!("Cannot find TreeView item");
-            }
-		    *(&mut rc as *mut _ as *mut winapi::um::commctrl::HTREEITEM) = current_visible;
-
-			if 0 == winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_GETITEMRECT, minwindef::TRUE as usize, &rc as *const _ as isize) {
-				common::log_error();
-			}
-            if let Some(item) = common::member_base_from_hwnd(retrieve_item.lParam as windef::HWND) {
-		    	let item = item.as_member_mut().is_control_mut().unwrap();
-	            //let _ = item.measure(cmp::max(0, custom_draw.nmcd.rc.right - custom_draw.nmcd.rc.left) as u16, cmp::max(0, custom_draw.nmcd.rc.bottom - custom_draw.nmcd.rc.top) as u16);
-	            //let indexes = index_from_hitem(current_visible, self.hwnd_tree);
-	            
-	            winuser::SetWindowPos(
-	            	item.native_id() as windef::HWND, 
-	            	ptr::null_mut(), 
-	            	rc.left + 1, 
-	            	rc.top + 1, 
-	            	cmp::max(0, w as i32 - rc.left), 
-	            	cmp::max(0, rc.bottom - rc.top), 
-	            	winuser::SWP_NOSIZE | winuser::SWP_NOSENDCHANGING | winuser::SWP_NOREDRAW);
-		    }    
-            current_visible = winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_GETNEXTITEM, winapi::um::commctrl::TVGN_NEXTVISIBLE, current_visible as isize) as *mut winapi::um::commctrl::TREEITEM;
-		    !current_visible.is_null()
-        } {}
-	    	            
-		let htheme = winapi::um::uxtheme::GetWindowTheme(self.hwnd_tree);
+    	
+    	unsafe fn redraw_breath(items: &mut Vec<TreeNode<winapi::um::commctrl::HTREEITEM>>, hwnd_tree: windef::HWND, rc: &mut windef::RECT, w: u16) {
+    		for item in items {
+    			*(rc as *mut _ as *mut winapi::um::commctrl::HTREEITEM) = item.native;
+	
+				if winuser::SendMessageW(hwnd_tree, winapi::um::commctrl::TVM_GETITEMRECT, minwindef::TRUE as usize, rc as *const _ as isize) as i32 == minwindef::TRUE {
+					item.root.set_visibility(types::Visibility::Visible);
+					
+		            winuser::SetWindowPos(
+		            	item.root.native_id() as windef::HWND, 
+		            	ptr::null_mut(), 
+		            	rc.left + 1, 
+		            	rc.top + 1, 
+		            	cmp::max(0, w as i32 - rc.left), 
+		            	cmp::max(0, rc.bottom - rc.top), 
+		            	winuser::SWP_NOSIZE | winuser::SWP_NOSENDCHANGING | winuser::SWP_NOREDRAW); 
+	    		} else {
+	    			item.root.set_visibility(types::Visibility::Gone);
+	    		}
+	    		redraw_breath(&mut item.branches, hwnd_tree, rc, w);
+    		}
+    	}
+    	redraw_breath(&mut self.items.0, self.hwnd_tree, &mut rc, w);
+    	
+    	let htheme = winapi::um::uxtheme::GetWindowTheme(self.hwnd_tree);
     	let hdc = winuser::GetDC(self.hwnd_tree);
         
 		if winerror::S_OK != winapi::um::uxtheme::DrawThemeBackground(htheme, hdc, /*TVP_GLYPH*/ 2, /*GLPS_CLOSED*/ 1, &mut rc, ptr::null_mut()) {
