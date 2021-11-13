@@ -310,10 +310,10 @@ unsafe extern "system" fn handler<T: controls::List>(hwnd: windef::HWND, msg: mi
         winuser::WM_LBUTTONUP => {
             let i = winuser::SendMessageW(hwnd, winuser::LB_ITEMFROMPOINT, 0, lparam);
             let list: &mut List = mem::transmute(param);
-            let item_view = list.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items.get_mut(i as usize).unwrap();
-            let list: &mut List = mem::transmute(param); // bck is stupid
-            if let Some(ref mut callback) = list.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().on_item_click {
-                let list: &mut List = mem::transmute(param); // bck is still stupid
+            let list_inner = list.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
+            let item_view = list_inner.items.get_mut(i as usize).unwrap();
+            if let Some(ref mut callback) = list_inner.on_item_click {
+                let list: &mut List = mem::transmute(param);
                 (callback.as_mut())(list, &[i as usize], item_view.as_mut());
             }
         }
