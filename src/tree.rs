@@ -133,8 +133,22 @@ impl WindowsTree {
 					}
 					let (w, _) = item.root.size();
 					let rcw = cmp::max(0, rc.right - rc.left);
-					if (rcw - w as i32) > 2 {
-						dbg!(w, rcw);
+					if (rcw - w as i32).abs() > 4 {
+						let mut retrieve_item = winapi::um::commctrl::TVITEMEXW {
+			        		mask: winapi::um::commctrl::TVIF_TEXT | winapi::um::commctrl::TVIF_PARAM,
+			        		hItem: item.native,
+			        		cchTextMax: 0,
+			        		..Default::default()
+			        	};			    
+					    if 0 == winuser::SendMessageW(hwnd_tree, winapi::um::commctrl::TVM_GETITEMW, 0, &mut retrieve_item as *mut _ as isize) {
+	                    	common::log_error();
+	                    	panic!("Cannot find TreeView item");
+	                    }
+						let label = OsStr::new(vec!['_'; w as usize / 5].iter().collect::<String>().as_str()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+						dbg!(common::str_from_wide(retrieve_item.pszText));
+					    retrieve_item.pszText = label.as_ptr() as *const _ as *mut u16;
+                		retrieve_item.mask |= winapi::um::commctrl::TVIF_TEXT;
+                        let _ = winuser::SendMessageW(hwnd_tree, winapi::um::commctrl::TVM_SETITEMW, 0, &mut retrieve_item as *mut _ as isize);
 					}
 		            winuser::SetWindowPos(
 		            	item.root.native_id() as windef::HWND, 
@@ -517,30 +531,27 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
 		                	
 		                	*(&mut custom_draw.nmcd.rc as *mut _ as *mut winapi::um::commctrl::HTREEITEM) = custom_draw.nmcd.dwItemSpec as winapi::um::commctrl::HTREEITEM;
                             if 0 == winuser::SendMessageW(hwnd_tree, winapi::um::commctrl::TVM_GETITEMRECT, minwindef::TRUE as usize, &custom_draw.nmcd.rc as *const _ as isize) {
-                                if types::Visibility::Gone != item.visibility() {
-				                    //item.set_visibility(types::Visibility::Gone);
-			                    }
                                 winuser::ShowWindow(item.native_id() as windef::HWND, winuser::SW_HIDE);
                             } else {
-                            	if types::Visibility::Visible != item.visibility() {
-                            		//item.set_visibility(types::Visibility::Visible);
-	                            }
-                            	let (pw, ph) = common::member_from_hwnd::<Tree>(hwnd).unwrap().inner().base.measured;
-	                
-                            	let (tw, _, _) = item.as_drawable_mut().measure(pw, ph);
-                            	let rcw = cmp::max(0, custom_draw.nmcd.rc.right - custom_draw.nmcd.rc.left);
-                            	if (rcw - tw as i32) > 2 {
-                            		dbg!(rcw, tw);
+			                    let this = common::member_from_hwnd::<Tree>(hwnd).unwrap();
+			                    let (pw, ph) = this.inner().base.measured;
+				                let (tw, th, changed) = item.measure(pw, ph);
+                            	if changed {
+                            		let label = OsStr::new(vec!['_'; tw as usize / 5].iter().collect::<String>().as_str()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+								    retrieve_item.pszText = label.as_ptr() as *const _ as *mut u16;
+									retrieve_item.mask |= winapi::um::commctrl::TVIF_TEXT;
+									retrieve_item.iIntegral = th as i32;
+                            		winuser::SendMessageW(hwnd_tree, winapi::um::commctrl::TVM_SETITEMW, 0, &mut retrieve_item as *mut _ as isize);
+									item.draw(None);
                             	}
-                            	//dbg!(w, h, &custom_draw.nmcd.rc, index_from_hitem(drawn, hwnd_tree));
                             	winuser::ShowWindow(item.native_id() as windef::HWND, winuser::SW_SHOW);
 	                            winuser::SetWindowPos(
 				                	item.native_id() as windef::HWND, 
 				                	ptr::null_mut(), 
 				                	custom_draw.nmcd.rc.left + 1, 
 				                	custom_draw.nmcd.rc.top + 1, 
-				                	cmp::max(0, custom_draw.nmcd.rc.right - custom_draw.nmcd.rc.left), //rcw, 
-				                	cmp::max(0, custom_draw.nmcd.rc.bottom - custom_draw.nmcd.rc.top), 
+				                	cmp::max(tw as i32, custom_draw.nmcd.rc.right - custom_draw.nmcd.rc.left), //rcw, 
+				                	cmp::max(th as i32, custom_draw.nmcd.rc.bottom - custom_draw.nmcd.rc.top), 
 				                	winuser::SWP_NOSIZE | winuser::SWP_NOSENDCHANGING | winuser::SWP_NOREDRAW);
                             }
 		                }
@@ -701,7 +712,7 @@ fn add_native_item(
 	let item_width = utils::coord_to_size(pw as i32 - offset) as u16;
 	items[index].root.set_layout_width(layout::Size::WrapContent);
     items[index].root.on_added_to_container(this, offset, 0, item_width, ph);
-    let (_, yy, _) = items[index].root.measure(pw, ph);
+    let (xx, yy, _) = items[index].root.measure(pw, ph);
     let hwnd_tree = this.inner().inner().inner().inner().inner().hwnd_tree;
     let insert_struct = unsafe {
     	let mut insert_struct = winapi::um::commctrl::TVINSERTSTRUCTW {
@@ -710,16 +721,16 @@ fn add_native_item(
         	u: mem::zeroed()
     	};
     	
-    	let label = items[index].root.is_has_label().map(|label| OsStr::new(label.label().as_ref()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>());
+    	let label = OsStr::new(vec!['_'; xx as usize / 5].iter().collect::<String>().as_str()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
     	
     	let insert_item = winapi::um::commctrl::TVITEMEXW {
     		mask: /*winapi::um::commctrl::TVIF_INTEGRAL |*/ winapi::um::commctrl::TVIF_TEXT | winapi::um::commctrl::TVIF_PARAM,
-    		pszText: label.map(|label| label.as_ptr()).unwrap_or(WINDOW_CLASS.as_ptr()) as *const _ as *mut u16,
+    		pszText: label.as_ptr() as *const _ as *mut u16,
     		iIntegral: yy as i32,
     		lParam: items[index].root.native_id() as isize,
     		..Default::default()
     	};
-    	
+    				    
     	*(insert_struct.u.itemex_mut()) = insert_item;
     	
         insert_struct
