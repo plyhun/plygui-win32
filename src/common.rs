@@ -19,7 +19,7 @@ pub use winapi::um::winnls;
 pub use winapi::um::winuser;
 
 pub use std::borrow::Cow;
-pub use std::ffi::{CString, IntoStringError, OsStr};
+pub use std::ffi::{CStr, CString, IntoStringError, OsStr};
 pub use std::marker::PhantomData;
 pub use std::os::windows::ffi::OsStrExt;
 pub use std::{cmp, mem, ops, ptr, str, sync::mpsc};
@@ -575,6 +575,22 @@ pub unsafe fn image_to_native(src: &image::DynamicImage, dst: *mut windef::HBITM
     }
 
     ptr::copy(src.flipv().to_rgba().into_raw().as_ptr(), pv_image_bits as *mut u8, (w * h * 4) as usize);
+}
+
+pub unsafe fn str_from_wide<'a>(wstring: *mut u16) -> Cow<'a, str> {
+	use std::slice;
+	if wstring.is_null() {
+		Cow::Owned(String::new())
+	} else {
+		let mut curr = wstring as usize;
+		let mut len = 0;
+		while *(curr as *const u16) != 0 {
+			len += 1;
+			curr += 2;
+		}
+		Cow::Owned(String::from_utf16_lossy(slice::from_raw_parts(wstring as *const u16, len)))
+		//Cow::Borrowed(CStr::from_ptr(wstring).to_str().expect("Cannot parse CStr"))
+	}
 }
 
 #[cfg(not(debug_assertions))]
