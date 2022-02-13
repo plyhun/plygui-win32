@@ -68,7 +68,7 @@ impl<O: controls::List> NewListInner<O> for WindowsList {
 impl ListInner for WindowsList {
     fn with_adapter(adapter: Box<dyn types::Adapter>) -> Box<dyn controls::List> {
         let mut b: Box<mem::MaybeUninit<List>> = Box::new_uninit();
-        let mut ab = AMember::with_inner(
+        let ab = AMember::with_inner(
             AControl::with_inner(
                 AContainer::with_inner(
                     AAdapted::with_inner(
@@ -117,7 +117,7 @@ impl AdaptedInner for WindowsList {
                 adapter::Change::Removed(at) => {
                     self.remove_item_inner(base, at);
                 },
-                adapter::Change::Edited(at, _) => {
+                adapter::Change::Edited(_, _) => {
                 },
             }
             self.base.invalidate();
