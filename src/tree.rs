@@ -92,7 +92,7 @@ impl WindowsTree {
 	            	add_native_item(this, items, index, parent, pw, ph);
                 
 	                match items[index].node() {
-	                	adapter::Node::Branch(expanded) => unsafe {
+	                	adapter::Node::Branch(expanded) => {
 	                		for i in 0..items[index].branches.len() {
 	                			let native = items[index].native;
 	                			add_native_item(this, &mut items[index].branches, i, Some((native, expanded)), pw, ph);
@@ -679,7 +679,7 @@ fn add_native_item(
 	let item_width = utils::coord_to_size(pw as i32 - offset) as u16;
 	items[index].root.set_layout_width(layout::Size::WrapContent);
     items[index].root.on_added_to_container(this, offset, 0, item_width, ph);
-    let (xx, yy, _) = items[index].root.measure(pw, ph);
+    let (xx, yy) = items[index].root.size();
     let hwnd_tree = this.inner().inner().inner().inner().inner().hwnd_tree;
     let insert_struct = unsafe {
     	let mut insert_struct = winapi::um::commctrl::TVINSERTSTRUCTW {
