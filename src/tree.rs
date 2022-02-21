@@ -143,7 +143,7 @@ impl<O: controls::Tree> NewTreeInner<O> for WindowsTree {
         WindowsTree {
             base: common::WindowsControlBase::with_wndproc(Some(handler::<O>)),
             hwnd_tree: 0 as windef::HWND,
-            items: TreeNodeList(vec![]),
+            items: Default::default(),
             on_item_click: None,
         }
     }
@@ -485,19 +485,30 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
     				 }
     				 return winapi::um::commctrl::CDRF_DODEFAULT;
     			}
-    			winapi::um::commctrl::NM_DBLCLK => {
-	    			let clicked = winuser::SendMessageW(hwnd_tree, winapi::um::commctrl::TVM_GETNEXTITEM, winapi::um::commctrl::TVGN_CARET, 0) as *mut winapi::um::commctrl::TREEITEM;
-		            if clicked.is_null() {
-		                common::log_error();
-		            } 
-				    let indexes = index_from_hitem(clicked, hwnd_tree);
-	                let item_view = &mut this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items;
-		            let this = common::member_from_hwnd::<Tree>(hwnd).unwrap();
-	                let clicked = &mut item_view[indexes.as_slice()];
-			        if let Some(ref mut cb) = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().on_item_click {
-			        	let this = common::member_from_hwnd::<T>(hwnd).unwrap();
-	                    (cb.as_mut())(this, indexes.as_slice(), clicked.root.as_member_mut().is_control_mut().unwrap());
-	                }
+    			winapi::um::commctrl::NM_CLICK => {
+    			    let mut hit_info = winapi::um::commctrl::TVHITTESTINFO {
+        			    pt: Default::default(),
+        			    flags: winapi::um::commctrl::TVHT_ONITEM,
+        			    ..Default::default()
+    			    };
+    			    if 0 == winuser::GetCursorPos(&mut hit_info.pt) || 0 == winuser::ScreenToClient(hwnd_tree, &mut hit_info.pt) {
+    			        common::log_error();
+    			        panic!("Cannot get cursor position!");
+    			    }
+	    			let clicked = winuser::SendMessageW(hwnd_tree, winapi::um::commctrl::TVM_HITTEST, 0, &mut hit_info as *mut _ as isize) as *mut winapi::um::commctrl::TREEITEM;
+		            if !clicked.is_null() {
+    		            let indexes = index_from_hitem(clicked, hwnd_tree);
+    				    if indexes.len() > 0 {
+            			    let item_view = &mut this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items;
+        		            let this = common::member_from_hwnd::<Tree>(hwnd).unwrap();
+        	                let clicked = &mut item_view[indexes.as_slice()];
+        			        if let Some(ref mut cb) = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().on_item_click {
+        			        	let this = common::member_from_hwnd::<T>(hwnd).unwrap();
+        	                    (cb.as_mut())(this, indexes.as_slice(), clicked.root.as_member_mut().is_control_mut().unwrap());
+        	                }
+            			}
+				        common::log_error();
+		            }				    
 	    		}
     			winapi::um::commctrl::TVN_ITEMEXPANDEDA
 		    			 | winapi::um::commctrl::TVN_ITEMEXPANDEDW => {
@@ -615,13 +626,13 @@ fn index_from_hitem(hitem: winapi::um::commctrl::HTREEITEM, hwnd_tree: windef::H
 		..Default::default()
 	};
     
+    let mut indexes = Vec::new();    
+
     if 0 == unsafe { winuser::SendMessageW(hwnd_tree, winapi::um::commctrl::TVM_GETITEMW, 0, &mut retrieve_item as *mut _ as isize) } {
-    	unsafe { common::log_error(); }
-    	panic!("Cannot find TreeView item");
+    	return indexes;
     }
 	
-	let mut indexes = Vec::new();    
-    let mut parent = None;
+	let mut parent = None;
     
     while {
     	if 0 == unsafe { winuser::SendMessageW(hwnd_tree, winapi::um::commctrl::TVM_GETITEMW, 0, &mut retrieve_item as *mut _ as isize) } {
