@@ -1,0 +1,355 @@
+use crate::common::{self, *};
+
+const CLASS_ID: &str = commctrl::WC_LISTVIEW;
+
+lazy_static! {
+    pub static ref WINDOW_CLASS: Vec<u16> = OsStr::new(CLASS_ID).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+}
+
+pub type Table = AMember<AControl<AContainer<AAdapted<ATable<WindowsTable>>>>>;
+
+#[repr(C)]
+pub struct WindowsTable {
+    base: WindowsControlBase<Table>,
+    items: Vec<Box<dyn controls::Control>>,
+    on_item_click: Option<callbacks::OnItemClick>,
+    width: usize, height: usize,
+}
+
+impl WindowsTable {
+    fn add_item_inner(&mut self, base: &mut MemberBase, indexes: &[usize], y: &mut i32) {
+        let (member, control, adapter, _) = unsafe { Table::adapter_base_parts_mut(base) };
+        let (pw, ph) = control.measured;
+        let scroll_width = unsafe { winuser::GetSystemMetrics(winuser::SM_CXVSCROLL) };
+        let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
+        
+        let mut item = adapter.adapter.spawn_item_view(indexes, this).unwrap();
+        item.on_added_to_container(this, 0, *y, utils::coord_to_size(pw as i32 - scroll_width - 14 /*TODO: WHY???*/ - DEFAULT_PADDING) as u16, utils::coord_to_size(ph as i32) as u16);
+                
+        let (_, yy) = item.size();
+        self.items.push(item);
+        *y += yy as i32;
+        
+        let i = indexes[0];
+        
+        unsafe {
+            if i as isize != winuser::SendMessageW(self.base.hwnd, winuser::LB_INSERTSTRING, i, WINDOW_CLASS.as_ptr() as isize) {
+                common::log_error();
+            }
+            if winuser::LB_ERR == winuser::SendMessageW(self.base.hwnd, winuser::LB_SETITEMHEIGHT, i, yy as isize) {
+                common::log_error();
+            }
+        }
+    }
+    fn remove_item_inner(&mut self, base: &mut MemberBase, indexes: &[usize]) {
+        let this: &mut Table = unsafe { utils::base_to_impl_mut(base) };
+        self.items.remove(indexes[0]).on_removed_from_container(this); 
+        let i = indexes[0];
+        unsafe {
+            if i as isize != winuser::SendMessageW(self.base.hwnd, winuser::LB_DELETESTRING, i, WINDOW_CLASS.as_ptr() as isize) {
+                common::log_error();
+            }
+        }
+    }
+    fn force_scrollbar(&mut self) {
+        unsafe {
+            winuser::ShowScrollBar(self.base.hwnd, winuser::SB_VERT as i32, minwindef::TRUE);
+        }
+    }
+}
+impl<O: controls::Table> NewTableInner<O> for WindowsTable {
+    fn with_uninit_params(_: &mut mem::MaybeUninit<O>, width: usize, height: usize) -> Self {
+        WindowsTable {
+            base: WindowsControlBase::with_handler(Some(handler::<O>)),
+            items: vec![],
+            on_item_click: None,
+            width, height
+        }
+    }
+}
+impl TableInner for WindowsTable {
+    fn with_adapter_initial_size(adapter: Box<dyn types::Adapter>, width: usize, height: usize) -> Box<dyn controls::Table> {
+        let mut b: Box<mem::MaybeUninit<Table>> = Box::new_uninit();
+        let ab = AMember::with_inner(
+            AControl::with_inner(
+                AContainer::with_inner(
+                    AAdapted::with_inner(
+                        ATable::with_inner(
+                            <Self as NewTableInner<Table>>::with_uninit_params(b.as_mut(), width, height)
+                        ),
+                        adapter,
+                        &mut b,
+                    ),
+                )
+            ),
+        );
+        unsafe {
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        }
+    }
+}
+impl ItemClickableInner for WindowsTable {
+    fn item_click(&mut self, indexes: &[usize], item_view: &mut dyn controls::Control, skip_callbacks: bool) {
+        if !skip_callbacks{
+            let self2 = self.base.as_outer_mut();
+            if let Some(ref mut callback) = self.on_item_click {
+                (callback.as_mut())(self2, indexes, item_view)
+            }
+        }
+    }
+    fn on_item_click(&mut self, callback: Option<callbacks::OnItemClick>) {
+        self.on_item_click = callback;
+    }
+}
+impl AdaptedInner for WindowsTable {
+    fn on_item_change(&mut self, base: &mut MemberBase, value: adapter::Change) {
+        if !self.base.hwnd.is_null() {
+            let mut y = 0;
+            {
+                for item in self.items.as_slice() {
+                    let (_, yy) = item.size();
+                    y += yy as i32;
+                }
+            }
+            match value {
+                adapter::Change::Added(at, _) => {
+                    self.add_item_inner(base, at, &mut y);
+                },
+                adapter::Change::Removed(at) => {
+                    self.remove_item_inner(base, at);
+                },
+                adapter::Change::Edited(_, _) => {
+                },
+            }
+            self.base.invalidate();
+            self.force_scrollbar();
+        }
+    }
+}
+
+impl ControlInner for WindowsTable {
+    fn parent(&self) -> Option<&dyn controls::Member> {
+        self.base.parent().map(|p| p.as_member())
+    }
+    fn parent_mut(&mut self) -> Option<&mut dyn controls::Member> {
+        self.base.parent_mut().map(|p| p.as_member_mut())
+    }
+    fn root(&self) -> Option<&dyn controls::Member> {
+        self.base.root().map(|p| p.as_member())
+    }
+    fn root_mut(&mut self) -> Option<&mut dyn controls::Member> {
+        self.base.root_mut().map(|p| p.as_member_mut())
+    }
+    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &dyn controls::Container, px: i32, py: i32, pw: u16, ph: u16) {
+        let selfptr = member as *mut _ as *mut c_void;
+        self.base.hwnd = unsafe { parent.native_container_id() as windef::HWND }; // required for measure, as we don't have own hwnd yet
+        let (w, h, _) = self.measure(member, control, pw, ph);
+        self.base.create_control_hwnd(
+            px as i32,
+            py as i32,
+            w as i32,
+            h as i32,
+            self.base.hwnd,
+            0,
+            WINDOW_CLASS.as_ptr(),
+            "",
+            winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::WS_VISIBLE | winuser::WS_BORDER | winuser::WS_CHILD | winapi::um::commctrl::LVS_REPORT,
+            selfptr,
+        );
+        control.coords = Some((px as i32, py as i32));
+        
+        let (member, _, adapter, _) = unsafe { Table::adapter_base_parts_mut(member) };
+
+        let mut y = 0;
+        adapter.adapter.for_each(&mut (|indexes, _node| {
+            self.add_item_inner(member, indexes, &mut y);
+        }));
+        self.force_scrollbar();
+    }
+    fn on_removed_from_container(&mut self, member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
+        for ref mut child in self.items.as_mut_slice() {
+            let self2: &mut Table = unsafe { utils::base_to_impl_mut(member) };
+            child.on_removed_from_container(self2);
+        }
+        common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, None);
+        self.base.hwnd = 0 as windef::HWND;
+        self.base.subclass_id = 0;
+    }
+
+    #[cfg(feature = "markup")]
+    fn fill_from_markup(&mut self, member: &mut MemberBase, _control: &mut ControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
+        use plygui_api::markup::MEMBER_TYPE_LIST;
+
+        fill_from_markup_base!(self, member, markup, registry, Table, [MEMBER_TYPE_LIST]);
+        //fill_from_markup_items!(self, member, markup, registry);
+    }
+}
+impl ContainerInner for WindowsTable {
+    fn find_control_mut<'a>(&'a mut self, arg: types::FindBy<'a>) -> Option<&'a mut dyn controls::Control> {
+        for child in self.items.as_mut_slice() {
+            match arg {
+                types::FindBy::Id(ref id) => {
+                    if child.as_member_mut().id() == *id {
+                        return Some(child.as_mut());
+                    }
+                }
+                types::FindBy::Tag(tag) => {
+                    if let Some(mytag) = child.as_member_mut().tag() {
+                        if tag == mytag {
+                            return Some(child.as_mut());
+                        }
+                    }
+                }
+            }
+            if let Some(c) = child.is_container_mut() {
+                let ret = c.find_control_mut(arg.clone());
+                if ret.is_none() {
+                    continue;
+                }
+                return ret;
+            }
+        }
+        None
+    }
+    fn find_control<'a>(&'a self, arg: types::FindBy<'a>) -> Option<&'a dyn controls::Control> {
+        for child in self.items.as_slice() {
+            match arg {
+                types::FindBy::Id(ref id) => {
+                    if child.as_member().id() == *id {
+                        return Some(child.as_ref());
+                    }
+                }
+                types::FindBy::Tag(tag) => {
+                    if let Some(mytag) = child.as_member().tag() {
+                        if tag == mytag {
+                            return Some(child.as_ref());
+                        }
+                    }
+                }
+            }
+            if let Some(c) = child.is_container() {
+                let ret = c.find_control(arg.clone());
+                if ret.is_none() {
+                    continue;
+                }
+                return ret;
+            }
+        }
+        None
+    }
+}
+impl HasLayoutInner for WindowsTable {
+    fn on_layout_changed(&mut self, _base: &mut MemberBase) {
+        let hwnd = self.base.hwnd;
+        if !hwnd.is_null() {
+            self.base.invalidate();
+        }
+    }
+}
+impl HasNativeIdInner for WindowsTable {
+    type Id = common::Hwnd;
+
+    fn native_id(&self) -> Self::Id {
+        self.base.hwnd.into()
+    }
+}
+impl MemberInner for WindowsTable {}
+
+impl HasSizeInner for WindowsTable {
+    fn on_size_set(&mut self, _: &mut MemberBase, _: (u16, u16)) -> bool {
+        self.base.invalidate();
+        true
+    }
+}
+
+impl HasVisibilityInner for WindowsTable {
+    fn on_visibility_set(&mut self, _base: &mut MemberBase, value: types::Visibility) -> bool {
+        self.base.on_set_visibility(value)
+    }
+}
+
+impl Drawable for WindowsTable {
+    fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase) {
+        self.base.draw(control.coords, control.measured);
+    }
+    fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+        let old_size = control.measured;
+        control.measured = match control.visibility {
+            types::Visibility::Gone => (0, 0),
+            _ => {
+                let w = match control.layout.width {
+                    layout::Size::MatchParent => parent_width,
+                    layout::Size::Exact(w) => w,
+                    layout::Size::WrapContent => defaults::THE_ULTIMATE_ANSWER_TO_EVERYTHING,
+                };
+                let h = match control.layout.height {
+                    layout::Size::MatchParent => parent_height,
+                    layout::Size::Exact(h) => h,
+                    layout::Size::WrapContent => defaults::THE_ULTIMATE_ANSWER_TO_EVERYTHING,
+                };
+                (cmp::max(0, w as i32) as u16, cmp::max(0, h as i32) as u16)
+            }
+        };
+        (control.measured.0, control.measured.1, control.measured != old_size)
+    }
+    fn invalidate(&mut self, _member: &mut MemberBase, _control: &mut ControlBase) {
+        self.base.invalidate()
+    }
+}
+impl Spawnable for WindowsTable {
+    fn spawn() -> Box<dyn controls::Control> {
+        Self::with_adapter_initial_size(Box::new(types::imp::StringVecAdapter::<crate::imp::Text>::new()), 0, 0).into_control()
+    }
+}
+
+unsafe extern "system" fn handler<T: controls::Table>(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
+    let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
+    if ww == 0 {
+        winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as WinPtr);
+    }
+    match msg {
+        winuser::WM_LBUTTONUP => {
+            let i = winuser::SendMessageW(hwnd, winuser::LB_ITEMFROMPOINT, 0, lparam);
+            let table: &mut Table = mem::transmute(param);
+            let table_inner = table.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
+            let item_view = table_inner.items.get_mut(i as usize).unwrap();
+            if let Some(ref mut callback) = table_inner.on_item_click {
+                let table: &mut Table = mem::transmute(param);
+                (callback.as_mut())(table, &[i as usize], item_view.as_mut());
+            }
+        }
+        winuser::WM_SIZE => {
+            let width = lparam as u16;
+            let height = (lparam >> 16) as u16;
+
+            let table: &mut Table = mem::transmute(param);
+            table.call_on_size::<T>(width, height);
+            
+            let mut y = 0;
+            let i = cmp::max(0, winuser::SendMessageW(hwnd, winuser::LB_GETTOPINDEX, 0, 0)) as usize;
+            let table = table.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
+            for i in i..table.items.len() {
+                let item = &mut table.items[i];
+                let (_, ch, _) = item.measure(cmp::max(0, width as i32 - DEFAULT_PADDING) as u16, cmp::max(0, height as i32) as u16);
+                item.draw(Some((0, y)));
+                y += ch as i32;
+            }
+            winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::FALSE);
+            table.force_scrollbar();
+        }
+        winuser::WM_CTLCOLORSTATIC => {
+            let hdc = wparam as windef::HDC;
+            wingdi::SetTextColor(hdc, wingdi::RGB(0, 0, 0));
+            wingdi::SetBkMode(hdc, wingdi::TRANSPARENT as i32);
+
+            return wingdi::GetStockObject(wingdi::NULL_BRUSH as i32) as isize;
+        }
+        winuser::WM_VSCROLL | winuser::WM_MOUSEWHEEL => {
+            winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::FALSE);
+        }
+        _ => {}
+    }
+
+    commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
+}

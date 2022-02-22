@@ -30,6 +30,7 @@ mod window;
 mod progress_bar;
 mod list;
 mod tree;
+mod table;
 
 default_markup_register_members!();
 default_pub_use!();
