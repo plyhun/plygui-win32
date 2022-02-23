@@ -42,10 +42,10 @@ impl WindowsTable {
         } else {
             self.columns.insert(index, TableColumn {
                 cells: std::iter::repeat_with(|| None).take(self.height).collect::<Vec<_>>(),
-                root: item.map(|mut item| {
+                control: item.map(|mut item| {
                     item.on_added_to_container(this, 0, 0, utils::coord_to_size(pw as i32 - DEFAULT_PADDING) as u16, utils::coord_to_size(ph as i32 - DEFAULT_PADDING) as u16);
                     item
-                }).take().unwrap(),
+                }),
                 native: index as isize,
             });
         }
@@ -63,23 +63,23 @@ impl WindowsTable {
             let lv = commctrl::LVITEMW {
                 mask: commctrl::LVIF_TEXT,
                 iItem: y as i32, 
-                iSubItem: x as i32,
+                iSubItem: x as i32 + 1,
                 pszText: title.as_mut_ptr(),
                 ..Default::default()
             };
             if 0 == unsafe { winuser::SendMessageW(self.base.hwnd, commctrl::LVM_SETITEMW, 0, &lv as *const _ as isize) } {
                 unsafe { common::log_error(); }
-                panic!("Could not insert a table cell at index [{}, {}]", x, y);
+               // panic!("Could not insert a table cell at index [{}, {}]", x, y);
             } else {
                 item.on_added_to_container(this, 0, 0, utils::coord_to_size(pw as i32 - DEFAULT_PADDING) as u16, utils::coord_to_size(ph as i32 - DEFAULT_PADDING) as u16);
                 self.columns.get_mut(x).map(|column| {
                     column.cells.insert(y, Some(TableCell {
-                        root: item,
+                        control: Some(item),
                         native: y as isize,
                     }));
-                })
+                });
             }
-        }).unwrap_or_else(|| None);
+        }).unwrap_or_else(|| {});
     }
     fn remove_column_inner(&mut self, base: &mut MemberBase, index: usize) {
         
@@ -238,13 +238,13 @@ impl ControlInner for WindowsTable {
 impl ContainerInner for WindowsTable {
     fn find_control_mut<'a>(&'a mut self, arg: types::FindBy<'a>) -> Option<&'a mut dyn controls::Control> {
         for column in self.columns.as_mut_slice() {
-            let maybe = utils::find_by_mut(column.root.as_mut(), arg);
+            let maybe = column.control.as_mut().and_then(|control| utils::find_by_mut(control.as_mut(), arg));
             if maybe.is_some() {
                 return maybe;
             }
             for cell in column.cells.as_mut_slice() {
                 if let Some(cell) = cell {
-                    let maybe = utils::find_by_mut(cell.root.as_mut(), arg);
+                    let maybe = cell.control.as_mut().and_then(|control| utils::find_by_mut(control.as_mut(), arg));
                     if maybe.is_some() {
                         return maybe;
                     }
@@ -255,13 +255,13 @@ impl ContainerInner for WindowsTable {
     }
     fn find_control<'a>(&'a self, arg: types::FindBy<'a>) -> Option<&'a dyn controls::Control> {
         for column in self.columns.as_slice() {
-            let maybe = utils::find_by(column.root.as_ref(), arg);
+            let maybe = column.control.as_ref().and_then(|control| utils::find_by(control.as_ref(), arg));
             if maybe.is_some() {
                 return maybe;
             }
             for cell in column.cells.as_slice() {
                 if let Some(cell) = cell {
-                    let maybe = utils::find_by(cell.root.as_ref(), arg);
+                    let maybe = cell.control.as_ref().and_then(|control| utils::find_by(control.as_ref(), arg));
                     if maybe.is_some() {
                         return maybe;
                     }

@@ -20,7 +20,6 @@ impl WindowsTree {
     fn add_item_inner(&mut self, base: &mut MemberBase, indexes: &[usize], node: &adapter::Node) {
         let (member, control, adapter, _) = unsafe { Tree::adapter_base_parts_mut(base) };
         let (pw, ph) = control.measured;
-        //let scroll_width = unsafe { winuser::GetSystemMetrics(winuser::SM_CXVSCROLL) };
         let this: &mut Tree = unsafe { utils::base_to_impl_mut(member) };
         
         let mut item = adapter.adapter.spawn_item_view(indexes, this);
@@ -33,11 +32,10 @@ impl WindowsTree {
             if end {
             	items.insert(index, TreeNode {
                     expanded: if let adapter::Node::Branch(expanded) = node { *expanded } else { false },
-                    root: item.take().unwrap(),
+                    control: item.take().unwrap(),
                     branches: vec![],
                     native: ptr::null_mut(),
-                });
-                
+                });                
                 add_native_item(this, items, index, parent, pw, ph);
                 //return;
             } else {
@@ -83,10 +81,10 @@ impl WindowsTree {
 	            if minwindef::TRUE as isize != unsafe { winuser::SendMessageW(self.hwnd_tree, commctrl::TVM_DELETEITEM, 0, deleted.native as isize) } {
 	                unsafe { common::log_error(); }
 	            } else {
-	            	deleted.root.on_removed_from_container(this);
+	            	deleted.control.on_removed_from_container(this);
 		            items.insert(index, TreeNode {
 	                    expanded: if let adapter::Node::Branch(expanded) = node { *expanded } else { false },
-	                    root: item.take().unwrap(),
+	                    control: item.take().unwrap(),
 	                    branches: vec![],
 	                    native: ptr::null_mut(),
 	                });
@@ -296,19 +294,19 @@ impl ContainerInner for WindowsTree {
             for child in vec {
                 match arg {
                     types::FindBy::Id(id) => {
-                        if child.root.as_member_mut().id() == id {
-                            return Some(child.root.as_mut());
+                        if child.control.as_member_mut().id() == id {
+                            return Some(child.control.as_mut());
                         }
                     }
                     types::FindBy::Tag(tag) => {
-                        if let Some(mytag) = child.root.as_member_mut().tag() {
+                        if let Some(mytag) = child.control.as_member_mut().tag() {
                             if tag == mytag {
-                                return Some(child.root.as_mut());
+                                return Some(child.control.as_mut());
                             }
                         }
                     }
                 }
-                if let Some(c) = child.root.is_container_mut() {
+                if let Some(c) = child.control.is_container_mut() {
                     let ret = c.find_control_mut(arg);
                     if ret.is_some() {
                         return ret;
@@ -328,10 +326,10 @@ impl ContainerInner for WindowsTree {
             for child in vec {
                 match arg {
                     types::FindBy::Id(id) => {
-                        if child.root.as_member().id() == id {
-                            return Some(child.root.as_ref());
+                        if child.control.as_member().id() == id {
+                            return Some(child.control.as_ref());
                         } else {
-                            if let Some(c) = child.root.is_container() {
+                            if let Some(c) = child.control.is_container() {
                                 let ret = c.find_control(arg.clone());
                                 if ret.is_some() {
                                     return ret;
@@ -340,14 +338,14 @@ impl ContainerInner for WindowsTree {
                         }
                     }
                     types::FindBy::Tag(tag) => {
-                        if let Some(mytag) = child.root.as_member().tag() {
+                        if let Some(mytag) = child.control.as_member().tag() {
                             if tag == mytag {
-                                return Some(child.root.as_ref());
+                                return Some(child.control.as_ref());
                             }
                         }
                     }
                 }
-                if let Some(c) = child.root.is_container() {
+                if let Some(c) = child.control.is_container() {
                     let ret = c.find_control(arg);
                     if ret.is_some() {
                         return ret;
@@ -524,7 +522,7 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
         	                let clicked = &mut item_view[indexes.as_slice()];
         			        if let Some(ref mut cb) = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().on_item_click {
         			        	let this = common::member_from_hwnd::<T>(hwnd).unwrap();
-        	                    (cb.as_mut())(this, indexes.as_slice(), clicked.root.as_member_mut().is_control_mut().unwrap());
+        	                    (cb.as_mut())(this, indexes.as_slice(), clicked.control.as_member_mut().is_control_mut().unwrap());
         	                }
             			}
 				        common::log_error();
@@ -694,8 +692,8 @@ fn remove_native_item(
     	},
     	_ => {}
     }
-	items[index].root.set_visibility(types::Visibility::Gone);
-    items[index].root.on_removed_from_container(this);
+	items[index].control.set_visibility(types::Visibility::Gone);
+    items[index].control.on_removed_from_container(this);
     let _ = items.remove(index);
 }
 fn add_native_item(
@@ -708,9 +706,9 @@ fn add_native_item(
 ) {
 	let offset = -9 /*TODO WHY???*/;
 	let item_width = utils::coord_to_size(pw as i32 - offset) as u16;
-	items[index].root.set_layout_width(layout::Size::WrapContent);
-    items[index].root.on_added_to_container(this, offset, 0, item_width, ph);
-    let (xx, yy) = items[index].root.size();
+	items[index].control.set_layout_width(layout::Size::WrapContent);
+    items[index].control.on_added_to_container(this, offset, 0, item_width, ph);
+    let (xx, yy) = items[index].control.size();
     let hwnd_tree = this.inner().inner().inner().inner().inner().hwnd_tree;
     let insert_struct = unsafe {
     	let mut insert_struct = commctrl::TVINSERTSTRUCTW {
@@ -718,14 +716,16 @@ fn add_native_item(
         	hInsertAfter: if index == 0 { commctrl::TVI_ROOT } else { items[index-1].native },
         	u: mem::zeroed()
     	};
-    	
-    	let label = OsStr::new(vec!['_'; xx as usize / 5].iter().collect::<String>().as_str()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+    	let label = OsStr::new(
+    	    items[index].control.is_has_label()
+        	    .map(|has_label| has_label.label().into_owned()).unwrap_or(vec!['_'; xx as usize / 5].iter().collect::<String>()).as_str())
+        	.encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
     	
     	let insert_item = commctrl::TVITEMEXW {
     		mask: /*commctrl::TVIF_INTEGRAL |*/ commctrl::TVIF_TEXT | commctrl::TVIF_PARAM,
     		pszText: label.as_ptr() as *const _ as *mut u16,
     		iIntegral: yy as i32,
-    		lParam: items[index].root.native_id() as isize,
+    		lParam: items[index].control.native_id() as isize,
     		..Default::default()
     	};
     				    
@@ -746,7 +746,7 @@ fn add_native_item(
             }
         }
     }
-    items[index].root.set_visibility(types::Visibility::Visible);
+    items[index].control.set_visibility(types::Visibility::Visible);
     match items[index].node() {
     	adapter::Node::Branch(expanded) => unsafe {
     		for i in 0..items[index].branches.len() {
@@ -774,7 +774,7 @@ fn expand(
 	show: bool
 ) {
 	if show {
-		item.root.set_visibility(types::Visibility::Visible);
+		item.control.set_visibility(types::Visibility::Visible);
 	}
 	match item.node() {
     	adapter::Node::Branch(expanded) if expanded => {
@@ -799,6 +799,6 @@ fn collapse(
     	_ => {}
     }
 	if hide {
-		item.root.set_visibility(types::Visibility::Gone);
+		item.control.set_visibility(types::Visibility::Gone);
 	}
 }
