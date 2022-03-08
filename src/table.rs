@@ -23,9 +23,10 @@ impl WindowsTable {
         let (pw, ph) = control.measured;
         
         let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
+        println!("col {}", index);
         
         let item = adapter.adapter.spawn_item_view(&[index], this);
-        let title = item.as_ref().and_then(|item| item.is_has_label()).map(|has_label| has_label.label().into_owned()).unwrap_or(format!("{}", index));
+        let title = item.as_ref().and_then(|item| item.is_has_label()).map(|has_label| has_label.label().into_owned()).unwrap_or(format!("{}", index+1));
         let mut title = OsStr::new(title.as_str()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
 
         let lvc = commctrl::LVCOLUMNW {
@@ -41,7 +42,24 @@ impl WindowsTable {
             panic!("Could not insert a table column at index {}", index);
         } else {
             self.columns.insert(index, TableColumn {
-                cells: std::iter::repeat_with(|| None).take(self.height).collect::<Vec<_>>(),
+                cells: std::iter::repeat_with(|| None).enumerate().take(self.height).map(|(y, none)| {
+                    let mut lv = commctrl::LVITEMW {
+                        mask: commctrl::LVIF_STATE,
+                        stateMask: std::u32::MAX,
+                        iItem: y as i32, 
+                        ..Default::default()
+                    };
+                    if 0 == unsafe { winuser::SendMessageW(self.base.hwnd, commctrl::LVM_GETITEMW, 0, &lv as *const _ as isize) } {
+                        println!("row {} of {}", y, index);
+                        lv.mask = commctrl::LVIF_PARAM;
+                        lv.lParam = item.as_ref().map(|item| unsafe { item.native_id() as isize }).unwrap_or(0);
+                        if y as isize != unsafe { winuser::SendMessageW(self.base.hwnd, commctrl::LVM_INSERTITEMW, 0, &lv as *const _ as isize) } {
+                            unsafe { common::log_error(); }
+                            panic!("Could not insert a table row at index [{}, {}]", index, y);
+                        } 
+                    }
+                    none
+                }).collect::<Vec<_>>(),
                 control: item.map(|mut item| {
                     item.on_added_to_container(this, 0, 0, utils::coord_to_size(pw as i32 - DEFAULT_PADDING) as u16, utils::coord_to_size(ph as i32 - DEFAULT_PADDING) as u16);
                     item
@@ -55,21 +73,24 @@ impl WindowsTable {
         let (pw, ph) = control.measured;
 
         let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
-        
         adapter.adapter.spawn_item_view(&[x, y], this).map(|mut item| {
+            println!("cell [{}/{}]", x,y);
+        
             let title = item.is_has_label().map(|has_label| has_label.label().into_owned()).unwrap_or(format!("[{}, {}]", x, y));
             let mut title = OsStr::new(title.as_str()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
             
             let lv = commctrl::LVITEMW {
-                mask: commctrl::LVIF_TEXT,
+                mask: commctrl::LVIF_TEXT,// | commctrl::LVIF_PARAM,
                 iItem: y as i32, 
-                iSubItem: x as i32 + 1,
+                iSubItem: x as i32,
+                cchTextMax: title.len() as i32 + 1,
                 pszText: title.as_mut_ptr(),
+                //lParam: unsafe { item.native_id() as isize },
                 ..Default::default()
             };
             if 0 == unsafe { winuser::SendMessageW(self.base.hwnd, commctrl::LVM_SETITEMW, 0, &lv as *const _ as isize) } {
                 unsafe { common::log_error(); }
-               // panic!("Could not insert a table cell at index [{}, {}]", x, y);
+                println!("Could not insert a table cell at index [{}, {}]", x, y);
             } else {
                 item.on_added_to_container(this, 0, 0, utils::coord_to_size(pw as i32 - DEFAULT_PADDING) as u16, utils::coord_to_size(ph as i32 - DEFAULT_PADDING) as u16);
                 self.columns.get_mut(x).map(|column| {
@@ -202,10 +223,15 @@ impl ControlInner for WindowsTable {
             0,
             WINDOW_CLASS.as_ptr(),
             "",
-            winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::WS_VISIBLE | winuser::WS_BORDER | winuser::WS_CHILD | winapi::um::commctrl::LVS_REPORT,
+            winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::WS_VISIBLE | commctrl::TVS_EX_DOUBLEBUFFER
+                     | winuser::WS_BORDER | winuser::WS_CHILD | winapi::um::commctrl::LVS_REPORT,
             selfptr,
         );
         control.coords = Some((px as i32, py as i32));
+        
+        if 0 == unsafe { winuser::SendMessageW(self.base.hwnd, commctrl::LVM_SETITEMCOUNT, self.width, commctrl::LVSICF_NOINVALIDATEALL) } {
+            unsafe { common::log_error(); }
+        }
         
         let (member, _, adapter, _) = unsafe { Table::adapter_base_parts_mut(member) };
 
