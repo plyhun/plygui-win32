@@ -591,16 +591,16 @@ unsafe extern "system" fn ahandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
 }
 
 unsafe fn redraw_item(drawn: commctrl::HTREEITEM, hwnd_tree: windef::HWND, hwnd: windef::HWND, rc: &mut windef::RECT, action: Option<bool>) {
-	let mut retrieve_item = commctrl::TVITEMEXW {
+	if drawn.is_null() {
+		return;
+	}			    
+    let mut retrieve_item = commctrl::TVITEMEXW {
 		mask: commctrl::TVIF_PARAM,
 		hItem: drawn,
 		cchTextMax: 0,
 		..Default::default()
 	};
-	if drawn.is_null() {
-		return;
-	}			    
-    if 0 == winuser::SendMessageW(hwnd_tree, commctrl::TVM_GETITEMW, 0, &mut retrieve_item as *mut _ as isize) {
+	if 0 == winuser::SendMessageW(hwnd_tree, commctrl::TVM_GETITEMW, 0, &mut retrieve_item as *mut _ as isize) {
     	common::log_error();
     	panic!("Cannot find TreeView item");
     }

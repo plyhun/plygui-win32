@@ -593,6 +593,15 @@ pub unsafe fn str_from_wide<'a>(wstring: *mut u16) -> Cow<'a, str> {
 	}
 }
 
+pub fn string_of_pixel_len(len: usize) -> String {
+    vec!['_'; len / 5].iter().collect::<String>()
+}
+
+//TODO density!
+pub fn wsz_of_pixel_len(len: usize) -> Vec<u16> {
+    OsStr::new(string_of_pixel_len(len).as_str()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>()
+}
+
 #[cfg(not(debug_assertions))]
 pub unsafe fn log_error() {}
 
