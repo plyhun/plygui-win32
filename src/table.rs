@@ -89,7 +89,7 @@ impl WindowsTable {
             } else {
                 let mut rc = windef::RECT {
                     left: commctrl::LVIR_BOUNDS,
-                	top: lv.iSubItem,
+                	top: lv.iSubItem + 1, // 0 stands for the whole row
                 	..Default::default()
                 };
                 if 0 == unsafe { winuser::SendMessageW(self.base.hwnd, commctrl::LVM_GETSUBITEMRECT, lv.iItem as usize, &mut rc as *mut _ as isize) } {
