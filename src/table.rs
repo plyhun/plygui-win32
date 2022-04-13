@@ -67,7 +67,7 @@ impl WindowsTable {
         }
     }
     fn add_cell_inner(&mut self, base: &mut MemberBase, x: usize, y: usize) {
-        let (member, control, adapter, _) = unsafe { Table::adapter_base_parts_mut(base) };
+        let (member, _, adapter, _) = unsafe { Table::adapter_base_parts_mut(base) };
 
         let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
         adapter.adapter.spawn_item_view(&[x, y], this).map(|mut item| {
@@ -97,8 +97,8 @@ impl WindowsTable {
                     panic!("Could not get cell rect at index [{}, {}]", x, y);
                 }
 
-                let w = utils::coord_to_size(rc.right - rc.left);
-                let h = utils::coord_to_size(rc.bottom - rc.top);
+                let w = utils::coord_to_size(rc.right - rc.left - 2);
+                let h = utils::coord_to_size(rc.bottom - rc.top - 2);
                 item.set_layout_width(layout::Size::Exact(w));
                 item.set_layout_height(layout::Size::Exact(h));
                 item.on_added_to_container(this, 0, 0, w, h);
@@ -131,6 +131,8 @@ impl WindowsTable {
     unsafe fn redraw_visible(&mut self) {
     	let color = winuser::GetSysColor(winuser::COLOR_3DFACE);
 		winuser::SendMessageW(self.base.hwnd, commctrl::LVM_SETBKCOLOR, 0, color as isize);
+		winuser::SendMessageW(self.base.hwnd, commctrl::LVM_SETTEXTCOLOR, 0, color as isize);
+		winuser::SendMessageW(self.base.hwnd, commctrl::LVM_SETTEXTBKCOLOR, 0, color as isize);
 		
 		let (w, _) = common::size_hwnd(self.base.hwnd);
     	
@@ -248,8 +250,8 @@ impl ControlInner for WindowsTable {
             0,
             WINDOW_CLASS.as_ptr(),
             "",
-            winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::WS_VISIBLE | commctrl::LVS_EX_DOUBLEBUFFER
-                     | winuser::WS_BORDER | winuser::WS_CHILD | winapi::um::commctrl::LVS_REPORT,
+            winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::WS_VISIBLE | commctrl::LVS_EX_DOUBLEBUFFER/* | commctrl::LVS_NOCOLUMNHEADER */
+                     | winuser::WS_EX_CLIENTEDGE | winuser::WS_CHILD | winapi::um::commctrl::LVS_REPORT | commctrl::LVS_EX_BORDERSELECT,
             selfptr,
         );
         control.coords = Some((px as i32, py as i32));
@@ -407,8 +409,8 @@ unsafe extern "system" fn handler<T: controls::Table>(hwnd: windef::HWND, msg: m
                         	let color = winuser::GetSysColor(winuser::COLOR_3DFACE);
 							custom_draw.clrText = color;
                             custom_draw.clrTextBk = color;
-                        	return commctrl::CDRF_NOTIFYPOSTPAINT | commctrl::CDRF_NOTIFYSUBITEMDRAW;
-                        },
+                        	return commctrl::CDRF_NOTIFYPOSTPAINT | commctrl::CDRF_NOTIFYSUBITEMDRAW | commctrl::CDRF_NEWFONT;
+                        }
 		                commctrl::CDDS_ITEMPOSTPAINT => {
 		                	redraw_row(custom_draw.nmcd.dwItemSpec as i32, hwnd, &mut custom_draw.nmcd.rc, None);
 		                }
@@ -427,13 +429,6 @@ unsafe extern "system" fn handler<T: controls::Table>(hwnd: windef::HWND, msg: m
             
             let table = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
 			table.redraw_visible();
-        }
-        winuser::WM_CTLCOLORSTATIC => {
-            let hdc = wparam as windef::HDC;
-            wingdi::SetTextColor(hdc, wingdi::RGB(0, 0, 0));
-            wingdi::SetBkMode(hdc, wingdi::TRANSPARENT as i32);
-
-            return wingdi::GetStockObject(wingdi::NULL_BRUSH as i32) as isize;
         }
         winuser::WM_VSCROLL | winuser::WM_MOUSEWHEEL => {
             winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::FALSE);
