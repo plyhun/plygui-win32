@@ -110,7 +110,6 @@ impl WindowsTable {
                     unsafe { common::log_error(); }
                     panic!("Could not get cell rect at index [{}, {}]", x, y);
                 }
-
                 let w = utils::coord_to_size(rc.right - rc.left - 2);
                 let h = utils::coord_to_size(rc.bottom - rc.top - 2);
                 item.set_layout_width(layout::Size::Exact(w));
@@ -454,18 +453,41 @@ unsafe extern "system" fn handler<T: controls::Table>(hwnd: windef::HWND, msg: m
     commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
 }
 unsafe fn column_resized(y: i32, hwnd: windef::HWND) {
-    let width = winuser::SendMessageW(hwnd, commctrl::LVM_GETCOLUMNWIDTH, y as usize, 0);
+    let width = winuser::SendMessageW(hwnd, commctrl::LVM_GETCOLUMNWIDTH, y as usize, 0) as u16;
     if 0 == width {
-        common::log_error();
-    	panic!("Cannot get width for column {}", y);
+        return;
     }
     let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
     this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.column_at_mut(y as usize).map(|column| column.cells.iter_mut().for_each(|cell| {
         cell.as_mut().and_then(|cell| cell.control.as_mut()).map(|item| {
             let (_, height) = item.size();
-            item.measure(cmp::max(0, width) as u16, height);
+            item.set_layout_width(layout::Size::Exact(width));
+            item.measure(cmp::max(0, width), height);
+            item.draw(None);
         });    
     }));
+    /*
+    let mut rc = windef::RECT {
+        left: commctrl::LVIR_BOUNDS,
+    	//top: lv.iSubItem + 1, // 0 stands for the whole row
+    	..Default::default()
+    };
+    if 0 == winuser::SendMessageW(hwnd, commctrl::LVM_GETITEMRECT, y as usize, &mut rc as *mut _ as isize) {
+        //common::log_error();
+        return;
+        //panic!("Could not get column rect at index {}", y);
+    }
+    let width = utils::coord_to_size(rc.right - rc.left);
+    let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
+    this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.column_at_mut(y as usize).map(|column| column.cells.iter_mut().for_each(|cell| {
+        cell.as_mut().and_then(|cell| cell.control.as_mut()).map(|item| {
+            let (_, height) = item.size();
+            item.set_layout_width(layout::Size::Exact(width));
+            item.measure(cmp::max(0, width), height);
+            item.draw(Some((rc.left, rc.top)));
+        });    
+    }));
+    */
 }
 unsafe fn set_header_height(hdr_hwnd: windef::HWND, height: i32) {
     let hdc = winuser::GetDC(hdr_hwnd);
