@@ -46,15 +46,15 @@ impl WindowsTable {
             panic!("Could not get the table header");
         }
         unsafe { set_header_height(hdr_hwnd as windef::HWND, -1); }
-        /*let hdi = commctrl::HDITEMW {
-            mask: commctrl::HDI_FORMAT,
+        let hdi = commctrl::HDITEMW {
+            mask: commctrl::HDI_FORMAT | commctrl::HDI_DI_SETITEM,
             fmt: commctrl::HDF_OWNERDRAW,
             ..Default::default()
         };
         if 0 == unsafe { winuser::SendMessageW(hdr_hwnd as windef::HWND, commctrl::HDM_SETITEMW, index, &hdi as *const _ as isize) } {
             unsafe { common::log_error(); }
             panic!("Could not insert a column headed at index {}", index);
-        }*/
+        }
         self.data.cols.insert(index, TableColumn {
             cells: std::iter::repeat_with(|| None).enumerate().take(self.height).map(|(y, none)| {
                 let mut lv = commctrl::LVITEMW {
@@ -265,7 +265,7 @@ impl ControlInner for WindowsTable {
             WINDOW_CLASS.as_ptr(),
             "",
             winuser::WS_BORDER | winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::WS_VISIBLE | commctrl::LVS_EX_DOUBLEBUFFER/* | commctrl::LVS_NOCOLUMNHEADER */
-                     | winuser::WS_EX_CLIENTEDGE | winuser::WS_CHILD | winapi::um::commctrl::LVS_REPORT | commctrl::LVS_EX_BORDERSELECT,
+                     | winuser::WS_EX_CLIENTEDGE | winuser::WS_CHILD | commctrl::LVS_REPORT/* | commctrl::LVS_EX_BORDERSELECT*//* | commctrl::LVS_EX_TRANSPARENTBKGND*/  | commctrl::LVS_OWNERDRAWFIXED ,
             selfptr,
         );
         control.coords = Some((px as i32, py as i32));
@@ -273,6 +273,7 @@ impl ControlInner for WindowsTable {
         if 0 == unsafe { winuser::SendMessageW(self.base.hwnd, commctrl::LVM_SETITEMCOUNT, self.width, commctrl::LVSICF_NOINVALIDATEALL) } {
             unsafe { common::log_error(); }
         }
+        //unsafe { winuser::SendMessageW(self.base.hwnd, commctrl::LVM_SETEXTENDEDLISTVIEWSTYLE , 0, (commctrl::LVS_EX_DOUBLEBUFFER | commctrl::LVS_EX_BORDERSELECT | commctrl::LVS_EX_TRANSPARENTBKGND) as isize); }
         unsafe { self.redraw_visible(); }
         
         let (member, _, adapter, _) = unsafe { Table::adapter_base_parts_mut(member) };
@@ -411,14 +412,16 @@ unsafe extern "system" fn handler<T: controls::Table>(hwnd: windef::HWND, msg: m
     let this: &mut Table = mem::transmute(param);
     match msg {
         winuser::WM_DRAWITEM => {
-            dbg!("draw item!");
+            let draw_item = &mut *(lparam as winuser::LPDRAWITEMSTRUCT);
+            redraw_row(draw_item.itemID as i32, hwnd, &mut draw_item.rcItem, None);
+            return minwindef::TRUE as isize;
         }
         winuser::WM_NOTIFY => {
     		match (&*(lparam as winuser::LPNMHDR)).code {
     		    commctrl::HDM_LAYOUT => {
         		    dbg!("layout 1");
     		    }
-    		    commctrl::HDN_BEGINTRACKW | commctrl::HDN_BEGINTRACKA => return minwindef::TRUE as isize, //temporary disable column resize
+    		    //commctrl::HDN_BEGINTRACKW | commctrl::HDN_BEGINTRACKA => return minwindef::TRUE as isize, //temporary disable column resize
     		    commctrl::HDN_ITEMCHANGEDW => {
         		    let header = &mut *(lparam as commctrl::LPNMHEADERW);
     				column_resized(header.iItem, hwnd);
@@ -427,27 +430,6 @@ unsafe extern "system" fn handler<T: controls::Table>(hwnd: windef::HWND, msg: m
     		        let header = &mut *(lparam as commctrl::LPNMHEADERA);
     				column_resized(header.iItem, hwnd);
     		    }                
-    			commctrl::NM_CUSTOMDRAW => {
-    				 let custom_draw = &mut *(lparam as commctrl::LPNMLVCUSTOMDRAW);
-                     match custom_draw.nmcd.dwDrawStage {               
-		                commctrl::CDDS_PREPAINT => return commctrl::CDRF_NOTIFYITEMDRAW | 0x80 /*commctrl::CDRF_NOTIFYITEMPOSTERASE*/ | commctrl::CDRF_NOTIFYPOSTERASE,
-			            commctrl::CDDS_ITEMPOSTERASE | commctrl::CDDS_ITEMPREERASE | commctrl::CDDS_POSTERASE | commctrl::CDDS_PREERASE => {
-			            	dbg!("erase");
-			            }
-		                commctrl::CDDS_ITEMPREPAINT | commctrl::CDDS_SUBITEM => {
-                            let color = winuser::GetSysColor(winuser::COLOR_3DFACE);
-							custom_draw.clrText = color;
-                            custom_draw.clrTextBk = color;
-                        	return commctrl::CDRF_NOTIFYPOSTPAINT | commctrl::CDRF_NOTIFYSUBITEMDRAW | commctrl::CDRF_NEWFONT;
-                        }
-		                commctrl::CDDS_ITEMPOSTPAINT => {
-                            redraw_row(custom_draw.nmcd.dwItemSpec as i32, hwnd, &mut custom_draw.nmcd.rc, None);
-                            return commctrl::CDRF_NEWFONT;
-		                }
-		                _ => {}
-    				 }
-    				 return commctrl::CDRF_DODEFAULT;
-    			}
     			_ => {}
             }
         }
@@ -471,13 +453,19 @@ unsafe extern "system" fn handler<T: controls::Table>(hwnd: windef::HWND, msg: m
 
     commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
 }
-unsafe fn column_resized(x: i32, hwnd: windef::HWND) {
-    let width = winuser::SendMessageW(hwnd, commctrl::LVM_GETCOLUMNWIDTH, x as usize, 0);
+unsafe fn column_resized(y: i32, hwnd: windef::HWND) {
+    let width = winuser::SendMessageW(hwnd, commctrl::LVM_GETCOLUMNWIDTH, y as usize, 0);
     if 0 == width {
         common::log_error();
-    	panic!("Cannot get width for column {}", x);
+    	panic!("Cannot get width for column {}", y);
     }
-    dbg!(x, width);
+    let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
+    this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.column_at_mut(y as usize).map(|column| column.cells.iter_mut().for_each(|cell| {
+        cell.as_mut().and_then(|cell| cell.control.as_mut()).map(|item| {
+            let (_, height) = item.size();
+            item.measure(cmp::max(0, width) as u16, height);
+        });    
+    }));
 }
 unsafe fn set_header_height(hdr_hwnd: windef::HWND, height: i32) {
     let hdc = winuser::GetDC(hdr_hwnd);
@@ -527,8 +515,7 @@ unsafe fn redraw_row(y: i32, hwnd: windef::HWND, rc: &mut windef::RECT, action: 
                 		item.draw(None);
                     }
             	}
-                dbg!(&rc);
-            	winuser::ShowWindow(item.native_id() as windef::HWND, winuser::SW_SHOW);
+                winuser::ShowWindow(item.native_id() as windef::HWND, winuser::SW_SHOW);
                 winuser::SetWindowPos(
                 	item.native_id() as windef::HWND, 
                 	ptr::null_mut(), 
