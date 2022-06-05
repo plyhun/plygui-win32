@@ -45,7 +45,7 @@ impl WindowsTable {
             unsafe { common::log_error(); }
             panic!("Could not get the table header");
         }
-        unsafe { set_header_height(hdr_hwnd as windef::HWND, -1); }
+        //unsafe { set_header_height(hdr_hwnd as windef::HWND, -1); }
         let hdi = commctrl::HDITEMW {
             mask: commctrl::HDI_FORMAT | commctrl::HDI_DI_SETITEM,
             fmt: commctrl::HDF_OWNERDRAW,
@@ -74,7 +74,9 @@ impl WindowsTable {
                 none
             }).collect::<Vec<_>>(),
             control: item.map(|mut item| {
-                item.on_added_to_container(this, 0, 0, utils::coord_to_size(pw as i32 - DEFAULT_PADDING) as u16, utils::coord_to_size(ph as i32 - DEFAULT_PADDING) as u16);
+            	let width = utils::coord_to_size(pw as i32 - DEFAULT_PADDING);
+            	let height = utils::coord_to_size(ph as i32 - DEFAULT_PADDING);
+            	item.on_added_to_container(this, 0, 0, width, height);
                 item
             }),
             native: index as isize,
@@ -92,7 +94,7 @@ impl WindowsTable {
                 mask: commctrl::LVIF_TEXT,// | commctrl::LVIF_PARAM,
                 iItem: y as i32, 
                 iSubItem: x as i32,
-                cchTextMax: title.len() as i32 + 1,
+                cchTextMax: title.len() as i32,
                 pszText: title.as_mut_ptr(),
                 //lParam: unsafe { item.native_id() as isize },
                 ..Default::default()
@@ -103,7 +105,7 @@ impl WindowsTable {
             } else {
                 let mut rc = windef::RECT {
                     left: commctrl::LVIR_BOUNDS,
-                	top: lv.iSubItem + 1, // 0 stands for the whole row
+                	top: lv.iSubItem,
                 	..Default::default()
                 };
                 if 0 == unsafe { winuser::SendMessageW(self.base.hwnd, commctrl::LVM_GETSUBITEMRECT, lv.iItem as usize, &mut rc as *mut _ as isize) } {
@@ -453,18 +455,19 @@ unsafe extern "system" fn handler<T: controls::Table>(hwnd: windef::HWND, msg: m
     commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
 }
 unsafe fn column_resized(y: i32, hwnd: windef::HWND) {
-    let width = winuser::SendMessageW(hwnd, commctrl::LVM_GETCOLUMNWIDTH, y as usize, 0) as u16;
-    if 0 == width {
+    let width = winuser::SendMessageW(hwnd, commctrl::LVM_GETCOLUMNWIDTH, y as usize, 0) as i32;
+    if 1 > width {
         return;
     }
     let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
     this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.column_at_mut(y as usize).map(|column| column.cells.iter_mut().for_each(|cell| {
         cell.as_mut().and_then(|cell| cell.control.as_mut()).map(|item| {
             let (_, height) = item.size();
+            let width = utils::coord_to_size(width - 2);
             item.set_layout_width(layout::Size::Exact(width));
-            item.measure(cmp::max(0, width), height);
+            item.measure(width, height);
             item.draw(None);
-        });    
+        });
     }));
     /*
     let mut rc = windef::RECT {

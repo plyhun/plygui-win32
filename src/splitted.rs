@@ -554,8 +554,8 @@ unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UIN
     
     let s: &mut Splitted = mem::transmute(ww);
     let s2: &mut Splitted = mem::transmute(ww);
-    if let Some(proc) = s.inner().inner().inner().inner().inner().base.proc_handler.as_proc() {
-        proc(s2, msg, wparam, lparam)
+    if let Some(_proc) = s.inner().inner().inner().inner().inner().base.proc_handler.as_proc() {
+        _proc(s2, msg, wparam, lparam)
     } else {
         winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
     }
@@ -579,7 +579,6 @@ unsafe extern "system" fn handler<T: controls::Splitted>(this: &mut Splitted, ms
                 }
                 this.set_skip_draw(false);
             }
-
             if msg != common::WM_UPDATE_INNER {
                 this.call_on_size::<T>(width, height);
             } else {
@@ -620,7 +619,6 @@ unsafe extern "system" fn handler<T: controls::Splitted>(this: &mut Splitted, ms
                     }
                 }
             }
-
             if updated {
                 let packed = ((height as i32) << 16) + width as i32;
                 winuser::SendMessageW(hwnd, common::WM_UPDATE_INNER, 0, packed as isize);
