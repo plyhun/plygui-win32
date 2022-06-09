@@ -193,6 +193,11 @@ impl TableInner for WindowsTable {
 	        b.assume_init()
         }
     }
+    fn resize(&mut self, member: &mut MemberBase, control: &mut ControlBase, adapted: &mut AdaptedBase, width: usize, height: usize) -> (usize, usize) {
+        let oldSize = self.size(member, control, adapted);
+        let maxSize = (cmp::max(width, oldSize.0), cmp::max(height, oldSize.1));
+        oldSize
+    }
 }
 impl ItemClickableInner for WindowsTable {
     fn item_click(&mut self, indexes: &[usize], item_view: &mut dyn controls::Control, skip_callbacks: bool) {
