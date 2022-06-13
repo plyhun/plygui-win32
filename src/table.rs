@@ -126,11 +126,28 @@ impl WindowsTable {
             }
         }).unwrap_or_else(|| {});
     }
-    fn remove_column_inner(&mut self, base: &mut MemberBase, index: usize) {
-        
+    fn remove_column_inner(&mut self, member: &mut MemberBase, index: usize) {
+        self.data.cols.get_mut(index).map(|col| (0..col.cells.len()).rev().for_each(|y| {
+            col.cells.get_mut(y).map(|cell| {
+                cell.as_mut().map(|cell| cell.control.as_mut().map(|ref mut control| {
+                    let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
+                    control.on_removed_from_container(this);
+                }));
+            });
+            col.cells.remove(y);
+        }));
+        self.data.cols.remove(index);
     }
-    fn remove_cell_inner(&mut self, base: &mut MemberBase, x: usize, y: usize) {
-        
+    fn remove_cell_inner(&mut self, member: &mut MemberBase, x: usize, y: usize) {
+        self.data.cols.get_mut(x).map(|col| {
+            col.cells.get_mut(y).map(|cell| {
+                cell.as_mut().map(|cell| cell.control.as_mut().map(|ref mut control| {
+                    let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
+                    control.on_removed_from_container(this);
+                }));
+            });
+            col.cells.remove(y);
+        });
     }
     fn change_column_inner(&mut self, base: &mut MemberBase, index: usize) {
         
@@ -195,7 +212,19 @@ impl TableInner for WindowsTable {
     }
     fn resize(&mut self, member: &mut MemberBase, control: &mut ControlBase, adapted: &mut AdaptedBase, width: usize, height: usize) -> (usize, usize) {
         let oldSize = self.size(member, control, adapted);
-        let maxSize = (cmp::max(width, oldSize.0), cmp::max(height, oldSize.1));
+        let (maxWidth, maxHeight) = (cmp::max(width, oldSize.0), cmp::max(height, oldSize.1));
+        let (minWidth, minHeight) = (cmp::min(width, oldSize.0), cmp::min(height, oldSize.1));
+        (minWidth..maxWidth).rev().for_each(|x| 
+            if self.data.cols.len() > x {
+                if oldSize.0 > x {
+                    self.remove_column_inner(member, x);
+                }
+            } else {
+                if oldSize.0 < x {
+                     self.add_column_inner(member, x);
+                }
+            }
+        );
         oldSize
     }
 }
