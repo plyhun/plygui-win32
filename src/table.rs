@@ -127,26 +127,20 @@ impl WindowsTable {
         }).unwrap_or_else(|| {});
     }
     fn remove_column_inner(&mut self, member: &mut MemberBase, index: usize) {
+        let hwnd = self.base.hwnd;
         self.data.cols.get_mut(index).map(|col| (0..col.cells.len()).rev().for_each(|y| {
-            col.cells.get_mut(y).map(|cell| {
-                cell.as_mut().map(|cell| cell.control.as_mut().map(|ref mut control| {
-                    let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
-                    control.on_removed_from_container(this);
-                }));
-            });
-            col.cells.remove(y);
+            remove_cell_from_col(hwnd, col, member, index, y);
         }));
-        self.data.cols.remove(index);
+        if minwindef::TRUE == unsafe { winuser::SendMessageW(self.base.hwnd, commctrl::LVM_DELETECOLUMN, index, 0) as i32 } {
+            self.data.cols.remove(index);
+        } else {
+            panic!("Could not delete column {}", index);
+        }
     }
     fn remove_cell_inner(&mut self, member: &mut MemberBase, x: usize, y: usize) {
+        let hwnd = self.base.hwnd;
         self.data.cols.get_mut(x).map(|col| {
-            col.cells.get_mut(y).map(|cell| {
-                cell.as_mut().map(|cell| cell.control.as_mut().map(|ref mut control| {
-                    let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
-                    control.on_removed_from_container(this);
-                }));
-            });
-            col.cells.remove(y);
+            remove_cell_from_col(hwnd, col, member, x, y);
         });
     }
     fn change_column_inner(&mut self, base: &mut MemberBase, index: usize) {
@@ -589,4 +583,25 @@ unsafe fn redraw_row(y: i32, hwnd: windef::HWND, rc: &mut windef::RECT, action: 
         });    
     }));
 }
-
+fn remove_cell_from_col<T: Sized>(hwnd: windef::HWND, col: &mut TableColumn<T>, member: &mut MemberBase, x: usize, y: usize) {
+    col.cells.get_mut(y).map(|cell| {
+        cell.as_mut().map(|cell| cell.control.as_mut().map(|ref mut control| {
+            let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
+            control.on_removed_from_container(this);
+            let lv = commctrl::LVITEMW {
+                mask: commctrl::LVIF_TEXT,// | commctrl::LVIF_PARAM,
+                iItem: y as i32, 
+                iSubItem: x as i32,
+                cchTextMax: 0,
+                pszText: ptr::null_mut(),
+                //lParam: unsafe { item.native_id() as isize },
+                ..Default::default()
+            };
+            if 0 == unsafe { winuser::SendMessageW(hwnd, commctrl::LVM_SETITEMW, 0, &lv as *const _ as isize) } {
+                unsafe { common::log_error(); }
+                panic!("Could not clear a table cell at index [{}, {}]", x, y);
+            }
+        }));
+    });
+    col.cells.remove(y);
+}
