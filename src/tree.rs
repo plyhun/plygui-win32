@@ -249,6 +249,7 @@ impl ControlInner for WindowsTree {
                 common::hinstance(),
                 selfptr,
             );
+            common::set_default_font(hwnd_tree);
             commctrl::SetWindowSubclass(hwnd_tree, Some(ahandler), common::subclass_id(WINDOW_CLASS_TREE.as_ptr()) as usize, selfptr as usize);
             (hwnd, hwnd_tree, id)
         };

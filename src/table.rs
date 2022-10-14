@@ -4,7 +4,8 @@ use winapi::um::commctrl;
 const CLASS_ID: &str = commctrl::WC_LISTVIEW;
 
 lazy_static! {
-    pub static ref WINDOW_CLASS: Vec<u16> = OsStr::new(CLASS_ID).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+    pub static ref WINDOW_CLASS_LV: Vec<u16> = OsStr::new(CLASS_ID).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+    pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
 }
 
 pub type Table = AMember<AControl<AContainer<AAdapted<ATable<WindowsTable>>>>>;
@@ -12,6 +13,7 @@ pub type Table = AMember<AControl<AContainer<AAdapted<ATable<WindowsTable>>>>>;
 #[repr(C)]
 pub struct WindowsTable {
     base: WindowsControlBase<Table>,
+    hwnd_lv: windef::HWND,
     data: TableData<WinPtr>,
     on_item_click: Option<callbacks::OnItemClick>,
     width: usize, height: usize,
@@ -36,11 +38,11 @@ impl WindowsTable {
             iSubItem: index as i32,
             ..Default::default()
         };
-        if index as isize != unsafe { winuser::SendMessageW(self.base.hwnd, commctrl::LVM_INSERTCOLUMNW, index, &lvc as *const _ as isize) } {
+        if index as isize != unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_INSERTCOLUMNW, index, &lvc as *const _ as isize) } {
             unsafe { common::log_error(); }
             panic!("Could not insert a table column at index {}", index);
         }
-        let hdr_hwnd = unsafe { winuser::SendMessageW(self.base.hwnd, commctrl::LVM_GETHEADER, 0, 0) };
+        let hdr_hwnd = unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_GETHEADER, 0, 0) };
         if 0 == hdr_hwnd {
             unsafe { common::log_error(); }
             panic!("Could not get the table header");
@@ -63,10 +65,10 @@ impl WindowsTable {
                     iItem: y as i32, 
                     ..Default::default()
                 };
-                if 0 == unsafe { winuser::SendMessageW(self.base.hwnd, commctrl::LVM_GETITEMW, 0, &lv as *const _ as isize) } {
+                if 0 == unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_GETITEMW, 0, &lv as *const _ as isize) } {
                     lv.mask = commctrl::LVIF_PARAM;
                     lv.lParam = item.as_ref().map(|item| unsafe { item.native_id() as isize }).unwrap_or(0);
-                    if y as isize != unsafe { winuser::SendMessageW(self.base.hwnd, commctrl::LVM_INSERTITEMW, 0, &lv as *const _ as isize) } {
+                    if y as isize != unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_INSERTITEMW, 0, &lv as *const _ as isize) } {
                         unsafe { common::log_error(); }
                         panic!("Could not insert a table row at index [{}, {}]", index, y);
                     } 
@@ -99,7 +101,7 @@ impl WindowsTable {
                 //lParam: unsafe { item.native_id() as isize },
                 ..Default::default()
             };
-            if 0 == unsafe { winuser::SendMessageW(self.base.hwnd, commctrl::LVM_SETITEMW, 0, &lv as *const _ as isize) } {
+            if 0 == unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_SETITEMW, 0, &lv as *const _ as isize) } {
                 unsafe { common::log_error(); }
                 panic!("Could not insert a table cell at index [{}, {}]", x, y);
             } else {
@@ -108,7 +110,7 @@ impl WindowsTable {
                 	top: lv.iSubItem,
                 	..Default::default()
                 };
-                if 0 == unsafe { winuser::SendMessageW(self.base.hwnd, commctrl::LVM_GETSUBITEMRECT, lv.iItem as usize, &mut rc as *mut _ as isize) } {
+                if 0 == unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_GETSUBITEMRECT, lv.iItem as usize, &mut rc as *mut _ as isize) } {
                     unsafe { common::log_error(); }
                     panic!("Could not get cell rect at index [{}, {}]", x, y);
                 }
@@ -151,16 +153,16 @@ impl WindowsTable {
     }
     fn force_scrollbar(&mut self) {
         unsafe {
-            winuser::ShowScrollBar(self.base.hwnd, winuser::SB_VERT as i32, minwindef::TRUE);
+            winuser::ShowScrollBar(self.hwnd_lv, winuser::SB_VERT as i32, minwindef::TRUE);
         }
     }
     unsafe fn redraw_visible(&mut self) {
     	let color = winuser::GetSysColor(winuser::COLOR_3DFACE);
-		winuser::SendMessageW(self.base.hwnd, commctrl::LVM_SETBKCOLOR, 0, color as isize);
-		winuser::SendMessageW(self.base.hwnd, commctrl::LVM_SETTEXTCOLOR, 0, color as isize);
-		winuser::SendMessageW(self.base.hwnd, commctrl::LVM_SETTEXTBKCOLOR, 0, color as isize);
+		winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_SETBKCOLOR, 0, color as isize);
+		winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_SETTEXTCOLOR, 0, color as isize);
+		winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_SETTEXTBKCOLOR, 0, color as isize);
 		
-		let (w, _) = common::size_hwnd(self.base.hwnd);
+		let (w, _) = common::size_hwnd(self.hwnd_lv);
     	
     	/*let mut rc: windef::RECT = Default::default();
     	
@@ -170,13 +172,14 @@ impl WindowsTable {
     			redraw_breath(&mut item.branches, hwnd_tree, hwnd, rc, w);
     		}
     	}
-    	redraw_breath(&mut self.items.0, self.hwnd_tree, self.base.hwnd, &mut rc, w);*/
+    	redraw_breath(&mut self.items.0, self.hwnd_tree, self.hwnd_lv, &mut rc, w);*/
     }
 }
 impl<O: controls::Table> NewTableInner<O> for WindowsTable {
     fn with_uninit_params(_: &mut mem::MaybeUninit<O>, width: usize, height: usize) -> Self {
         WindowsTable {
-            base: WindowsControlBase::with_handler(Some(handler::<O>)),
+            base: WindowsControlBase::with_wndproc(Some(handler::<O>)),
+            hwnd_lv: 0 as windef::HWND,
             data: Default::default(),
             on_item_click: None,
             width, height
@@ -237,7 +240,7 @@ impl ItemClickableInner for WindowsTable {
 }
 impl AdaptedInner for WindowsTable {
     fn on_item_change(&mut self, base: &mut MemberBase, value: adapter::Change) {
-        if !self.base.hwnd.is_null() {
+        if !self.hwnd_lv.is_null() {
             match value {
                 adapter::Change::Added(at, node) => {
                     if adapter::Node::Leaf == node || at.len() > 1 {
@@ -283,27 +286,54 @@ impl ControlInner for WindowsTable {
     fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent: &dyn controls::Container, px: i32, py: i32, pw: u16, ph: u16) {
         let selfptr = member as *mut _ as *mut c_void;
         self.base.hwnd = unsafe { parent.native_container_id() as windef::HWND }; // required for measure, as we don't have own hwnd yet
-        let (w, h, _) = self.measure(member, control, pw, ph);
-        self.base.create_control_hwnd(
-            px as i32,
-            py as i32,
-            w as i32,
-            h as i32,
-            self.base.hwnd,
-            0,
-            WINDOW_CLASS.as_ptr(),
-            "",
-            winuser::WS_BORDER | winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::WS_VISIBLE | commctrl::LVS_EX_DOUBLEBUFFER/* | commctrl::LVS_NOCOLUMNHEADER */
+        let (hwnd, hwnd_lv, id) = unsafe {
+            self.base.hwnd = parent.native_container_id() as windef::HWND; // required for measure, as we don't have own hwnd yet
+            let (width, height, _) = self.measure(member, control, pw, ph);
+            let (hwnd, id) = common::create_control_hwnd(
+                px,
+                py,
+                width as i32,
+                height as i32,
+                self.base.hwnd,
+                winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN,
+                WINDOW_CLASS.as_ptr(),
+                "",
+                0,
+                selfptr,
+                None,
+            );
+            let hwnd_lv = winuser::CreateWindowExW(
+                commctrl::LVS_EX_DOUBLEBUFFER,
+                WINDOW_CLASS_LV.as_ptr(),
+                WINDOW_CLASS.as_ptr(),
+	            winuser::WS_BORDER | winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::WS_VISIBLE | commctrl::LVS_EX_DOUBLEBUFFER/* | commctrl::LVS_NOCOLUMNHEADER */
                      | winuser::WS_EX_CLIENTEDGE | winuser::WS_CHILD | commctrl::LVS_REPORT/* | commctrl::LVS_EX_BORDERSELECT*//* | commctrl::LVS_EX_TRANSPARENTBKGND*/  | commctrl::LVS_OWNERDRAWFIXED ,
-            selfptr,
-        );
-        control.coords = Some((px as i32, py as i32));
+                px,
+                py,
+                width as i32,
+                height as i32,
+                hwnd,
+                ptr::null_mut(),
+                common::hinstance(),
+                ptr::null_mut(),
+            );
+            common::set_default_font(hwnd_lv);
+            commctrl::SetWindowSubclass(hwnd_lv, Some(ahandler), common::subclass_id(WINDOW_CLASS_LV.as_ptr()) as usize, selfptr as usize);
+            (hwnd, hwnd_lv, id)
+        };
+        self.base.hwnd = hwnd;
+        self.hwnd_lv = hwnd_lv;
+        self.base.subclass_id = id;
+        control.coords = Some((px, py));
         
-        if 0 == unsafe { winuser::SendMessageW(self.base.hwnd, commctrl::LVM_SETITEMCOUNT, self.width, commctrl::LVSICF_NOINVALIDATEALL) } {
+        if 0 == unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_SETITEMCOUNT, self.width, commctrl::LVSICF_NOINVALIDATEALL) } {
             unsafe { common::log_error(); }
         }
-        //unsafe { winuser::SendMessageW(self.base.hwnd, commctrl::LVM_SETEXTENDEDLISTVIEWSTYLE , 0, (commctrl::LVS_EX_DOUBLEBUFFER | commctrl::LVS_EX_BORDERSELECT | commctrl::LVS_EX_TRANSPARENTBKGND) as isize); }
-        unsafe { self.redraw_visible(); }
+        //unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_SETEXTENDEDLISTVIEWSTYLE , 0, (commctrl::LVS_EX_DOUBLEBUFFER | commctrl::LVS_EX_BORDERSELECT | commctrl::LVS_EX_TRANSPARENTBKGND) as isize); }
+        unsafe { 
+        	winuser::SetWindowLongPtrW(self.hwnd_lv, winuser::GWLP_USERDATA, selfptr as WinPtr); 
+        	self.redraw_visible();
+        }
         
         let (member, _, adapter, _) = unsafe { Table::adapter_base_parts_mut(member) };
 
@@ -320,8 +350,8 @@ impl ControlInner for WindowsTable {
 //            let self2: &mut Table = unsafe { utils::base_to_impl_mut(member) };
 //            child.on_removed_from_container(self2);
 //        }
-        common::destroy_hwnd(self.base.hwnd, self.base.subclass_id, None);
-        self.base.hwnd = 0 as windef::HWND;
+        common::destroy_hwnd(self.hwnd_lv, self.base.subclass_id, None);
+        self.hwnd_lv = 0 as windef::HWND;
         self.base.subclass_id = 0;
     }
 
@@ -371,7 +401,7 @@ impl ContainerInner for WindowsTable {
 }
 impl HasLayoutInner for WindowsTable {
     fn on_layout_changed(&mut self, _base: &mut MemberBase) {
-        let hwnd = self.base.hwnd;
+        let hwnd = self.hwnd_lv;
         if !hwnd.is_null() {
             self.base.invalidate();
         }
@@ -381,7 +411,7 @@ impl HasNativeIdInner for WindowsTable {
     type Id = common::Hwnd;
 
     fn native_id(&self) -> Self::Id {
-        self.base.hwnd.into()
+        self.hwnd_lv.into()
     }
 }
 impl MemberInner for WindowsTable {}
@@ -432,13 +462,69 @@ impl Spawnable for WindowsTable {
         Self::with_adapter_initial_size(Box::new(types::imp::StringVecAdapter::<crate::imp::Text>::new()), 0, 0).into_control()
     }
 }
-
-unsafe extern "system" fn handler<T: controls::Table>(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
+unsafe fn register_window_class() -> Vec<u16> {
+    let class_name = OsStr::new("PlyguiWin32Table").encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
+    let class = winuser::WNDCLASSEXW {
+        cbSize: mem::size_of::<winuser::WNDCLASSEXW>() as minwindef::UINT,
+        style: winuser::CS_DBLCLKS,
+        lpfnWndProc: Some(window_handler),
+        cbClsExtra: 0,
+        cbWndExtra: 0,
+        hInstance: libloaderapi::GetModuleHandleW(ptr::null()),
+        hIcon: winuser::LoadIconW(ptr::null_mut(), winuser::IDI_APPLICATION),
+        hCursor: winuser::LoadCursorW(ptr::null_mut(), winuser::IDC_ARROW),
+        hbrBackground: ptr::null_mut(),
+        lpszMenuName: ptr::null(),
+        lpszClassName: class_name.as_ptr(),
+        hIconSm: ptr::null_mut(),
+    };
+    winuser::RegisterClassExW(&class);
+    class_name
+}
+unsafe extern "system" fn ahandler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
     let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
         winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as WinPtr);
     }
-    let this: &mut Table = mem::transmute(param);
+    match msg {
+        winuser::WM_NOTIFY => {
+    		match (&*(lparam as winuser::LPNMHDR)).code {
+    		    commctrl::HDM_LAYOUT => {
+        		    dbg!("layout 1");
+    		    }
+    			_ => {}
+            }
+        }
+        commctrl::HDM_LAYOUT => {
+		    dbg!("layout 2");
+	    }
+        _ => {}
+    }
+    commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
+}
+unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
+    let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
+    if ww == 0 {
+        if winuser::WM_CREATE == msg {
+            let cs: &mut winuser::CREATESTRUCTW = mem::transmute(lparam);
+            winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, cs.lpCreateParams as WinPtr);
+        }
+        return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
+    }
+    
+    let table: &mut Table = mem::transmute(ww);
+    let table2: &mut Table = mem::transmute(ww);
+    if let Some(wproc) = table.inner().inner().inner().inner().inner().base.proc_handler.as_proc() {
+	    wproc(table2, msg, wparam, lparam)
+    } else if let Some(whandler) = table.inner().inner().inner().inner().inner().base.proc_handler.as_handler() {
+    	whandler(hwnd, msg, wparam, lparam, 0, 0)
+    } else {
+	    winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
+    }
+}
+unsafe extern "system" fn handler<T: controls::Table>(this: &mut Table, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
+	let hwnd = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.hwnd;
+	let hwnd_lv = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().hwnd_lv;
     match msg {
         winuser::WM_DRAWITEM => {
             let draw_item = &mut *(lparam as winuser::LPDRAWITEMSTRUCT);
