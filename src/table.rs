@@ -307,7 +307,7 @@ impl ControlInner for WindowsTable {
                 WINDOW_CLASS_LV.as_ptr(),
                 WINDOW_CLASS.as_ptr(),
 	            winuser::WS_BORDER | winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::WS_VISIBLE | commctrl::LVS_EX_DOUBLEBUFFER/* | commctrl::LVS_NOCOLUMNHEADER */
-                     | winuser::WS_EX_CLIENTEDGE | winuser::WS_CHILD | commctrl::LVS_REPORT/* | commctrl::LVS_EX_BORDERSELECT*//* | commctrl::LVS_EX_TRANSPARENTBKGND*/  | commctrl::LVS_OWNERDRAWFIXED ,
+                     | winuser::WS_EX_CLIENTEDGE | winuser::WS_CHILD | commctrl::LVS_REPORT/* | commctrl::LVS_EX_BORDERSELECT*/ | commctrl::LVS_EX_TRANSPARENTBKGND | commctrl::LVS_OWNERDRAWFIXED ,
                 px,
                 py,
                 width as i32,
@@ -487,45 +487,7 @@ unsafe extern "system" fn ahandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
         winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as WinPtr);
     }
     match msg {
-        winuser::WM_NOTIFY => {
-    		match (&*(lparam as winuser::LPNMHDR)).code {
-    		    commctrl::HDM_LAYOUT => {
-        		    dbg!("layout 1");
-    		    }
-    			_ => {}
-            }
-        }
-        commctrl::HDM_LAYOUT => {
-		    dbg!("layout 2");
-	    }
-        _ => {}
-    }
-    commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
-}
-unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
-    let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
-    if ww == 0 {
-        if winuser::WM_CREATE == msg {
-            let cs: &mut winuser::CREATESTRUCTW = mem::transmute(lparam);
-            winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, cs.lpCreateParams as WinPtr);
-        }
-        return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
-    }
-    
-    let table: &mut Table = mem::transmute(ww);
-    let table2: &mut Table = mem::transmute(ww);
-    if let Some(wproc) = table.inner().inner().inner().inner().inner().base.proc_handler.as_proc() {
-	    wproc(table2, msg, wparam, lparam)
-    } else if let Some(whandler) = table.inner().inner().inner().inner().inner().base.proc_handler.as_handler() {
-    	whandler(hwnd, msg, wparam, lparam, 0, 0)
-    } else {
-	    winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
-    }
-}
-unsafe extern "system" fn handler<T: controls::Table>(this: &mut Table, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
-	let hwnd = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.hwnd;
-	let hwnd_lv = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().hwnd_lv;
-    match msg {
+
         winuser::WM_DRAWITEM => {
             let draw_item = &mut *(lparam as winuser::LPDRAWITEMSTRUCT);
             redraw_row(draw_item.itemID as i32, hwnd, &mut draw_item.rcItem, None);
@@ -548,7 +510,46 @@ unsafe extern "system" fn handler<T: controls::Table>(this: &mut Table, msg: min
     			_ => {}
             }
         }
-        commctrl::HDM_LAYOUT => {
+        winuser::WM_MEASUREITEM => {
+		    dbg!("layout 1");
+	    }
+        winuser::WM_VSCROLL | winuser::WM_MOUSEWHEEL => {
+            winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::FALSE);
+        }
+        _ => {}
+    }
+    commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
+}
+unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
+    let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
+    if ww == 0 {
+        if winuser::WM_CREATE == msg {
+            let cs: &mut winuser::CREATESTRUCTW = mem::transmute(lparam);
+            winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, cs.lpCreateParams as WinPtr);
+        }
+        return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
+    }
+    match msg {
+        winuser::WM_MEASUREITEM => {
+		    dbg!("layout 3");
+	    }
+        _ => {}
+    }
+    let table: &mut Table = mem::transmute(ww);
+    let table2: &mut Table = mem::transmute(ww);
+    if let Some(wproc) = table.inner().inner().inner().inner().inner().base.proc_handler.as_proc() {
+	    wproc(table2, msg, wparam, lparam)
+    } else if let Some(whandler) = table.inner().inner().inner().inner().inner().base.proc_handler.as_handler() {
+    	whandler(hwnd, msg, wparam, lparam, 0, 0)
+    } else {
+	    winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
+    }
+}
+unsafe extern "system" fn handler<T: controls::Table>(this: &mut Table, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
+	let hwnd = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.hwnd;
+	let hwnd_lv = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().hwnd_lv;
+    match msg {
+        winuser::WM_MEASUREITEM => {
 		    dbg!("layout 2");
 	    }
         winuser::WM_SIZE => {
