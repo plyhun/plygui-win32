@@ -17,6 +17,7 @@ pub struct WindowsTable {
     data: TableData<WinPtr>,
     on_item_click: Option<callbacks::OnItemClick>,
     width: usize, height: usize,
+    col_1_needs_init: bool,
 }
 
 impl WindowsTable {
@@ -25,7 +26,7 @@ impl WindowsTable {
         let (pw, ph) = control.measured;
         
         let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
-        
+        this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().col_1_needs_init |= 1 == index;
         let item = adapter.adapter.spawn_item_view(&[index], this);
         let title = common::string_of_pixel_len(5);
         let mut title = OsStr::new(title.as_str()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
@@ -182,7 +183,8 @@ impl<O: controls::Table> NewTableInner<O> for WindowsTable {
             hwnd_lv: 0 as windef::HWND,
             data: Default::default(),
             on_item_click: None,
-            width, height
+            width, height,
+            col_1_needs_init: false,
         }
     }
 }
@@ -307,9 +309,9 @@ impl ControlInner for WindowsTable {
                 WINDOW_CLASS_LV.as_ptr(),
                 WINDOW_CLASS.as_ptr(),
 	            winuser::WS_BORDER | winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::WS_VISIBLE | commctrl::LVS_EX_DOUBLEBUFFER/* | commctrl::LVS_NOCOLUMNHEADER */
-                     | winuser::WS_EX_CLIENTEDGE | winuser::WS_CHILD | commctrl::LVS_REPORT/* | commctrl::LVS_EX_BORDERSELECT*/ | commctrl::LVS_EX_TRANSPARENTBKGND | commctrl::LVS_OWNERDRAWFIXED ,
-                px,
-                py,
+                     | winuser::WS_EX_CLIENTEDGE | winuser::WS_CHILD | commctrl::LVS_REPORT/* | commctrl::LVS_EX_BORDERSELECT | commctrl::LVS_EX_TRANSPARENTBKGND*/ | commctrl::LVS_OWNERDRAWFIXED ,
+                0,
+                0,
                 width as i32,
                 height as i32,
                 hwnd,
@@ -324,6 +326,7 @@ impl ControlInner for WindowsTable {
         self.base.hwnd = hwnd;
         self.hwnd_lv = hwnd_lv;
         self.base.subclass_id = id;
+        self.col_1_needs_init |= self.width > 1;
         control.coords = Some((px, py));
         
         if 0 == unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_SETITEMCOUNT, self.width, commctrl::LVSICF_NOINVALIDATEALL) } {
@@ -357,9 +360,9 @@ impl ControlInner for WindowsTable {
 
     #[cfg(feature = "markup")]
     fn fill_from_markup(&mut self, member: &mut MemberBase, _control: &mut ControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
-        use plygui_api::markup::MEMBER_TYPE_LIST;
+        use plygui_api::markup::MEMBER_TYPE_TABLE;
 
-        fill_from_markup_base!(self, member, markup, registry, Table, [MEMBER_TYPE_LIST]);
+        fill_from_markup_base!(self, member, markup, registry, Table, [MEMBER_TYPE_TABLE]);
         //fill_from_markup_items!(self, member, markup, registry);
     }
 }
@@ -431,7 +434,12 @@ impl HasVisibilityInner for WindowsTable {
 
 impl Drawable for WindowsTable {
     fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase) {
-        self.base.draw(control.coords, control.measured);
+        if let Some((x, y)) = control.coords {
+            unsafe {
+                winuser::SetWindowPos(self.base.hwnd, ptr::null_mut(), x, y, control.measured.0 as i32, control.measured.1 as i32, 0);
+                winuser::SetWindowPos(self.hwnd_lv, ptr::null_mut(), 0, 0, control.measured.0 as i32, control.measured.1 as i32, 0);
+            }
+        }
     }
     fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
         let old_size = control.measured;
@@ -487,17 +495,18 @@ unsafe extern "system" fn ahandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
         winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as WinPtr);
     }
     match msg {
-
         winuser::WM_DRAWITEM => {
             let draw_item = &mut *(lparam as winuser::LPDRAWITEMSTRUCT);
+            let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
+            if this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().col_1_needs_init {
+                column_resized(0, hwnd);
+                this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().col_1_needs_init = false;
+            }
             redraw_row(draw_item.itemID as i32, hwnd, &mut draw_item.rcItem, None);
             return minwindef::TRUE as isize;
         }
         winuser::WM_NOTIFY => {
     		match (&*(lparam as winuser::LPNMHDR)).code {
-    		    commctrl::HDM_LAYOUT => {
-        		    dbg!("layout 1");
-    		    }
     		    //commctrl::HDN_BEGINTRACKW | commctrl::HDN_BEGINTRACKA => return minwindef::TRUE as isize, //temporary disable column resize
     		    commctrl::HDN_ITEMCHANGEDW => {
         		    let header = &mut *(lparam as commctrl::LPNMHEADERW);
@@ -510,9 +519,6 @@ unsafe extern "system" fn ahandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
     			_ => {}
             }
         }
-        winuser::WM_MEASUREITEM => {
-		    dbg!("layout 1");
-	    }
         winuser::WM_VSCROLL | winuser::WM_MOUSEWHEEL => {
             winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::FALSE);
         }
@@ -529,12 +535,6 @@ unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UIN
         }
         return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }
-    match msg {
-        winuser::WM_MEASUREITEM => {
-		    dbg!("layout 3");
-	    }
-        _ => {}
-    }
     let table: &mut Table = mem::transmute(ww);
     let table2: &mut Table = mem::transmute(ww);
     if let Some(wproc) = table.inner().inner().inner().inner().inner().base.proc_handler.as_proc() {
@@ -547,10 +547,10 @@ unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UIN
 }
 unsafe extern "system" fn handler<T: controls::Table>(this: &mut Table, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
 	let hwnd = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.hwnd;
-	let hwnd_lv = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().hwnd_lv;
-    match msg {
+	match msg {
         winuser::WM_MEASUREITEM => {
-		    dbg!("layout 2");
+		    let mis: &mut winuser::MEASUREITEMSTRUCT = mem::transmute(lparam);
+		    //mis.itemHeight = 5;
 	    }
         winuser::WM_SIZE => {
             let width = lparam as u16;
