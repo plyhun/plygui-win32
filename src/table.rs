@@ -349,10 +349,9 @@ impl ControlInner for WindowsTable {
         self.force_scrollbar();
     }
     fn on_removed_from_container(&mut self, member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
-//        for ref mut child in self.columns.as_mut_slice() {
-//            let self2: &mut Table = unsafe { utils::base_to_impl_mut(member) };
-//            child.on_removed_from_container(self2);
-//        }
+        let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
+        self.data.cols.iter_mut().flat_map(|col| col.cells.iter_mut()).filter(|cell| cell.is_some()).map(|cell| cell.as_mut().unwrap().control.as_mut()).filter(|cntl| cntl.is_some()).for_each(|mut cntl| cntl.as_mut().unwrap().on_removed_from_container(this));
+        self.data.cols.clear();
         common::destroy_hwnd(self.hwnd_lv, self.base.subclass_id, None);
         self.hwnd_lv = 0 as windef::HWND;
         self.base.subclass_id = 0;

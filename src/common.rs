@@ -574,7 +574,7 @@ pub unsafe fn image_to_native(src: &image::DynamicImage, dst: *mut windef::HBITM
         panic!("Could not load image.")
     }
 
-    ptr::copy(src.flipv().to_rgba().into_raw().as_ptr(), pv_image_bits as *mut u8, (w * h * 4) as usize);
+    ptr::copy(src.flipv().to_rgba8().into_raw().as_ptr(), pv_image_bits as *mut u8, (w * h * 4) as usize);
 }
 
 pub unsafe fn str_from_wide<'a>(wstring: *mut u16) -> Cow<'a, str> {
