@@ -301,8 +301,26 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
         self.hwnd = 0 as windef::HWND;
         self.subclass_id = 0;
     }
+    pub fn handle(&mut self, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
+        if self.hwnd.is_null() {
+            0 as minwindef::LRESULT
+        } else if let Some(wproc) = self.proc_handler.as_proc() {
+            let table2: &mut T = member_from_hwnd(self.hwnd).unwrap();
+            unsafe { wproc(table2, msg, wparam, lparam) }
+        } else if let Some(whandler) = self.proc_handler.as_handler() {
+            unsafe { whandler(self.hwnd, msg, wparam, lparam, 0, 0) }
+        } else {
+            unsafe { winuser::DefWindowProcW(self.hwnd, msg, wparam, lparam) }
+        }
+    }
 }
-
+impl<T: controls::Control + Sized> Drop for WindowsControlBase<T> {
+    fn drop(&mut self) {
+        if !self.hwnd.is_null() {
+            self.destroy_control_hwnd();
+        }
+    }
+}
 pub fn size_hwnd(hwnd: windef::HWND) -> (u16, u16) {
     let rect = unsafe { window_rect(hwnd) };
     ((rect.right - rect.left) as u16, (rect.bottom - rect.top) as u16)

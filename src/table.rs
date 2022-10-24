@@ -535,14 +535,7 @@ unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UIN
         return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }
     let table: &mut Table = mem::transmute(ww);
-    let table2: &mut Table = mem::transmute(ww);
-    if let Some(wproc) = table.inner().inner().inner().inner().inner().base.proc_handler.as_proc() {
-	    wproc(table2, msg, wparam, lparam)
-    } else if let Some(whandler) = table.inner().inner().inner().inner().inner().base.proc_handler.as_handler() {
-    	whandler(hwnd, msg, wparam, lparam, 0, 0)
-    } else {
-	    winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
-    }
+    table.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.handle(msg, wparam, lparam)
 }
 unsafe extern "system" fn handler<T: controls::Table>(this: &mut Table, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
 	let hwnd = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.hwnd;

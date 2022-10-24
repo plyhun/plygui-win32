@@ -387,11 +387,9 @@ unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UIN
             winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, cs.lpCreateParams as WinPtr);
         }
         return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
-    }
-    
-    let frame: &mut LinearLayout = mem::transmute(ww);
-    let frame2: &mut LinearLayout = mem::transmute(ww);
-    frame.inner().inner().inner().inner().inner().base.proc_handler.as_proc().unwrap()(frame2, msg, wparam, lparam)
+    }    
+    let ll: &mut LinearLayout = mem::transmute(ww);
+    ll.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.handle(msg, wparam, lparam)
 }
 
 unsafe extern "system" fn handler<T: controls::LinearLayout>(this: &mut LinearLayout, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
