@@ -551,14 +551,8 @@ unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UIN
         }
         return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }
-    
     let s: &mut Splitted = mem::transmute(ww);
-    let s2: &mut Splitted = mem::transmute(ww);
-    if let Some(_proc) = s.inner().inner().inner().inner().inner().base.proc_handler.as_proc() {
-        _proc(s2, msg, wparam, lparam)
-    } else {
-        winuser::DefWindowProcW(hwnd, msg, wparam, lparam)
-    }
+    s.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.handle(msg, wparam, lparam, hwnd)
 }
 
 unsafe extern "system" fn handler<T: controls::Splitted>(this: &mut Splitted, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {

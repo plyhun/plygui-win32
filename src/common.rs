@@ -306,8 +306,11 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
             if self.hwnd.is_null() {
                 0 as minwindef::LRESULT
             } else if let Some(wproc) = self.proc_handler.as_proc() {
-                let table2: &mut T = member_from_hwnd(self.hwnd).unwrap();
-                unsafe { wproc(table2, msg, wparam, lparam) }
+                if let Some(table2) = member_from_hwnd::<T>(self.hwnd) {
+                    unsafe { wproc(table2, msg, wparam, lparam) }
+                } else {
+                    0 as minwindef::LRESULT
+                }
             } else if let Some(whandler) = self.proc_handler.as_handler() {
                 unsafe { whandler(self.hwnd, msg, wparam, lparam, 0, 0) }
             } else {
