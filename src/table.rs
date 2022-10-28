@@ -72,7 +72,7 @@ impl WindowsTable {
                     if y as isize != unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_INSERTITEMW, 0, &lv as *const _ as isize) } {
                         unsafe { common::log_error(); }
                         panic!("Could not insert a table row at index [{}, {}]", index, y);
-                    } 
+                    }
                 }
                 none
             }).collect::<Vec<_>>(),
@@ -83,7 +83,30 @@ impl WindowsTable {
                 item
             }),
             native: index as isize,
+            width: layout::Size::MatchParent,
         });
+        self.resize_column(index, self.data.cols[index].width);
+    }
+    fn resize_column(&mut self, index: usize, size: layout::Size) {
+        let col_1_needs_init = self.col_1_needs_init;
+        match size {
+            layout::Size::Exact(width) => {
+                if minwindef::TRUE != unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_SETCOLUMNWIDTH, index, width as isize) as i32 } {
+                    unsafe { common::log_error(); }
+                    panic!("Could not resize a table column at index [{}] to {}px", index, width);
+                }
+            },
+            layout::Size::WrapContent => {
+                if minwindef::TRUE != unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_SETCOLUMNWIDTH, index, commctrl::LVSCW_AUTOSIZE as isize) as i32 } {
+                    unsafe { common::log_error(); }
+                    panic!("Could not resize a table column at index [{}] to fit content", index);
+                }
+            },
+            layout::Size::MatchParent => {
+                // evenly distributed by default
+            },
+        }
+        self.col_1_needs_init = col_1_needs_init;
     }
     fn add_cell_inner(&mut self, base: &mut MemberBase, x: usize, y: usize) {
         let (member, _, adapter, _) = unsafe { Table::adapter_base_parts_mut(base) };
