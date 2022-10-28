@@ -389,7 +389,7 @@ unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UIN
         return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }    
     let ll: &mut LinearLayout = mem::transmute(ww);
-    ll.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.handle(msg, wparam, lparam)
+    ll.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.handle(msg, wparam, lparam, hwnd)
 }
 
 unsafe extern "system" fn handler<T: controls::LinearLayout>(this: &mut LinearLayout, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {

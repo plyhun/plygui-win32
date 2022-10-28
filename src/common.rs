@@ -301,16 +301,24 @@ impl<T: controls::Control + Sized> WindowsControlBase<T> {
         self.hwnd = 0 as windef::HWND;
         self.subclass_id = 0;
     }
-    pub fn handle(&mut self, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
-        if self.hwnd.is_null() {
-            0 as minwindef::LRESULT
-        } else if let Some(wproc) = self.proc_handler.as_proc() {
-            let table2: &mut T = member_from_hwnd(self.hwnd).unwrap();
-            unsafe { wproc(table2, msg, wparam, lparam) }
-        } else if let Some(whandler) = self.proc_handler.as_handler() {
-            unsafe { whandler(self.hwnd, msg, wparam, lparam, 0, 0) }
+    pub fn handle(&mut self, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, alt_hwnd: windef::HWND) -> minwindef::LRESULT {
+        if alt_hwnd.is_null() || alt_hwnd == self.hwnd {
+            if self.hwnd.is_null() {
+                0 as minwindef::LRESULT
+            } else if let Some(wproc) = self.proc_handler.as_proc() {
+                let table2: &mut T = member_from_hwnd(self.hwnd).unwrap();
+                unsafe { wproc(table2, msg, wparam, lparam) }
+            } else if let Some(whandler) = self.proc_handler.as_handler() {
+                unsafe { whandler(self.hwnd, msg, wparam, lparam, 0, 0) }
+            } else {
+                unsafe { winuser::DefWindowProcW(self.hwnd, msg, wparam, lparam) }
+            }
         } else {
-            unsafe { winuser::DefWindowProcW(self.hwnd, msg, wparam, lparam) }
+            if let Some(whandler) = self.proc_handler.as_handler() {
+                unsafe { whandler(alt_hwnd, msg, wparam, lparam, 0, 0) }
+            } else {
+                unsafe { winuser::DefWindowProcW(alt_hwnd, msg, wparam, lparam) }
+            }
         }
     }
 }

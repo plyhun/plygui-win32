@@ -395,7 +395,7 @@ unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UIN
         return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }
     let frame: &mut Frame = mem::transmute(ww);
-    frame.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.handle(msg, wparam, lparam)
+    frame.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.handle(msg, wparam, lparam, hwnd)
 }
 
 unsafe extern "system" fn handler<T: controls::Frame>(this: &mut Frame, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
