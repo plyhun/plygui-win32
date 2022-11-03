@@ -21,7 +21,7 @@ pub struct WindowsTable {
 }
 
 impl WindowsTable {
-    fn add_column_inner(&mut self, base: &mut MemberBase, index: usize) {
+    fn add_column_inner(&mut self, base: &mut MemberBase, index: usize, initial: bool) {
         let (member, control, adapter, _) = unsafe { Table::adapter_base_parts_mut(base) };
         let (pw, ph) = control.measured;
         
@@ -48,7 +48,7 @@ impl WindowsTable {
             unsafe { common::log_error(); }
             panic!("Could not get the table header");
         }
-        //unsafe { set_header_height(hdr_hwnd as windef::HWND, -1); }
+        unsafe { set_header_height(hdr_hwnd as windef::HWND, -2); }
         let hdi = commctrl::HDITEMW {
             mask: commctrl::HDI_FORMAT | commctrl::HDI_DI_SETITEM,
             fmt: commctrl::HDF_OWNERDRAW,
@@ -85,9 +85,9 @@ impl WindowsTable {
             native: index as isize,
             width: layout::Size::MatchParent,
         });
-        self.resize_column(index, self.data.cols[index].width);
+        self.resize_column(control, index, self.data.cols[index].width, initial);
     }
-    fn resize_column(&mut self, index: usize, size: layout::Size) {
+    fn resize_column(&mut self, base: &ControlBase, index: usize, size: layout::Size, skip_match_parent: bool) {
         let col_1_needs_init = self.col_1_needs_init;
         match size {
             layout::Size::Exact(width) => {
@@ -103,7 +103,17 @@ impl WindowsTable {
                 }
             },
             layout::Size::MatchParent => {
-                // evenly distributed by default
+                if skip_match_parent {
+                    // evenly distributed by default
+                } else {
+                    let width = base.measured.0 / self.data.cols.len() as u16; // must be > 0
+                    (0..self.data.cols.len()).for_each(|x| {
+                        if minwindef::TRUE != unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_SETCOLUMNWIDTH, x, width as isize) as i32 } {
+                            unsafe { common::log_error(); }
+                            panic!("Could not resize a table column at index [{}] to {}px", index, width);
+                        }
+                    });
+                }
             },
         }
         self.col_1_needs_init = col_1_needs_init;
@@ -170,10 +180,12 @@ impl WindowsTable {
         });
     }
     fn change_column_inner(&mut self, base: &mut MemberBase, index: usize) {
-        
+        self.remove_column_inner(base, index);
+        self.add_column_inner(base, index, false);
     }
     fn change_cell_inner(&mut self, base: &mut MemberBase, x: usize, y: usize) {
-        
+        self.remove_cell_inner(base, x, y);
+        self.add_cell_inner(base, x, y);
     }
     fn force_scrollbar(&mut self) {
         unsafe {
@@ -186,9 +198,9 @@ impl WindowsTable {
 		winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_SETTEXTCOLOR, 0, color as isize);
 		winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_SETTEXTBKCOLOR, 0, color as isize);
 		
-		let (w, _) = common::size_hwnd(self.hwnd_lv);
+		/*let (w, _) = common::size_hwnd(self.hwnd_lv);
     	
-    	/*let mut rc: windef::RECT = Default::default();
+    	let mut rc: windef::RECT = Default::default();
     	
     	unsafe fn redraw_breath(items: &mut Vec<TreeNode<commctrl::HTREEITEM>>, hwnd_tree: windef::HWND, hwnd: windef::HWND, rc: &mut windef::RECT, w: u16) {
     		for item in items {
@@ -232,22 +244,39 @@ impl TableInner for WindowsTable {
 	        b.assume_init()
         }
     }
+    fn set_column_width(&mut self, _: &mut MemberBase, control: &mut ControlBase, _: &mut AdaptedBase, index: usize, size: layout::Size) {
+        self.resize_column(control, index, size, false)
+    }
     fn resize(&mut self, member: &mut MemberBase, control: &mut ControlBase, adapted: &mut AdaptedBase, width: usize, height: usize) -> (usize, usize) {
-        let oldSize = self.size(member, control, adapted);
-        let (maxWidth, maxHeight) = (cmp::max(width, oldSize.0), cmp::max(height, oldSize.1));
-        let (minWidth, minHeight) = (cmp::min(width, oldSize.0), cmp::min(height, oldSize.1));
-        (minWidth..maxWidth).rev().for_each(|x| 
+        let old_size = self.size(member, control, adapted);
+        let (max_width, max_height) = (cmp::max(width, old_size.0), cmp::max(height, old_size.1));
+        let (min_width, min_height) = (cmp::min(width, old_size.0), cmp::min(height, old_size.1));
+        (min_width..max_width).rev().for_each(|x| 
             if self.data.cols.len() > x {
-                if oldSize.0 > x {
+                if old_size.0 > x {
                     self.remove_column_inner(member, x);
                 }
             } else {
-                if oldSize.0 < x {
-                     self.add_column_inner(member, x);
+                if old_size.0 < x {
+                     self.add_column_inner(member, x, false);
                 }
             }
         );
-        oldSize
+        (0..self.data.cols.len()).for_each(|x| {
+            let height = self.data.cols[x].cells.len();
+            (min_height..max_height).rev().for_each(|y| 
+                if height > y {
+                    if old_size.1 > y {
+                        self.remove_cell_inner(member, x, y);
+                    }
+                } else {
+                    if old_size.1 < y {
+                         self.add_cell_inner(member, x, y);
+                    }
+                }
+            );
+        });
+        old_size
     }
 }
 impl ItemClickableInner for WindowsTable {
@@ -271,7 +300,7 @@ impl AdaptedInner for WindowsTable {
                     if adapter::Node::Leaf == node || at.len() > 1 {
                         self.add_cell_inner(base, at[0], at[1]);
                     } else {
-                        self.add_column_inner(base, at[0]);
+                        self.add_column_inner(base, at[0], false);
                     }
                 },
                 adapter::Change::Removed(at) => {
@@ -366,7 +395,7 @@ impl ControlInner for WindowsTable {
         adapter.adapter.for_each(&mut (|indexes, node| {
             match node {
                 adapter::Node::Leaf => self.add_cell_inner(member, indexes[0], indexes[1]),
-                adapter::Node::Branch(_) => self.add_column_inner(member, indexes[0])
+                adapter::Node::Branch(_) => self.add_column_inner(member, indexes[0], true)
             }
         }));
         self.force_scrollbar();

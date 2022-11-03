@@ -413,15 +413,22 @@ pub unsafe fn set_default_font(hwnd: windef::HWND) {
     winuser::SendMessageW(hwnd, winuser::WM_SETFONT, hfont() as usize, minwindef::TRUE as isize);
 }
 
+#[inline]
+pub fn is_valid(hwnd: windef::HWND) -> bool {
+    unsafe { winuser::IsWindow(hwnd) != 0 }
+}
+
 pub fn destroy_hwnd(hwnd: windef::HWND, subclass_id: usize, handler: Option<unsafe extern "system" fn(windef::HWND, msg: minwindef::UINT, minwindef::WPARAM, minwindef::LPARAM, usize, usize) -> isize>) {
     unsafe {
-        if subclass_id != 0 {
-            if minwindef::FALSE == commctrl::RemoveWindowSubclass(hwnd, handler, subclass_id) {
+        if is_valid(hwnd) {
+            if subclass_id != 0 {
+                if minwindef::FALSE == commctrl::RemoveWindowSubclass(hwnd, handler, subclass_id) {
+                    log_error();
+                }
+            }
+            if winuser::DestroyWindow(hwnd) == 0 {
                 log_error();
             }
-        }
-        if winuser::DestroyWindow(hwnd) == 0 && winuser::IsWindow(hwnd) != 0 {
-            log_error();
         }
     }
 }

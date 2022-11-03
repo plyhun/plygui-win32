@@ -214,7 +214,7 @@ impl MemberInner for WindowsTray {}
 impl Drop for WindowsTray {
     fn drop(&mut self) {
         unsafe {
-            if !self.menu.0.is_null() {
+            if winuser::IsMenu(self.menu.0) != 0 {
                 winuser::DeleteMenu(self.menu.0, 0, 0);
                 if shellapi::Shell_NotifyIconW(shellapi::NIM_DELETE, &mut self.cfg) == minwindef::FALSE {
                     common::log_error();
