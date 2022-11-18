@@ -649,7 +649,7 @@ pub unsafe fn log_error() {
     }
 
     let mut string = vec![0u16; 127];
-    winbase::FormatMessageW(
+    let len = winbase::FormatMessageW(
         winbase::FORMAT_MESSAGE_FROM_SYSTEM | winbase::FORMAT_MESSAGE_IGNORE_INSERTS,
         ptr::null_mut(),
         error,
@@ -658,6 +658,6 @@ pub unsafe fn log_error() {
         string.len() as u32,
         ptr::null_mut(),
     );
-
+    string.shrink_to(len as usize);
     println!("Last error #{}: {}", error, String::from_utf16_lossy(&string));
 }

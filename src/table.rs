@@ -18,6 +18,7 @@ pub struct WindowsTable {
     on_item_click: Option<callbacks::OnItemClick>,
     width: usize, height: usize,
     col_1_needs_init: bool,
+    custom_row_height: Option<commctrl::HIMAGELIST>
 }
 
 impl WindowsTable {
@@ -87,6 +88,36 @@ impl WindowsTable {
         });
         self.resize_column(control, index, self.data.cols[index].width, initial);
     }
+    fn resize_rows(&mut self, index: usize, size: layout::Size, force: bool) {
+        if force || self.data.default_row_height != size {
+            let height = match size {
+                layout::Size::WrapContent => {
+                    Some(self.data.cols.iter()
+                        .flat_map(|col| col.cells.iter())
+                        .filter(|cell| cell.is_some())
+                        .map(|cell| cell.as_ref().unwrap().control.as_ref())
+                        .filter(|control| control.is_some())
+                        .map(|control| control.unwrap().size().1)
+                        .fold(0, |s, i| if s > i {s} else {i}))
+                },
+                layout::Size::MatchParent => None,
+                layout::Size::Exact(value) => Some(value)
+            };
+            self.custom_row_height.map(|il| unsafe { 
+                    commctrl::ImageList_Destroy(il) 
+            }).filter(|res| *res != 0).or_else(|| unsafe {common::log_error(); None});
+            self.custom_row_height = height.map(|height| unsafe {
+                let il = commctrl::ImageList_Create(1, height as i32, commctrl::ILC_COLOR, 0, 1);
+                winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_SETIMAGELIST, commctrl::LVSIL_SMALL as usize, il as isize);
+                il
+            }).or(None);
+            if !force {
+                self.data.row_heights.insert(index, size);
+            }
+        } else {
+            self.data.row_heights.remove(&index);
+        }
+    }
     fn resize_column(&mut self, base: &ControlBase, index: usize, size: layout::Size, skip_match_parent: bool) {
         let col_1_needs_init = self.col_1_needs_init;
         match size {
@@ -116,6 +147,7 @@ impl WindowsTable {
                 }
             },
         }
+        self.data.column_at_mut(index).map(|col| col.width = size);
         self.col_1_needs_init = col_1_needs_init;
     }
     fn add_cell_inner(&mut self, base: &mut MemberBase, x: usize, y: usize) {
@@ -167,7 +199,7 @@ impl WindowsTable {
         self.data.cols.get_mut(index).map(|col| (0..col.cells.len()).rev().for_each(|y| {
             remove_cell_from_col(hwnd, col, member, index, y);
         }));
-        if minwindef::TRUE == unsafe { winuser::SendMessageW(self.base.hwnd, commctrl::LVM_DELETECOLUMN, index, 0) as i32 } {
+        if minwindef::TRUE == unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_DELETECOLUMN, index, 0) as i32 } {
             self.data.cols.remove(index);
         } else {
             panic!("Could not delete column {}", index);
@@ -220,6 +252,7 @@ impl<O: controls::Table> NewTableInner<O> for WindowsTable {
             on_item_click: None,
             width, height,
             col_1_needs_init: false,
+            custom_row_height: None,
         }
     }
 }
@@ -246,6 +279,9 @@ impl TableInner for WindowsTable {
     }
     fn set_column_width(&mut self, _: &mut MemberBase, control: &mut ControlBase, _: &mut AdaptedBase, index: usize, size: layout::Size) {
         self.resize_column(control, index, size, false)
+    }
+    fn set_row_height(&mut self, _: &mut MemberBase, _: &mut ControlBase, _: &mut AdaptedBase, index: usize, size: layout::Size) {
+        self.resize_rows(index, size, false)
     }
     fn resize(&mut self, member: &mut MemberBase, control: &mut ControlBase, adapted: &mut AdaptedBase, width: usize, height: usize) -> (usize, usize) {
         let old_size = self.size(member, control, adapted);
@@ -398,6 +434,7 @@ impl ControlInner for WindowsTable {
                 adapter::Node::Branch(_) => self.add_column_inner(member, indexes[0], true)
             }
         }));
+        self.resize_rows(0, self.data.default_row_height, true);
         self.force_scrollbar();
     }
     fn on_removed_from_container(&mut self, member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
@@ -586,16 +623,21 @@ unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UIN
         }
         return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }
+    match msg {
+        winuser::WM_MEASUREITEM => {
+		    let mis: &mut winuser::MEASUREITEMSTRUCT = mem::transmute(lparam);
+		    dbg!(mis.itemHeight, mis.itemWidth, mis.itemID);
+		    //mis.itemHeight = 50;
+	    }
+        _ => {}
+    }
+
     let table: &mut Table = mem::transmute(ww);
     table.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.handle(msg, wparam, lparam, hwnd)
 }
 unsafe extern "system" fn handler<T: controls::Table>(this: &mut Table, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
 	let hwnd = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.hwnd;
 	match msg {
-        winuser::WM_MEASUREITEM => {
-		    let mis: &mut winuser::MEASUREITEMSTRUCT = mem::transmute(lparam);
-		    //mis.itemHeight = 5;
-	    }
         winuser::WM_SIZE => {
             let width = lparam as u16;
             let height = (lparam >> 16) as u16;
