@@ -22,7 +22,35 @@ pub struct WindowsTable {
 }
 
 impl WindowsTable {
-    fn add_column_inner(&mut self, base: &mut MemberBase, index: usize, initial: bool) {
+    fn add_row_inner(&mut self, _base: &mut MemberBase, index: usize) -> Option<&mut TableRow<isize>> {
+        let hwnd = self.hwnd_lv;
+        let row = TableRow {
+            cells: self.data.cols.iter_mut().enumerate().map(|(y, col)| {
+                let mut lv = commctrl::LVITEMW {
+                    mask: commctrl::LVIF_STATE,
+                    stateMask: std::u32::MAX,
+                    iItem: y as i32, 
+                    ..Default::default()
+                };
+                if 0 == unsafe { winuser::SendMessageW(hwnd, commctrl::LVM_GETITEMW, 0, &lv as *const _ as isize) } {
+                    lv.mask = commctrl::LVIF_PARAM;
+                    lv.lParam = col.native;
+                    if y as isize != unsafe { winuser::SendMessageW(hwnd, commctrl::LVM_INSERTITEMW, 0, &lv as *const _ as isize) } {
+                        unsafe { common::log_error(); }
+                        panic!("Could not insert a table row at index [{}, {}]", index, y);
+                    }
+                }
+                None
+            }).collect(),
+            native: 0 as WinPtr,
+            control: None,
+            height: self.data.default_row_height,
+        };
+        self.data.rows.insert(index, row);
+        self.resize_rows(index, self.data.default_row_height, true);
+        self.data.row_at_mut(index)
+    }
+    fn add_column_inner(&mut self, base: &mut MemberBase, index: usize, initial: bool) -> Option<&mut TableColumn<isize>> {
         let (member, control, adapter, _) = unsafe { Table::adapter_base_parts_mut(base) };
         let (pw, ph) = control.measured;
         
@@ -60,44 +88,30 @@ impl WindowsTable {
             panic!("Could not insert a column headed at index {}", index);
         }
         self.data.cols.insert(index, TableColumn {
-            cells: std::iter::repeat_with(|| None).enumerate().take(self.height).map(|(y, none)| {
-                let mut lv = commctrl::LVITEMW {
-                    mask: commctrl::LVIF_STATE,
-                    stateMask: std::u32::MAX,
-                    iItem: y as i32, 
-                    ..Default::default()
-                };
-                if 0 == unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_GETITEMW, 0, &lv as *const _ as isize) } {
-                    lv.mask = commctrl::LVIF_PARAM;
-                    lv.lParam = item.as_ref().map(|item| unsafe { item.native_id() as isize }).unwrap_or(0);
-                    if y as isize != unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_INSERTITEMW, 0, &lv as *const _ as isize) } {
-                        unsafe { common::log_error(); }
-                        panic!("Could not insert a table row at index [{}, {}]", index, y);
-                    }
-                }
-                none
-            }).collect::<Vec<_>>(),
             control: item.map(|mut item| {
             	let width = utils::coord_to_size(pw as i32 - DEFAULT_PADDING);
             	let height = utils::coord_to_size(ph as i32 - DEFAULT_PADDING);
-            	let row_height = *self.data.row_heights.get(&(index as usize)).unwrap_or(&self.data.default_row_height);
                 item.set_layout_width(layout::Size::Exact(width));
-                item.set_layout_height(row_height);
+                item.set_layout_height(self.data.default_row_height);// TODO customize column header height
                 item.on_added_to_container(this, 0, 0, width, height);
                 item
             }),
             native: index as isize,
             width: layout::Size::MatchParent,
         });
+        self.data.rows.iter_mut().for_each(|row| {
+            row.cells.insert(index, None);
+        });
         self.resize_column(control, index, self.data.cols[index].width, initial);
         self.resize_rows(index, self.data.default_row_height, true);
+        self.data.column_at_mut(index)
     }
     fn resize_rows(&mut self, index: usize, size: layout::Size, force: bool) {
         if force || self.data.default_row_height != size {
             let height = match size {
                 layout::Size::WrapContent => {
-                    let height = self.data.cols.iter()
-                        .flat_map(|col| col.cells.iter())
+                    let height = self.data.rows.iter()
+                        .flat_map(|row| row.cells.iter())
                         .filter(|cell| cell.is_some())
                         .map(|cell| cell.as_ref().unwrap().control.as_ref())
                         .filter(|control| control.is_some())
@@ -117,10 +131,11 @@ impl WindowsTable {
                 il
             }).or(None);
             if !force {
-                self.data.row_heights.insert(index, size);
+                self.data.row_at_mut(index).map(|row| row.height = size);
             }
         } else {
-            self.data.row_heights.remove(&index);
+            let row_height = self.data.default_row_height;
+            self.data.row_at_mut(index).map(|mut row| row.height = row_height);
         }
     }
     fn resize_column(&mut self, base: &ControlBase, index: usize, size: layout::Size, skip_match_parent: bool) {
@@ -156,9 +171,11 @@ impl WindowsTable {
         self.col_1_needs_init = col_1_needs_init;
     }
     fn add_cell_inner(&mut self, base: &mut MemberBase, x: usize, y: usize) {
+        if self.data.row_at_mut(x).is_none() {
+            self.add_row_inner(base, x);
+        }
         let (member, control, adapter, _) = unsafe { Table::adapter_base_parts_mut(base) };
         let (pw, ph) = control.measured;
-        
         let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
         adapter.adapter.spawn_item_view(&[x, y], this).map(|mut item| {
             let title = common::string_of_pixel_len(5);
@@ -187,24 +204,24 @@ impl WindowsTable {
                     panic!("Could not get cell rect at index [{}, {}]", x, y);
                 }
                 let w = utils::coord_to_size(rc.right - rc.left - 2);
-                let row_height = *self.data.row_heights.get(&(x as usize)).unwrap_or(&self.data.default_row_height);
-                item.set_layout_width(layout::Size::Exact(w));
-                item.set_layout_height(row_height);
-                item.on_added_to_container(this, 0, 0, pw, ph);
-                self.data.cols.get_mut(x).map(|column| {
-                    column.cells.insert(y, Some(TableCell {
+                let row_height = self.data.rows.get_mut(x).map(|row| {
+                    item.set_layout_width(layout::Size::Exact(w));
+                    item.set_layout_height(row.height);
+                    item.on_added_to_container(this, 0, 0, pw, ph);
+                    row.cells.insert(y, Some(TableCell {
                         control: Some(item),
                         native: y as isize,
                     }));
-                });
+                    row.height
+                }).unwrap_or(self.data.default_row_height);
                 self.resize_rows(y, row_height, true);
             }
         }).unwrap_or_else(|| {});
     }
     fn remove_column_inner(&mut self, member: &mut MemberBase, index: usize) {
         let hwnd = self.base.hwnd;
-        self.data.cols.get_mut(index).map(|col| (0..col.cells.len()).rev().for_each(|y| {
-            remove_cell_from_col(hwnd, col, member, index, y);
+        self.data.rows.get_mut(index).map(|row| (0..row.cells.len()).rev().for_each(|y| {
+            remove_cell_from_row(hwnd, row, member, index, y);
         }));
         if minwindef::TRUE == unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_DELETECOLUMN, index, 0) as i32 } {
             self.data.cols.remove(index);
@@ -214,8 +231,8 @@ impl WindowsTable {
     }
     fn remove_cell_inner(&mut self, member: &mut MemberBase, x: usize, y: usize) {
         let hwnd = self.base.hwnd;
-        self.data.cols.get_mut(x).map(|col| {
-            remove_cell_from_col(hwnd, col, member, x, y);
+        self.data.rows.get_mut(x).map(|row| {
+            remove_cell_from_row(hwnd, row, member, x, y);
         });
     }
     fn change_column_inner(&mut self, base: &mut MemberBase, index: usize) {
@@ -305,8 +322,8 @@ impl TableInner for WindowsTable {
                 }
             }
         );
-        (0..self.data.cols.len()).for_each(|x| {
-            let height = self.data.cols[x].cells.len();
+        (0..self.data.rows.len()).for_each(|x| {
+            let height = self.data.rows[x].cells.len();
             (min_height..max_height).rev().for_each(|y| 
                 if height > y {
                     if old_size.1 > y {
@@ -438,8 +455,8 @@ impl ControlInner for WindowsTable {
 
         adapter.adapter.for_each(&mut (|indexes, node| {
             match node {
-                adapter::Node::Leaf => self.add_cell_inner(member, indexes[0], indexes[1]),
-                adapter::Node::Branch(_) => self.add_column_inner(member, indexes[0], true)
+                adapter::Node::Leaf => { self.add_cell_inner(member, indexes[0], indexes[1]); },
+                adapter::Node::Branch(_) => { self.add_column_inner(member, indexes[0], true); }
             }
         }));
         self.resize_rows(0, self.data.default_row_height, true);
@@ -447,8 +464,10 @@ impl ControlInner for WindowsTable {
     }
     fn on_removed_from_container(&mut self, member: &mut MemberBase, _control: &mut ControlBase, _: &dyn controls::Container) {
         let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
-        self.data.cols.iter_mut().flat_map(|col| col.cells.iter_mut()).filter(|cell| cell.is_some()).map(|cell| cell.as_mut().unwrap().control.as_mut()).filter(|cntl| cntl.is_some()).for_each(|mut cntl| cntl.as_mut().unwrap().on_removed_from_container(this));
+        self.data.cols.iter_mut().filter(|col| col.control.is_some()).map(|col| col.control.as_mut().unwrap()).for_each(|cntl| cntl.on_removed_from_container(this));
         self.data.cols.clear();
+        self.data.rows.iter_mut().flat_map(|col| col.cells.iter_mut()).filter(|cell| cell.is_some()).map(|cell| cell.as_mut().unwrap().control.as_mut()).filter(|cntl| cntl.is_some()).for_each(|mut cntl| cntl.as_mut().unwrap().on_removed_from_container(this));
+        self.data.rows.clear();
         common::destroy_hwnd(self.hwnd_lv, self.base.subclass_id, None);
         self.hwnd_lv = 0 as windef::HWND;
         self.base.subclass_id = 0;
@@ -469,7 +488,13 @@ impl ContainerInner for WindowsTable {
             if maybe.is_some() {
                 return maybe;
             }
-            for cell in column.cells.as_mut_slice() {
+        }
+        for row in self.data.rows.as_mut_slice() {
+            let maybe = row.control.as_mut().and_then(|control| utils::find_by_mut(control.as_mut(), arg));
+            if maybe.is_some() {
+                return maybe;
+            }
+            for cell in row.cells.as_mut_slice() {
                 if let Some(cell) = cell {
                     let maybe = cell.control.as_mut().and_then(|control| utils::find_by_mut(control.as_mut(), arg));
                     if maybe.is_some() {
@@ -486,7 +511,13 @@ impl ContainerInner for WindowsTable {
             if maybe.is_some() {
                 return maybe;
             }
-            for cell in column.cells.as_slice() {
+        }
+        for row in self.data.rows.as_slice() {
+            let maybe = row.control.as_ref().and_then(|control| utils::find_by(control.as_ref(), arg));
+            if maybe.is_some() {
+                return maybe;
+            }
+            for cell in row.cells.as_slice() {
                 if let Some(cell) = cell {
                     let maybe = cell.control.as_ref().and_then(|control| utils::find_by(control.as_ref(), arg));
                     if maybe.is_some() {
@@ -664,20 +695,22 @@ unsafe fn column_resized(x: i32, hwnd: windef::HWND, full_redraw: bool) {
             return;
         }
         let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
-        let row_height = *this.inner().inner().inner().inner().inner().data.row_heights.get(&(x as usize)).unwrap_or(&this.inner().inner().inner().inner().inner().data.default_row_height);
-        this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.column_at_mut(x as usize).map(|column| column.cells.iter_mut().for_each(|cell| {
-            cell.as_mut().and_then(|cell| cell.control.as_mut()).map(|item| {
-                let height = match row_height {
-                    layout::Size::Exact(height) => height,
-                    _ => item.size().1
-                };
-                let width = utils::coord_to_size(width - 2);
-                item.set_layout_width(layout::Size::Exact(width));
-                item.set_layout_height(row_height);
-                item.measure(width, height);
-                item.draw(None);
-            });
-        }));
+        this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.row_at_mut(x as usize).map(|row| {
+            let row_height = row.height;
+            row.cells.iter_mut().for_each(|cell| {
+                cell.as_mut().and_then(|cell| cell.control.as_mut()).map(|item| {
+                    let height = match row_height {
+                        layout::Size::Exact(height) => height,
+                        _ => item.size().1
+                    };
+                    let width = utils::coord_to_size(width - 2);
+                    item.set_layout_width(layout::Size::Exact(width));
+                    item.set_layout_height(row_height);
+                    item.measure(width, height);
+                    item.draw(None);
+                });
+            })
+        });
     }
 }
 unsafe fn set_header_height(hdr_hwnd: windef::HWND, height: i32) {
@@ -697,18 +730,19 @@ unsafe fn set_header_height(hdr_hwnd: windef::HWND, height: i32) {
 }
 unsafe fn redraw_row(y: i32, hwnd: windef::HWND, rc: &mut windef::RECT, action: Option<bool>) {
     let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
-    let row_height = *this.inner().inner().inner().inner().inner().data.row_heights.get(&(y as usize)).unwrap_or(&this.inner().inner().inner().inner().inner().data.default_row_height);
-    this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.cols.iter_mut().enumerate().for_each(|(x, column)| {
-        redraw_cell(column.cell_at_mut(y as usize), x as i32, y as i32, hwnd, rc, action, row_height)
+    this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.rows.iter_mut().enumerate().for_each(|(x, row)| {
+        let row_height = row.height;
+        redraw_cell(row.cell_at_mut(y as usize), x as i32, y as i32, hwnd, rc, action, row_height)
     });
 }
 unsafe fn redraw_column(x: i32, hwnd: windef::HWND, rc: &mut windef::RECT, action: Option<bool>) {
     let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
-    let this2: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
-    this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.column_at_mut(x as usize).map(|column| column.cells.iter_mut().enumerate().for_each(|(y, cell)| {
-        let row_height = *this2.inner().inner().inner().inner().inner().data.row_heights.get(&(y as usize)).unwrap_or(&this2.inner().inner().inner().inner().inner().data.default_row_height);
-        redraw_cell(cell.as_mut(), x, y as i32, hwnd, rc, action, row_height);
-    }));
+    this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.row_at_mut(x as usize).map(|row| {
+        let row_height = row.height;
+        row.cells.iter_mut().enumerate().for_each(|(y, cell)| {
+            redraw_cell(cell.as_mut(), x, y as i32, hwnd, rc, action, row_height);
+        })
+});
 }
 fn redraw_cell<T: Sized>(cell: Option<&mut TableCell<T>>, x: i32, y: i32, hwnd: windef::HWND, rc: &mut windef::RECT, action: Option<bool>, row_height: layout::Size) {
     let mut drawn = commctrl::LVITEMW {
@@ -759,8 +793,8 @@ fn redraw_cell<T: Sized>(cell: Option<&mut TableCell<T>>, x: i32, y: i32, hwnd: 
         } 
     });
 }
-fn remove_cell_from_col<T: Sized>(hwnd: windef::HWND, col: &mut TableColumn<T>, member: &mut MemberBase, x: usize, y: usize) {
-    col.cells.get_mut(y).map(|cell| {
+fn remove_cell_from_row<T: Sized>(hwnd: windef::HWND, row: &mut TableRow<T>, member: &mut MemberBase, x: usize, y: usize) {
+    row.cells.get_mut(y).map(|cell| {
         cell.as_mut().map(|cell| cell.control.as_mut().map(|ref mut control| {
             let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
             control.on_removed_from_container(this);
@@ -779,5 +813,5 @@ fn remove_cell_from_col<T: Sized>(hwnd: windef::HWND, col: &mut TableColumn<T>, 
             }
         }));
     });
-    col.cells.remove(y);
+    row.cells.remove(y);
 }
