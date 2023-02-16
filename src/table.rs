@@ -1,4 +1,4 @@
-use crate::common::{self, *};
+use crate::common::{self, matrix::*, *};
 use winapi::um::commctrl;
 
 const CLASS_ID: &str = commctrl::WC_LISTVIEW;
@@ -14,7 +14,7 @@ pub type Table = AMember<AControl<AContainer<AAdapted<ATable<WindowsTable>>>>>;
 pub struct WindowsTable {
     base: WindowsControlBase<Table>,
     hwnd_lv: windef::HWND,
-    data: TableData<WinPtr>,
+    data: Matrix<WinPtr>,
     on_item_click: Option<callbacks::OnItemClick>,
     width: usize, height: usize,
     col_1_needs_init: bool,
@@ -22,9 +22,9 @@ pub struct WindowsTable {
 }
 
 impl WindowsTable {
-    fn add_row_inner(&mut self, _base: &mut MemberBase, index: usize) -> Option<&mut TableRow<isize>> {
+    fn add_row_inner(&mut self, _base: &mut MemberBase, index: usize) -> Option<&mut Row<isize>> {
         let hwnd = self.hwnd_lv;
-        let row = TableRow {
+        let row = Row {
             cells: self.data.cols.iter_mut().enumerate().map(|(y, col)| {
                 let mut lv = commctrl::LVITEMW {
                     mask: commctrl::LVIF_STATE,
@@ -50,7 +50,7 @@ impl WindowsTable {
         self.resize_rows(index, self.data.default_row_height, true);
         self.data.row_at_mut(index)
     }
-    fn add_column_inner(&mut self, base: &mut MemberBase, index: usize, initial: bool) -> Option<&mut TableColumn<isize>> {
+    fn add_column_inner(&mut self, base: &mut MemberBase, index: usize, initial: bool) -> Option<&mut Column<isize>> {
         let (member, control, adapter, _) = unsafe { Table::adapter_base_parts_mut(base) };
         let (pw, ph) = control.measured;
         
@@ -87,7 +87,7 @@ impl WindowsTable {
             unsafe { common::log_error(); }
             panic!("Could not insert a column headed at index {}", index);
         }
-        self.data.cols.insert(index, TableColumn {
+        self.data.cols.insert(index, Column {
             control: item.map(|mut item| {
             	let width = utils::coord_to_size(pw as i32 - DEFAULT_PADDING);
             	let height = utils::coord_to_size(ph as i32 - DEFAULT_PADDING);
@@ -208,7 +208,7 @@ impl WindowsTable {
                     item.set_layout_width(layout::Size::Exact(w));
                     item.set_layout_height(row.height);
                     item.on_added_to_container(this, 0, 0, pw, ph);
-                    row.cells.insert(y, Some(TableCell {
+                    row.cells.insert(y, Some(Cell {
                         control: Some(item),
                         native: y as isize,
                     }));
@@ -744,7 +744,7 @@ unsafe fn redraw_column(x: i32, hwnd: windef::HWND, rc: &mut windef::RECT, actio
         })
 });
 }
-fn redraw_cell<T: Sized>(cell: Option<&mut TableCell<T>>, x: i32, y: i32, hwnd: windef::HWND, rc: &mut windef::RECT, action: Option<bool>, row_height: layout::Size) {
+fn redraw_cell<T: Sized>(cell: Option<&mut Cell<T>>, x: i32, y: i32, hwnd: windef::HWND, rc: &mut windef::RECT, action: Option<bool>, row_height: layout::Size) {
     let mut drawn = commctrl::LVITEMW {
         mask: commctrl::LVIF_TEXT,// | commctrl::LVIF_PARAM,
         iItem: y, 
@@ -793,7 +793,7 @@ fn redraw_cell<T: Sized>(cell: Option<&mut TableCell<T>>, x: i32, y: i32, hwnd: 
         } 
     });
 }
-fn remove_cell_from_row<T: Sized>(hwnd: windef::HWND, row: &mut TableRow<T>, member: &mut MemberBase, x: usize, y: usize) {
+fn remove_cell_from_row<T: Sized>(hwnd: windef::HWND, row: &mut Row<T>, member: &mut MemberBase, x: usize, y: usize) {
     row.cells.get_mut(y).map(|cell| {
         cell.as_mut().map(|cell| cell.control.as_mut().map(|ref mut control| {
             let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
