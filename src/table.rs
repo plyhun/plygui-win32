@@ -220,14 +220,21 @@ impl WindowsTable {
     }
     fn remove_column_inner(&mut self, member: &mut MemberBase, index: usize) {
         let hwnd = self.base.hwnd;
-        self.data.rows.get_mut(index).map(|row| (0..row.cells.len()).rev().for_each(|y| {
-            remove_cell_from_row(hwnd, row, member, index, y);
-        }));
+        self.data.rows.iter_mut().enumerate().for_each(|(x, row)| {
+            remove_cell_from_row(hwnd, row, member, x, index);
+        });
         if minwindef::TRUE == unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_DELETECOLUMN, index, 0) as i32 } {
             self.data.cols.remove(index);
         } else {
             panic!("Could not delete column {}", index);
         }
+    }
+    fn remove_row_inner(&mut self, member: &mut MemberBase, index: usize) {
+        let hwnd = self.base.hwnd;
+        self.data.rows.get_mut(index).map(|row| (0..row.cells.len()).rev().for_each(|y| {
+            remove_cell_from_row(hwnd, row, member, index, y);
+        }));
+        self.data.rows.remove(index);
     }
     fn remove_cell_inner(&mut self, member: &mut MemberBase, x: usize, y: usize) {
         let hwnd = self.base.hwnd;
@@ -307,7 +314,7 @@ impl TableInner for WindowsTable {
     fn set_row_height(&mut self, _: &mut MemberBase, _: &mut ControlBase, _: &mut AdaptedBase, index: usize, size: layout::Size) {
         self.resize_rows(index, size, false)
     }
-    fn resize(&mut self, member: &mut MemberBase, control: &mut ControlBase, adapted: &mut AdaptedBase, width: usize, height: usize) -> (usize, usize) {
+   /* fn resize(&mut self, member: &mut MemberBase, control: &mut ControlBase, adapted: &mut AdaptedBase, width: usize, height: usize) -> (usize, usize) {
         let old_size = self.size(member, control, adapted);
         let (max_width, max_height) = (cmp::max(width, old_size.0), cmp::max(height, old_size.1));
         let (min_width, min_height) = (cmp::min(width, old_size.0), cmp::min(height, old_size.1));
@@ -337,7 +344,7 @@ impl TableInner for WindowsTable {
             );
         });
         old_size
-    }
+    } */
 }
 impl ItemClickableInner for WindowsTable {
     fn item_click(&mut self, indexes: &[usize], item_view: &mut dyn controls::Control, skip_callbacks: bool) {
