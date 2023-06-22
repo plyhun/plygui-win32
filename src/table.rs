@@ -4,6 +4,7 @@ use winapi::um::commctrl;
 const CLASS_ID: &str = commctrl::WC_LISTVIEW;
 
 lazy_static! {
+    pub static ref WINDOW_CLASS_LVHDR: Vec<u16> = OsStr::new("PlyguiListViewHeader").encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
     pub static ref WINDOW_CLASS_LV: Vec<u16> = OsStr::new(CLASS_ID).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
     pub static ref WINDOW_CLASS: Vec<u16> = unsafe { register_window_class() };
 }
@@ -56,10 +57,11 @@ impl WindowsTable {
         
         let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
         this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().col_1_needs_init |= 1 == index;
-        let item = adapter.adapter.spawn_item_view(&[index], this);
-        let title = common::string_of_pixel_len(5);
-        let mut title = OsStr::new(title.as_str()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
-
+        let indices = &[index];
+        let item = adapter.adapter.spawn_item_view(indices, this);
+        let title = adapter.adapter.alt_text_at(indices);
+        let mut title = title.map(|title| OsStr::new(title).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>())
+            .unwrap_or_else(|| OsStr::new(common::string_of_pixel_len(5).as_str()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>());
         let lvc = commctrl::LVCOLUMNW {
             mask: commctrl::LVCF_FMT | commctrl::LVCF_WIDTH | commctrl::LVCF_TEXT | commctrl::LVCF_SUBITEM ,
             fmt: commctrl::LVCFMT_LEFT,
@@ -77,7 +79,6 @@ impl WindowsTable {
             unsafe { common::log_error(); }
             panic!("Could not get the table header");
         }
-        unsafe { set_header_height(hdr_hwnd as windef::HWND, -2); }
         let hdi = commctrl::HDITEMW {
             mask: commctrl::HDI_FORMAT | commctrl::HDI_DI_SETITEM,
             fmt: commctrl::HDF_OWNERDRAW,
@@ -427,8 +428,8 @@ impl ControlInner for WindowsTable {
                 commctrl::LVS_EX_DOUBLEBUFFER,
                 WINDOW_CLASS_LV.as_ptr(),
                 WINDOW_CLASS.as_ptr(),
-	            winuser::WS_BORDER | winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::WS_VISIBLE | commctrl::LVS_EX_DOUBLEBUFFER/* | commctrl::LVS_NOCOLUMNHEADER */
-                     | winuser::WS_EX_CLIENTEDGE | winuser::WS_CHILD | commctrl::LVS_REPORT/* | commctrl::LVS_EX_BORDERSELECT | commctrl::LVS_EX_TRANSPARENTBKGND*/ | commctrl::LVS_OWNERDRAWFIXED ,
+	            winuser::WS_BORDER | winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::WS_VISIBLE/* | commctrl::LVS_EX_FULLROWSELECT*/ 
+                    | commctrl::LVS_NOSORTHEADER/* | commctrl::LVS_NOCOLUMNHEADER*/ | commctrl::LVS_REPORT | winuser::WS_CHILD | commctrl::LVS_OWNERDRAWFIXED ,
                 0,
                 0,
                 width as i32,
@@ -439,7 +440,10 @@ impl ControlInner for WindowsTable {
                 ptr::null_mut(),
             );
             common::set_default_font(hwnd_lv);
+            winuser::SendMessageW(hwnd_lv, commctrl::LVM_SETEXTENDEDLISTVIEWSTYLE, 0, (commctrl::LVS_EX_DOUBLEBUFFER | winuser::WS_EX_CLIENTEDGE | commctrl::LVS_EX_BORDERSELECT | commctrl::LVS_EX_TRANSPARENTBKGND) as isize);
             commctrl::SetWindowSubclass(hwnd_lv, Some(ahandler), common::subclass_id(WINDOW_CLASS_LV.as_ptr()) as usize, selfptr as usize);
+            let hwnd_hdr = winuser::SendMessageW(hwnd_lv, commctrl::LVM_GETHEADER, 0, 0) as windef::HWND;
+            commctrl::SetWindowSubclass(hwnd_hdr, Some(hdrhandler), common::subclass_id(WINDOW_CLASS_LVHDR.as_ptr()) as usize, selfptr as usize);
             (hwnd, hwnd_lv, id)
         };
         self.base.hwnd = hwnd;
@@ -452,7 +456,6 @@ impl ControlInner for WindowsTable {
         if 0 == unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_SETITEMCOUNT, self.width, commctrl::LVSICF_NOINVALIDATEALL) } {
             unsafe { common::log_error(); }
         }
-        //unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_SETEXTENDEDLISTVIEWSTYLE , 0, (commctrl::LVS_EX_DOUBLEBUFFER | commctrl::LVS_EX_BORDERSELECT | commctrl::LVS_EX_TRANSPARENTBKGND) as isize); }
         unsafe { 
         	winuser::SetWindowLongPtrW(self.hwnd_lv, winuser::GWLP_USERDATA, selfptr as WinPtr); 
         	self.redraw_visible();
@@ -623,6 +626,31 @@ unsafe fn register_window_class() -> Vec<u16> {
     winuser::RegisterClassExW(&class);
     class_name
 }
+unsafe extern "system" fn hdrhandler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
+    let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
+    if ww == 0 {
+        winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as WinPtr);
+    }
+    match msg {
+        commctrl::HDM_LAYOUT => {
+            let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from Header HWND");
+            let hl = &mut *(lparam as commctrl::LPHDLAYOUT);
+            let rect = &mut *(hl.prc);
+            let pos = &mut *(hl.pwpos);
+            let r = commctrl::DefSubclassProc(hwnd, msg, wparam, lparam);
+            pos.cy = 0;
+            this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.cols.iter_mut().enumerate().for_each(|(x, col)| {
+                col.control.as_mut().map(|col| {
+                    let (_, ch) = col.size();
+                    pos.cy = cmp::max(pos.cy, ch as i32);
+                });
+            });
+            rect.top = pos.cy;
+            r
+        }
+        _ => commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
+    }
+}
 unsafe extern "system" fn ahandler(hwnd: windef::HWND, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM, _: usize, param: usize) -> isize {
     let ww = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA);
     if ww == 0 {
@@ -631,12 +659,19 @@ unsafe extern "system" fn ahandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
     match msg {
         winuser::WM_DRAWITEM => {
             let draw_item = &mut *(lparam as winuser::LPDRAWITEMSTRUCT);
-            let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
-            if this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().col_1_needs_init {
-                column_resized(0, hwnd, false);
-                this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().col_1_needs_init = false;
+            match draw_item.CtlType {
+                commctrl::ODT_HEADER => {
+                    column_resized(draw_item.itemID as i32, hwnd, true);
+                }
+                _ => {
+                    let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
+                    if this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().col_1_needs_init {
+                        column_resized(0, hwnd, false);
+                        this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().col_1_needs_init = false;
+                    }
+                    redraw_row(draw_item.itemID as i32, hwnd, &mut draw_item.rcItem, None);
+                }
             }
-            redraw_row(draw_item.itemID as i32, hwnd, &mut draw_item.rcItem, None);
             return minwindef::TRUE as isize;
         }
         winuser::WM_NOTIFY => {
@@ -702,6 +737,18 @@ unsafe fn column_resized(x: i32, hwnd: windef::HWND, full_redraw: bool) {
             return;
         }
         let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
+        let header_height = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.header_height;
+        this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.column_at_mut(x as usize).and_then(|col| col.control.as_mut()).map(|item| {
+            let height = match header_height {
+                layout::Size::Exact(height) => height,
+                _ => item.size().1
+            };
+            let width = utils::coord_to_size(width - 2);
+            item.set_layout_width(layout::Size::Exact(width));
+            item.set_layout_height(header_height);
+            item.measure(width, height);
+            item.draw(None);
+        });
         this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.row_at_mut(x as usize).map(|row| {
             let row_height = row.height;
             row.cells.iter_mut().for_each(|cell| {
@@ -720,21 +767,6 @@ unsafe fn column_resized(x: i32, hwnd: windef::HWND, full_redraw: bool) {
         });
     }
 }
-unsafe fn set_header_height(hdr_hwnd: windef::HWND, height: i32) {
-    let hdc = winuser::GetDC(hdr_hwnd);
-    let hfont = winuser::SendMessageW(hdr_hwnd, winuser::WM_GETFONT, 0, 0);
-    let hobject = wingdi::SelectObject(hdc, hfont as *mut c_void);
-    let mut logfont = wingdi::LOGFONTW {
-        ..Default::default()
-    };
-    wingdi::GetObjectW(hfont as *mut c_void, mem::size_of::<wingdi::LOGFONTW>() as i32, &mut logfont as *mut _ as *mut c_void);
-    logfont.lfHeight = height;
-    let hfont = wingdi::CreateFontIndirectW(&logfont);
-    wingdi::SelectObject(hdc, hobject as *mut c_void);
-    winuser::ReleaseDC(hdr_hwnd, hdc);
-    winuser::SendMessageW(hdr_hwnd, winuser::WM_SETFONT, hfont as usize, 0);
-    wingdi::DeleteObject(hfont as *mut c_void);
-}
 unsafe fn redraw_row(y: i32, hwnd: windef::HWND, rc: &mut windef::RECT, action: Option<bool>) {
     let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
     this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.rows.iter_mut().enumerate().for_each(|(x, row)| {
@@ -744,12 +776,64 @@ unsafe fn redraw_row(y: i32, hwnd: windef::HWND, rc: &mut windef::RECT, action: 
 }
 unsafe fn redraw_column(x: i32, hwnd: windef::HWND, rc: &mut windef::RECT, action: Option<bool>) {
     let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
-    this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.row_at_mut(x as usize).map(|row| {
+    let header_height = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.header_height;
+    redraw_header(this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.column_at_mut(x as usize), x, hwnd, rc, action, header_height);
+    this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.rows.iter_mut().enumerate().for_each(|(y, row)| {
         let row_height = row.height;
-        row.cells.iter_mut().enumerate().for_each(|(y, cell)| {
-            redraw_cell(cell.as_mut(), x, y as i32, hwnd, rc, action, row_height);
-        })
-});
+        redraw_cell(row.cell_at_mut(x as usize), x, y as i32, hwnd, rc, action, row_height);
+    });
+}
+fn redraw_header<T: Sized>(col: Option<&mut Column<T>>, x: i32, hwnd: windef::HWND, rc: &mut windef::RECT, action: Option<bool>, header_height: layout::Size) {
+    let hdr_hwnd = unsafe { winuser::SendMessageW(hwnd, commctrl::LVM_GETHEADER, 0, 0) } as windef::HWND;
+    if hdr_hwnd.is_null() {
+        unsafe { common::log_error(); }
+        panic!("Could not get the table header");
+    }
+    let mut drawn = commctrl::HDITEMW {
+        mask: commctrl::HDI_TEXT | commctrl::HDI_WIDTH,// | commctrl::LVIF_PARAM,
+        //lParam: unsafe { item.native_id() as isize },
+        ..Default::default()
+    }; 
+    if 0 == unsafe { winuser::SendMessageW(hdr_hwnd, commctrl::HDM_GETITEMW, x as usize, &mut drawn as *mut _ as isize) } {
+    	return;
+    }
+    col.and_then(|cell| cell.control.as_mut()).map(|item| {
+        let action = action.unwrap_or(0 != unsafe { winuser::SendMessageW(hdr_hwnd, commctrl::HDM_GETITEMRECT, x as usize, rc as *mut _ as isize) });
+        if action {
+            let (width, mut height) = item.size();
+            if let layout::Size::Exact(row_height) = header_height {
+                height = row_height;
+            };
+            item.set_layout_width(layout::Size::Exact(drawn.cxy as u16 - 2));
+            item.set_layout_height(header_height);
+            let (tw, th, changed) = item.measure(width, height);
+            if changed {
+        		let mut title = common::wsz_of_pixel_len(tw as usize);
+    		    drawn.mask = commctrl::LVIF_TEXT;// | commctrl::LVIF_PARAM,
+                drawn.cchTextMax = title.len() as i32 + 1;
+                drawn.pszText = title.as_mut_ptr();
+                if 0 == unsafe { winuser::SendMessageW(hdr_hwnd, commctrl::HDM_SETITEMW, x as usize, &drawn as *const _ as isize) } {
+                    unsafe { common::log_error(); }
+                    println!("Could not insert a table header at index [{}]", x);
+                } else {
+            		item.draw(None);
+                }
+        	}
+            unsafe {
+                winuser::ShowWindow(item.native_id() as windef::HWND, winuser::SW_SHOW);
+                winuser::SetWindowPos(
+                    item.native_id() as windef::HWND, 
+                    ptr::null_mut(), 
+                    rc.left + 1, 
+                    rc.top + 1, 
+                    cmp::max(tw as i32, rc.right - rc.left), 
+                    cmp::max(th as i32, rc.bottom - rc.top), 
+                    winuser::SWP_NOSIZE | winuser::SWP_NOSENDCHANGING | winuser::SWP_NOREDRAW);
+            }
+        } else {
+            unsafe { winuser::ShowWindow(item.native_id() as windef::HWND, winuser::SW_HIDE); }
+        } 
+    });
 }
 fn redraw_cell<T: Sized>(cell: Option<&mut Cell<T>>, x: i32, y: i32, hwnd: windef::HWND, rc: &mut windef::RECT, action: Option<bool>, row_height: layout::Size) {
     let mut drawn = commctrl::LVITEMW {
