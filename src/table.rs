@@ -665,19 +665,12 @@ unsafe extern "system" fn ahandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
     match msg {
         winuser::WM_DRAWITEM => {
             let draw_item = &mut *(lparam as winuser::LPDRAWITEMSTRUCT);
-            match draw_item.CtlType {
-                commctrl::ODT_HEADER => {
-                    column_resized(draw_item.itemID as i32, hwnd, true);
-                }
-                _ => {
-                    let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
-                    if this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().col_1_needs_init {
-                        column_resized(0, hwnd, false);
-                        this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().col_1_needs_init = false;
-                    }
-                    redraw_row(draw_item.itemID as i32, hwnd, &mut draw_item.rcItem, None);
-                }
+            let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
+            if this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().col_1_needs_init {
+                column_resized(0, hwnd, false);
+                this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().col_1_needs_init = false;
             }
+            redraw_column(draw_item.itemID as i32, hwnd, &mut draw_item.rcItem, None);
             return minwindef::TRUE as isize;
         }
         winuser::WM_NOTIFY => {
@@ -808,9 +801,11 @@ fn redraw_header<T: Sized>(col: Option<&mut Column<T>>, col_index: i32, hwnd: wi
             if let layout::Size::Exact(row_height) = header_height {
                 height = row_height;
             };
+            item.set_skip_draw(true);
             item.set_layout_width(layout::Size::Exact(drawn.cxy as u16 - 2));
             item.set_layout_height(header_height);
             let (tw, th, changed) = item.measure(width, height);
+            item.set_skip_draw(false);
             if changed {
         		let mut title = common::wsz_of_pixel_len(tw as usize);
     		    drawn.mask = commctrl::LVIF_TEXT;// | commctrl::LVIF_PARAM,
