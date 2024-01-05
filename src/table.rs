@@ -136,7 +136,7 @@ impl WindowsTable {
             }
         } else {
             let row_height = self.data.default_row_height;
-            self.data.row_at_mut(index).map(|mut row| row.height = row_height);
+            self.data.row_at_mut(index).map(|row| row.height = row_height);
         }
     }
     fn resize_column(&mut self, base: &ControlBase, index: usize, size: layout::Size, skip_match_parent: bool) {
@@ -654,6 +654,24 @@ unsafe extern "system" fn hdrhandler(hwnd: windef::HWND, msg: minwindef::UINT, w
             rect.top = pos.cy;
             r
         }
+        winuser::WM_NOTIFY => {
+    		match (&*(lparam as winuser::LPNMHDR)).code {
+    		    commctrl::NM_CLICK => {
+                    let mut hit_info = commctrl::LVHITTESTINFO {
+        			    pt: Default::default(),
+        			    flags: commctrl::LVHT_ONITEM,
+        			    ..Default::default()
+    			    };
+    			    if 0 == winuser::GetCursorPos(&mut hit_info.pt) || 0 == winuser::ScreenToClient(hwnd, &mut hit_info.pt) {
+    			        common::log_error();
+    			        panic!("Cannot get cursor position!");
+    			    }
+	    			//let clicked = winuser::SendMessageW(hwnd_tree, commctrl::LVM_HITTEST, 0, &mut hit_info as *mut _ as isize) as *mut commctrl::LVITEM;
+                }            
+    			_ => {}
+            }
+            0
+        }
         _ => commctrl::DefSubclassProc(hwnd, msg, wparam, lparam)
     }
 }
@@ -683,7 +701,20 @@ unsafe extern "system" fn ahandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
     		    commctrl::HDN_ITEMCHANGEDA => {
     		        let header = &mut *(lparam as commctrl::LPNMHEADERA);
     				column_resized(header.iItem, hwnd, false);
-    		    }                
+    		    }
+                commctrl::NM_CLICK => {
+                    let mut hit_info = commctrl::LVHITTESTINFO {
+        			    pt: Default::default(),
+        			    flags: commctrl::LVHT_ONITEM,
+        			    ..Default::default()
+    			    };
+    			    if 0 == winuser::GetCursorPos(&mut hit_info.pt) || 0 == winuser::ScreenToClient(hwnd, &mut hit_info.pt) {
+    			        common::log_error();
+    			        panic!("Cannot get cursor position!");
+    			    }
+	    			//let clicked = winuser::SendMessageW(hwnd_tree, commctrl::LVM_HITTEST, 0, &mut hit_info as *mut _ as isize) as *mut commctrl::LVITEM;
+		            
+                }            
     			_ => {}
             }
         }
@@ -717,6 +748,36 @@ unsafe extern "system" fn handler<T: controls::Table>(this: &mut Table, msg: min
             
             let table = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
 			table.redraw_visible();
+        }
+        winuser::WM_NOTIFY => {
+    		match (&*(lparam as winuser::LPNMHDR)).code {
+    		    commctrl::NM_CLICK => {
+                    let hwnd_lv = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().hwnd_lv;
+                    let mut hit_info = commctrl::LVHITTESTINFO {
+        			    pt: Default::default(),
+        			    flags: commctrl::LVHT_ONITEM,
+        			    ..Default::default()
+    			    };
+    			    if 0 == winuser::GetCursorPos(&mut hit_info.pt) || 0 == winuser::ScreenToClient(hwnd_lv, &mut hit_info.pt) {
+    			        common::log_error();
+    			        panic!("Cannot get cursor position!");
+    			    }
+	    			if 0 > winuser::SendMessageW(hwnd_lv, commctrl::LVM_SUBITEMHITTEST, 0, &mut hit_info as *mut _ as isize) {
+                        common::log_error();
+    			        panic!("Cannot get sub item position!");
+                    }
+                    let indices = &[hit_info.iItem as usize, hit_info.iSubItem as usize];
+                    let this = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
+                    let maybe_clicked = this.data.cell_at_mut(indices);
+		            if let Some(clicked) = maybe_clicked.and_then(|clicked| clicked.control.as_mut()) {
+                        if let Some(ref mut cb) = this.on_item_click {
+                            let this = common::member_from_hwnd::<T>(hwnd).unwrap();
+                            (cb.as_mut())(this, indices.as_slice(), clicked.as_member_mut().is_control_mut().unwrap());
+                        }
+                    }
+                }            
+    			_ => {}
+            }
         }
         winuser::WM_VSCROLL | winuser::WM_MOUSEWHEEL => {
             winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::FALSE);
@@ -864,6 +925,7 @@ fn redraw_cell<T: Sized>(cell: Option<&mut Cell<T>>, col_index: i32, row_index: 
                     unsafe { common::log_error(); }
                     println!("Could not insert a table cell at index [{}, {}]", drawn.iSubItem, drawn.iItem);
                 } else {
+                    println!("Drawing [{}, {}] anew", drawn.iSubItem, drawn.iItem);
             		item.draw(None);
                 }
         	}
