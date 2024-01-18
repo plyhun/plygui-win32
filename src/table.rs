@@ -1,4 +1,5 @@
 use crate::common::{self, matrix::*, *};
+use plygui_api::controls::Member;
 use winapi::um::commctrl;
 
 const CLASS_ID: &str = commctrl::WC_LISTVIEW;
@@ -23,7 +24,7 @@ pub struct WindowsTable {
 }
 
 impl WindowsTable {
-    fn add_row_inner(&mut self, _base: &mut MemberBase, row_index: usize) -> Option<&mut Row<isize>> {
+    fn add_row_inner(&mut self, base: &mut MemberBase, row_index: usize) -> Option<&mut Row<isize>> {
         let hwnd = self.hwnd_lv;
         let row = Row {
             cells: self.data.cols.iter_mut().enumerate().map(|(y, col)| {
@@ -54,7 +55,7 @@ impl WindowsTable {
     fn add_column_inner(&mut self, base: &mut MemberBase, col_index: usize, initial: bool) -> Option<&mut Column<isize>> {
         let (member, control, adapter, _) = unsafe { Table::adapter_base_parts_mut(base) };
         let (pw, ph) = control.measured;
-        
+        let hwnd = self.hwnd_lv;
         let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
         this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().col_1_needs_init |= 1 == col_index;
         let indices = &[col_index];
@@ -100,7 +101,7 @@ impl WindowsTable {
             native: col_index as isize,
             width: layout::Size::MatchParent,
         });
-        self.data.rows.iter_mut().for_each(|row| {
+        self.data.rows.iter_mut().enumerate().for_each(|(row_index, row)| {
             row.cells.insert(col_index, None);
         });
         self.resize_column(control, col_index, self.data.cols[col_index].width, initial);
@@ -175,6 +176,7 @@ impl WindowsTable {
         if self.data.row_at_mut(row_index).is_none() {
             self.add_row_inner(base, row_index);
         }
+        let hwnd = self.hwnd_lv;
         let (member, control, adapter, _) = unsafe { Table::adapter_base_parts_mut(base) };
         let (pw, ph) = control.measured;
         let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
@@ -191,7 +193,7 @@ impl WindowsTable {
                 //lParam: unsafe { item.native_id() as isize },
                 ..Default::default()
             };
-            if 0 == unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_SETITEMW, 0, &lv as *const _ as isize) } {
+            if 0 == unsafe { winuser::SendMessageW(hwnd, commctrl::LVM_SETITEMW, 0, &lv as *const _ as isize) } {
                 unsafe { common::log_error(); }
                 panic!("Could not insert a table cell at index [{}, {}]", col_index, row_index);
             } else {
@@ -200,7 +202,7 @@ impl WindowsTable {
                 	top: lv.iSubItem,
                 	..Default::default()
                 };
-                if 0 == unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_GETSUBITEMRECT, lv.iItem as usize, &mut rc as *mut _ as isize) } {
+                if 0 == unsafe { winuser::SendMessageW(hwnd, commctrl::LVM_GETSUBITEMRECT, lv.iItem as usize, &mut rc as *mut _ as isize) } {
                     unsafe { common::log_error(); }
                     panic!("Could not get cell rect at index [{}, {}]", col_index, row_index);
                 }
@@ -209,10 +211,18 @@ impl WindowsTable {
                     item.set_layout_width(layout::Size::Exact(w));
                     item.set_layout_height(row.height);
                     item.on_added_to_container(this, 0, 0, pw, ph);
-                    row.cells.insert(col_index, Some(Cell {
-                        control: Some(item),
-                        native: col_index as isize,
-                    }));
+                    let maybe_cell = row.cell_at_mut(col_index);
+                    if maybe_cell.is_some() {
+                        maybe_cell.map(|cell| {
+                            cell.control = Some(item);
+                            cell.native = col_index as isize;
+                        });
+                    } else {
+                        row.cells.insert(col_index, Some(Cell {
+                            control: Some(item),
+                            native: col_index as isize,
+                        }));
+                    }
                     row.height
                 }).unwrap_or(self.data.default_row_height);
                 self.resize_rows(row_index, row_height, true);
@@ -231,14 +241,16 @@ impl WindowsTable {
         }
     }
     fn remove_row_inner(&mut self, member: &mut MemberBase, row_index: usize) {
-        let hwnd = self.base.hwnd;
+        let hwnd = self.hwnd_lv;
         self.data.rows.get_mut(row_index).map(|row| (0..row.cells.len()).rev().for_each(|col_index| {
             remove_cell_from_row(hwnd, row, member, col_index, row_index);
         }));
-        self.data.rows.remove(row_index);
+        if row_index < self.data.rows.len() {
+            self.data.rows.remove(row_index);
+        }
     }
     fn remove_cell_inner(&mut self, member: &mut MemberBase, col_index: usize, row_index: usize) {
-        let hwnd = self.base.hwnd;
+        let hwnd = self.hwnd_lv;
         self.data.rows.get_mut(row_index).map(|row| {
             remove_cell_from_row(hwnd, row, member, col_index, row_index);
         });
@@ -656,18 +668,18 @@ unsafe extern "system" fn hdrhandler(hwnd: windef::HWND, msg: minwindef::UINT, w
         }
         winuser::WM_NOTIFY => {
     		match (&*(lparam as winuser::LPNMHDR)).code {
-    		    commctrl::NM_CLICK => {
-                    let mut hit_info = commctrl::LVHITTESTINFO {
-        			    pt: Default::default(),
-        			    flags: commctrl::LVHT_ONITEM,
-        			    ..Default::default()
-    			    };
-    			    if 0 == winuser::GetCursorPos(&mut hit_info.pt) || 0 == winuser::ScreenToClient(hwnd, &mut hit_info.pt) {
-    			        common::log_error();
-    			        panic!("Cannot get cursor position!");
-    			    }
-	    			//let clicked = winuser::SendMessageW(hwnd_tree, commctrl::LVM_HITTEST, 0, &mut hit_info as *mut _ as isize) as *mut commctrl::LVITEM;
-                }            
+    		    commctrl::LVN_COLUMNCLICK => {
+                    let header = &mut *(lparam as commctrl::LPNMLISTVIEW);
+                    let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
+                    let this = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
+                    let maybe_clicked = this.data.column_at_mut(header.iSubItem as usize);
+		            if let Some(clicked) = maybe_clicked.and_then(|clicked| clicked.control.as_mut()) {
+                        if let Some(ref mut cb) = this.on_item_click {
+                            let this = common::member_from_hwnd::<Table>(hwnd).unwrap();
+                            (cb.as_mut())(this, &[header.iSubItem as usize], clicked.as_member_mut().is_control_mut().unwrap());
+                        }
+                    }
+                }
     			_ => {}
             }
             0
@@ -702,19 +714,18 @@ unsafe extern "system" fn ahandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
     		        let header = &mut *(lparam as commctrl::LPNMHEADERA);
     				column_resized(header.iItem, hwnd, false);
     		    }
-                commctrl::NM_CLICK => {
-                    let mut hit_info = commctrl::LVHITTESTINFO {
-        			    pt: Default::default(),
-        			    flags: commctrl::LVHT_ONITEM,
-        			    ..Default::default()
-    			    };
-    			    if 0 == winuser::GetCursorPos(&mut hit_info.pt) || 0 == winuser::ScreenToClient(hwnd, &mut hit_info.pt) {
-    			        common::log_error();
-    			        panic!("Cannot get cursor position!");
-    			    }
-	    			//let clicked = winuser::SendMessageW(hwnd_tree, commctrl::LVM_HITTEST, 0, &mut hit_info as *mut _ as isize) as *mut commctrl::LVITEM;
-		            
-                }            
+                commctrl::LVN_COLUMNCLICK => {
+                    let header = &mut *(lparam as commctrl::LPNMLISTVIEW);
+                    let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
+                    let this = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
+                    let maybe_clicked = this.data.column_at_mut(header.iSubItem as usize);
+		            if let Some(clicked) = maybe_clicked.and_then(|clicked| clicked.control.as_mut()) {
+                        if let Some(ref mut cb) = this.on_item_click {
+                            let this = common::member_from_hwnd::<Table>(hwnd).unwrap();
+                            (cb.as_mut())(this, &[header.iSubItem as usize], clicked.as_member_mut().is_control_mut().unwrap());
+                        }
+                    }
+                }    
     			_ => {}
             }
         }
@@ -735,6 +746,26 @@ unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UIN
         return winuser::DefWindowProcW(hwnd, msg, wparam, lparam);
     }
     let table: &mut Table = mem::transmute(ww);
+    match msg {
+        winuser::WM_NOTIFY => {
+    		match (&*(lparam as winuser::LPNMHDR)).code {
+    		    commctrl::LVN_COLUMNCLICK => {
+                    let header = &mut *(lparam as commctrl::LPNMLISTVIEW);
+                    let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
+                    let this = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
+                    let maybe_clicked = this.data.column_at_mut(header.iSubItem as usize);
+		            if let Some(clicked) = maybe_clicked.and_then(|clicked| clicked.control.as_mut()) {
+                        if let Some(ref mut cb) = this.on_item_click {
+                            let this = common::member_from_hwnd::<Table>(hwnd).unwrap();
+                            (cb.as_mut())(this, &[header.iSubItem as usize], clicked.as_member_mut().is_control_mut().unwrap());
+                        }
+                    }
+                }
+    			_ => {}
+            }
+        }
+        _ => {}
+    }
     table.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.handle(msg, wparam, lparam, hwnd)
 }
 unsafe extern "system" fn handler<T: controls::Table>(this: &mut Table, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
@@ -751,7 +782,7 @@ unsafe extern "system" fn handler<T: controls::Table>(this: &mut Table, msg: min
         }
         winuser::WM_NOTIFY => {
     		match (&*(lparam as winuser::LPNMHDR)).code {
-    		    commctrl::NM_CLICK => {
+                commctrl::NM_CLICK => {
                     let hwnd_lv = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().hwnd_lv;
                     let mut hit_info = commctrl::LVHITTESTINFO {
         			    pt: Default::default(),
@@ -766,16 +797,27 @@ unsafe extern "system" fn handler<T: controls::Table>(this: &mut Table, msg: min
                         common::log_error();
     			        panic!("Cannot get sub item position!");
                     }
-                    let indices = &[hit_info.iItem as usize, hit_info.iSubItem as usize];
                     let this = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
-                    let maybe_clicked = this.data.cell_at_mut(indices);
+                    let maybe_clicked = this.data.cell_at_mut(&[hit_info.iItem as usize, hit_info.iSubItem as usize]);
 		            if let Some(clicked) = maybe_clicked.and_then(|clicked| clicked.control.as_mut()) {
                         if let Some(ref mut cb) = this.on_item_click {
                             let this = common::member_from_hwnd::<T>(hwnd).unwrap();
-                            (cb.as_mut())(this, indices.as_slice(), clicked.as_member_mut().is_control_mut().unwrap());
+                            (cb.as_mut())(this, &[hit_info.iSubItem as usize, hit_info.iItem as usize], clicked.as_member_mut().is_control_mut().unwrap());
                         }
                     }
                 }            
+                commctrl::LVN_COLUMNCLICK => {
+                    let header = &mut *(lparam as commctrl::LPNMLISTVIEW);
+                    let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
+                    let this = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
+                    let maybe_clicked = this.data.column_at_mut(header.iSubItem as usize);
+		            if let Some(clicked) = maybe_clicked.and_then(|clicked| clicked.control.as_mut()) {
+                        if let Some(ref mut cb) = this.on_item_click {
+                            let this = common::member_from_hwnd::<Table>(hwnd).unwrap();
+                            (cb.as_mut())(this, &[header.iSubItem as usize], clicked.as_member_mut().is_control_mut().unwrap());
+                        }
+                    }
+                }    
     			_ => {}
             }
         }
@@ -888,7 +930,7 @@ fn redraw_header<T: Sized>(col: Option<&mut Column<T>>, col_index: i32, hwnd: wi
                     rc.top + 1, 
                     cmp::max(tw as i32, rc.right - rc.left), 
                     cmp::max(th as i32, rc.bottom - rc.top), 
-                    winuser::SWP_NOSIZE | winuser::SWP_NOSENDCHANGING | winuser::SWP_NOREDRAW);
+                    winuser::SWP_NOSIZE | winuser::SWP_NOSENDCHANGING | winuser::SWP_NOREDRAW | winuser::SWP_NOCOPYBITS | winuser::SWP_DEFERERASE);
             }
         } else {
             unsafe { winuser::ShowWindow(item.native_id() as windef::HWND, winuser::SW_HIDE); }
@@ -938,7 +980,7 @@ fn redraw_cell<T: Sized>(cell: Option<&mut Cell<T>>, col_index: i32, row_index: 
                 	rc.top + 1, 
                 	cmp::max(tw as i32, rc.right - rc.left), 
                 	cmp::max(th as i32, rc.bottom - rc.top), 
-                	winuser::SWP_NOSIZE | winuser::SWP_NOSENDCHANGING | winuser::SWP_NOREDRAW);
+                	winuser::SWP_NOSIZE | winuser::SWP_NOSENDCHANGING | winuser::SWP_NOREDRAW | winuser::SWP_NOCOPYBITS | winuser::SWP_DEFERERASE);
             }
         } else {
         	 unsafe { winuser::ShowWindow(item.native_id() as windef::HWND, winuser::SW_HIDE); }
@@ -947,23 +989,25 @@ fn redraw_cell<T: Sized>(cell: Option<&mut Cell<T>>, col_index: i32, row_index: 
 }
 fn remove_cell_from_row<T: Sized>(hwnd: windef::HWND, row: &mut Row<T>, member: &mut MemberBase, col_index: usize, row_index: usize) {
     row.cells.get_mut(row_index).map(|cell| {
-        cell.as_mut().map(|cell| cell.control.as_mut().map(|ref mut control| {
-            let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
-            control.on_removed_from_container(this);
-            let lv = commctrl::LVITEMW {
-                mask: commctrl::LVIF_TEXT,// | commctrl::LVIF_PARAM,
-                iItem: row_index as i32, 
-                iSubItem: col_index as i32,
-                cchTextMax: 0,
-                pszText: ptr::null_mut(),
-                //lParam: unsafe { item.native_id() as isize },
-                ..Default::default()
-            };
-            if 0 == unsafe { winuser::SendMessageW(hwnd, commctrl::LVM_SETITEMW, 0, &lv as *const _ as isize) } {
-                unsafe { common::log_error(); }
-                panic!("Could not clear a table cell at index [{}, {}]", col_index, row_index);
-            }
-        }));
+        cell.as_mut().map(|cell| {
+            cell.control.as_mut().map(|ref mut control| {
+                let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
+                control.on_removed_from_container(this);
+                let lv = commctrl::LVITEMW {
+                    mask: commctrl::LVIF_TEXT,// | commctrl::LVIF_PARAM,
+                    iItem: row_index as i32, 
+                    iSubItem: col_index as i32,
+                    cchTextMax: 0,
+                    pszText: ptr::null_mut(),
+                    //lParam: unsafe { item.native_id() as isize },
+                    ..Default::default()
+                };
+                if 0 == unsafe { winuser::SendMessageW(hwnd, commctrl::LVM_SETITEMW, 0, &lv as *const _ as isize) } {
+                    unsafe { common::log_error(); }
+                   // panic!("Could not clear a table cell at index [{}, {}]", col_index, row_index);
+                }
+            });
+            cell.control = None;
+        });
     });
-    row.cells.remove(col_index);
 }
