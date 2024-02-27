@@ -551,14 +551,23 @@ unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwi
     			_ => {}
     		}
     	}
-    	winuser::WM_SIZE => {
+        winuser::WM_SIZE | common::WM_UPDATE_INNER => {
             let width = lparam as u16;
             let height = (lparam >> 16) as u16;
-            
-            this.call_on_size::<T>(width, height);
-            
-            let tree = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
-			tree.redraw_visible();
+            {
+                this.set_skip_draw(true);
+                {
+                    let tree = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
+			        tree.redraw_visible();
+                }
+                this.set_skip_draw(false);
+            }
+            if msg != common::WM_UPDATE_INNER {
+                this.call_on_size::<T>(width, height);
+            } else {
+                winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::TRUE);
+            }
+            return 0;
         }
         winuser::WM_CTLCOLORSTATIC => {
             let hdc = wparam as windef::HDC;

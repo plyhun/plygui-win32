@@ -592,7 +592,7 @@ unsafe extern "system" fn handler<T: controls::Splitted>(this: &mut Splitted, ms
                     if width >= DEFAULT_BOUND as u16 && x > DEFAULT_BOUND as u16 && x < (width - DEFAULT_BOUND as u16) {
                         winuser::SetCursor(this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().cursor);
 
-                        if wparam == winuser::MK_LBUTTON && true {
+                        if wparam == winuser::MK_LBUTTON && this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().moving {
                             this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().splitter = x as f32 / width as f32;
                             updated = true;
                         }

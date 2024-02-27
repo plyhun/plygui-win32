@@ -211,6 +211,14 @@ impl WindowsTable {
                     item.set_layout_width(layout::Size::Exact(w));
                     item.set_layout_height(row.height);
                     item.on_added_to_container(this, 0, 0, pw, ph);
+                    unsafe {
+                        let item_hwnd = item.native_id() as windef::HWND;
+                        let mut style = winuser::GetWindowLongW(item_hwnd, winuser::GWL_STYLE);
+                        style |= winuser::WS_CLIPSIBLINGS as i32;
+                        style &= !winuser::CS_HREDRAW as i32;
+                        style &= !winuser::CS_VREDRAW as i32;
+                        winuser::SetWindowLongW(item_hwnd, winuser::GWL_STYLE, style);
+                    }
                     let maybe_cell = row.cell_at_mut(col_index);
                     if maybe_cell.is_some() {
                         maybe_cell.map(|cell| {
@@ -435,7 +443,7 @@ impl ControlInner for WindowsTable {
                 width as i32,
                 height as i32,
                 self.base.hwnd,
-                winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN,
+                winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::WS_EX_COMPOSITED,
                 WINDOW_CLASS.as_ptr(),
                 "",
                 0,
@@ -446,7 +454,7 @@ impl ControlInner for WindowsTable {
                 commctrl::LVS_EX_DOUBLEBUFFER,
                 WINDOW_CLASS_LV.as_ptr(),
                 WINDOW_CLASS.as_ptr(),
-	            winuser::WS_BORDER | winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::WS_VISIBLE/* | commctrl::LVS_EX_FULLROWSELECT*/ 
+	            winuser::WS_BORDER | winuser::WS_EX_COMPOSITED | winuser::WS_EX_CONTROLPARENT | winuser::WS_CLIPCHILDREN | winuser::WS_VISIBLE/* | commctrl::LVS_EX_FULLROWSELECT*/ 
                     | commctrl::LVS_NOSORTHEADER/* | commctrl::LVS_NOCOLUMNHEADER*/ | commctrl::LVS_REPORT | winuser::WS_CHILD | commctrl::LVS_OWNERDRAWFIXED ,
                 0,
                 0,
@@ -771,14 +779,23 @@ unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UIN
 unsafe extern "system" fn handler<T: controls::Table>(this: &mut Table, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
 	let hwnd = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.hwnd;
 	match msg {
-        winuser::WM_SIZE => {
+        winuser::WM_SIZE | common::WM_UPDATE_INNER => {
             let width = lparam as u16;
             let height = (lparam >> 16) as u16;
-            
-            this.call_on_size::<T>(width, height);
-            
-            let table = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
-			table.redraw_visible();
+            {
+                this.set_skip_draw(true);
+                {
+                    let table = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
+                    table.redraw_visible();
+                }
+                this.set_skip_draw(false);
+            }
+            if msg != common::WM_UPDATE_INNER {
+                this.call_on_size::<T>(width, height);
+            } else {
+                winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::TRUE);
+            }
+            return 0;
         }
         winuser::WM_NOTIFY => {
     		match (&*(lparam as winuser::LPNMHDR)).code {

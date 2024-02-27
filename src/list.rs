@@ -317,6 +317,33 @@ unsafe extern "system" fn handler<T: controls::List>(hwnd: windef::HWND, msg: mi
                 (callback.as_mut())(list, &[i as usize], item_view.as_mut());
             }
         }
+        winuser::WM_SIZE | common::WM_UPDATE_INNER => {
+            let width = lparam as u16;
+            let height = (lparam >> 16) as u16;
+            let list: &mut List = mem::transmute(param);
+            {
+                list.set_skip_draw(true);
+                {
+                    let mut y = 0;
+                    let i = cmp::max(0, winuser::SendMessageW(hwnd, winuser::LB_GETTOPINDEX, 0, 0)) as usize;
+                    let list = list.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
+                    for i in i..list.items.len() {
+                        let item = &mut list.items[i];
+                        let (_, ch, _) = item.measure(cmp::max(0, width as i32 - DEFAULT_PADDING) as u16, cmp::max(0, height as i32) as u16);
+                        item.draw(Some((0, y)));
+                        y += ch as i32;
+                    }
+                    list.force_scrollbar();
+                }
+                list.set_skip_draw(false);
+            }
+            if msg != common::WM_UPDATE_INNER {
+                list.call_on_size::<T>(width, height);
+            } else {
+                winuser::InvalidateRect(hwnd, ptr::null_mut(), minwindef::TRUE);
+            }
+            return 0;
+        }
         winuser::WM_SIZE => {
             let width = lparam as u16;
             let height = (lparam >> 16) as u16;
