@@ -1,5 +1,5 @@
 use crate::common::{self, matrix::*, *};
-use plygui_api::controls::Member;
+use plygui_api::controls::{Control, Member};
 use winapi::um::commctrl;
 
 const CLASS_ID: &str = commctrl::WC_LISTVIEW;
@@ -55,11 +55,10 @@ impl WindowsTable {
     fn add_column_inner(&mut self, base: &mut MemberBase, col_index: usize, initial: bool) -> Option<&mut Column<isize>> {
         let (member, control, adapter, _) = unsafe { Table::adapter_base_parts_mut(base) };
         let (pw, ph) = control.measured;
-        let hwnd = self.hwnd_lv;
         let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
         this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().col_1_needs_init |= 1 == col_index;
         let indices = &[col_index];
-        let item = adapter.adapter.spawn_item_view(indices, this);
+        let item: Option<Box<dyn Control>> = adapter.adapter.spawn_item_view(indices, this);
         let title = adapter.adapter.alt_text_at(indices);
         let mut title = title.map(|title| OsStr::new(title).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>())
             .unwrap_or_else(|| OsStr::new(common::string_of_pixel_len(5).as_str()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>());
@@ -101,7 +100,7 @@ impl WindowsTable {
             native: col_index as isize,
             width: layout::Size::MatchParent,
         });
-        self.data.rows.iter_mut().enumerate().for_each(|(row_index, row)| {
+        self.data.rows.iter_mut().for_each(|row| {
             row.cells.insert(col_index, None);
         });
         self.resize_column(control, col_index, self.data.cols[col_index].width, initial);
@@ -658,6 +657,32 @@ unsafe extern "system" fn hdrhandler(hwnd: windef::HWND, msg: minwindef::UINT, w
         winuser::SetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA, param as WinPtr);
     }
     match msg {
+        winuser::WM_LBUTTONUP => {
+            let points = wingdi::MAKEPOINTS(lparam as u32);
+            let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from Header HWND");
+            //if points.y > this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().da
+            let hwnd_lv = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().hwnd_lv;
+            let mut hit_info = commctrl::LVHITTESTINFO {
+                pt: Default::default(),
+                flags: commctrl::LVHT_ONITEM,
+                ..Default::default()
+            };
+            hit_info.pt.x = points.x as i32;
+            hit_info.pt.y = points.y as i32;
+            if 0 > winuser::SendMessageW(hwnd_lv, commctrl::LVM_SUBITEMHITTEST, 0, &mut hit_info as *mut _ as isize) {
+                common::log_error();
+                panic!("Cannot get sub item position!");
+            }
+            let this = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
+            let maybe_clicked = this.data.column_at_mut(hit_info.iSubItem as usize);
+            if let Some(clicked) = maybe_clicked.and_then(|clicked| clicked.control.as_mut()) {
+                if let Some(ref mut cb) = this.on_item_click {
+                    let this = common::member_from_hwnd::<Table>(hwnd).unwrap();
+                    (cb.as_mut())(this, &[hit_info.iSubItem as usize], clicked.as_member_mut().is_control_mut().unwrap());
+                }
+            }
+            0
+        }
         commctrl::HDM_LAYOUT => {
             let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from Header HWND");
             let hl = &mut *(lparam as commctrl::LPHDLAYOUT);
@@ -676,6 +701,18 @@ unsafe extern "system" fn hdrhandler(hwnd: windef::HWND, msg: minwindef::UINT, w
         }
         winuser::WM_NOTIFY => {
     		match (&*(lparam as winuser::LPNMHDR)).code {
+                commctrl::HDN_ITEMSTATEICONCLICK => {
+                    let header = &mut *(lparam as commctrl::LPNMHEADERW);
+                    let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
+                    let this = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
+                    let maybe_clicked = this.data.column_at_mut(header.iItem as usize);
+		            if let Some(clicked) = maybe_clicked.and_then(|clicked| clicked.control.as_mut()) {
+                        if let Some(ref mut cb) = this.on_item_click {
+                            let this = common::member_from_hwnd::<Table>(hwnd).unwrap();
+                            (cb.as_mut())(this, &[header.iItem as usize], clicked.as_member_mut().is_control_mut().unwrap());
+                        }
+                    }
+                }
     		    commctrl::LVN_COLUMNCLICK => {
                     let header = &mut *(lparam as commctrl::LPNMLISTVIEW);
                     let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
@@ -734,6 +771,18 @@ unsafe extern "system" fn ahandler(hwnd: windef::HWND, msg: minwindef::UINT, wpa
                         }
                     }
                 }    
+                commctrl::HDN_ITEMSTATEICONCLICK => {
+                    let header = &mut *(lparam as commctrl::LPNMHEADERW);
+                    let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
+                    let this = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
+                    let maybe_clicked = this.data.column_at_mut(header.iItem as usize);
+		            if let Some(clicked) = maybe_clicked.and_then(|clicked| clicked.control.as_mut()) {
+                        if let Some(ref mut cb) = this.on_item_click {
+                            let this = common::member_from_hwnd::<Table>(hwnd).unwrap();
+                            (cb.as_mut())(this, &[header.iItem as usize], clicked.as_member_mut().is_control_mut().unwrap());
+                        }
+                    }
+                }
     			_ => {}
             }
         }
@@ -766,6 +815,18 @@ unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UIN
                         if let Some(ref mut cb) = this.on_item_click {
                             let this = common::member_from_hwnd::<Table>(hwnd).unwrap();
                             (cb.as_mut())(this, &[header.iSubItem as usize], clicked.as_member_mut().is_control_mut().unwrap());
+                        }
+                    }
+                }
+                commctrl::HDN_ITEMSTATEICONCLICK => {
+                    let header = &mut *(lparam as commctrl::LPNMHEADERW);
+                    let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
+                    let this = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
+                    let maybe_clicked = this.data.column_at_mut(header.iItem as usize);
+		            if let Some(clicked) = maybe_clicked.and_then(|clicked| clicked.control.as_mut()) {
+                        if let Some(ref mut cb) = this.on_item_click {
+                            let this = common::member_from_hwnd::<Table>(hwnd).unwrap();
+                            (cb.as_mut())(this, &[header.iItem as usize], clicked.as_member_mut().is_control_mut().unwrap());
                         }
                     }
                 }
@@ -808,11 +869,11 @@ unsafe extern "system" fn handler<T: controls::Table>(this: &mut Table, msg: min
     			    };
     			    if 0 == winuser::GetCursorPos(&mut hit_info.pt) || 0 == winuser::ScreenToClient(hwnd_lv, &mut hit_info.pt) {
     			        common::log_error();
-    			        panic!("Cannot get cursor position!");
+    			        return 0;
     			    }
 	    			if 0 > winuser::SendMessageW(hwnd_lv, commctrl::LVM_SUBITEMHITTEST, 0, &mut hit_info as *mut _ as isize) {
                         common::log_error();
-    			        panic!("Cannot get sub item position!");
+    			        return 0;
                     }
                     let this = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
                     let maybe_clicked = this.data.cell_at_mut(&[hit_info.iItem as usize, hit_info.iSubItem as usize]);
@@ -822,7 +883,19 @@ unsafe extern "system" fn handler<T: controls::Table>(this: &mut Table, msg: min
                             (cb.as_mut())(this, &[hit_info.iSubItem as usize, hit_info.iItem as usize], clicked.as_member_mut().is_control_mut().unwrap());
                         }
                     }
-                }            
+                }
+                commctrl::HDN_ITEMSTATEICONCLICK => {
+                    let header = &mut *(lparam as commctrl::LPNMHEADERW);
+                    let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
+                    let this = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
+                    let maybe_clicked = this.data.column_at_mut(header.iItem as usize);
+		            if let Some(clicked) = maybe_clicked.and_then(|clicked| clicked.control.as_mut()) {
+                        if let Some(ref mut cb) = this.on_item_click {
+                            let this = common::member_from_hwnd::<Table>(hwnd).unwrap();
+                            (cb.as_mut())(this, &[header.iItem as usize], clicked.as_member_mut().is_control_mut().unwrap());
+                        }
+                    }
+                }
                 commctrl::LVN_COLUMNCLICK => {
                     let header = &mut *(lparam as commctrl::LPNMLISTVIEW);
                     let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
@@ -863,9 +936,11 @@ unsafe fn column_resized(col_index: i32, hwnd: windef::HWND, full_redraw: bool) 
                 _ => item.size().1
             };
             let width = utils::coord_to_size(width - 2);
+            item.set_skip_draw(true);
             item.set_layout_width(layout::Size::Exact(width));
             item.set_layout_height(header_height);
             item.measure(width, height);
+            item.set_skip_draw(false);
             item.draw(None);
         });
         this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.rows.iter_mut().for_each(|row| {
@@ -875,10 +950,12 @@ unsafe fn column_resized(col_index: i32, hwnd: windef::HWND, full_redraw: bool) 
                     layout::Size::Exact(height) => height,
                     _ => item.size().1
                 };
+                item.set_skip_draw(true);
                 let width = utils::coord_to_size(width - 2);
                 item.set_layout_width(layout::Size::Exact(width));
                 item.set_layout_height(row_height);
                 item.measure(width, height);
+                item.set_skip_draw(false);
                 item.draw(None);
             });
         });
@@ -1005,7 +1082,7 @@ fn redraw_cell<T: Sized>(cell: Option<&mut Cell<T>>, col_index: i32, row_index: 
     });
 }
 fn remove_cell_from_row<T: Sized>(hwnd: windef::HWND, row: &mut Row<T>, member: &mut MemberBase, col_index: usize, row_index: usize) {
-    row.cells.get_mut(row_index).map(|cell| {
+    row.cells.get_mut(col_index).map(|cell| {
         cell.as_mut().map(|cell| {
             cell.control.as_mut().map(|ref mut control| {
                 let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };

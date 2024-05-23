@@ -140,7 +140,7 @@ impl WindowsTree {
 impl<O: controls::Tree> NewTreeInner<O> for WindowsTree {
     fn with_uninit(_: &mut mem::MaybeUninit<O>) -> Self {
         WindowsTree {
-            base: common::WindowsControlBase::with_wndproc(Some(handler::<O>)),
+            base: common::WindowsControlBase::with_wndproc(Some(parent_handler::<O>)),
             hwnd_tree: 0 as windef::HWND,
             items: Default::default(),
             on_item_click: None,
@@ -475,7 +475,7 @@ unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UIN
     }
 }
 
-unsafe extern "system" fn handler<T: controls::Tree>(this: &mut Tree, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
+unsafe extern "system" fn parent_handler<T: controls::Tree>(this: &mut Tree, msg: minwindef::UINT, wparam: minwindef::WPARAM, lparam: minwindef::LPARAM) -> minwindef::LRESULT {
 	let hwnd = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.hwnd;
 	let hwnd_tree = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().hwnd_tree;
     match msg {
