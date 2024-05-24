@@ -1,5 +1,5 @@
 use crate::common::{self, matrix::*, *};
-use plygui_api::controls::{Control, Member};
+use plygui_api::{controls::{Control, Member}, types::Visibility};
 use winapi::um::commctrl;
 
 const CLASS_ID: &str = commctrl::WC_LISTVIEW;
@@ -660,8 +660,17 @@ unsafe extern "system" fn hdrhandler(hwnd: windef::HWND, msg: minwindef::UINT, w
         winuser::WM_LBUTTONUP => {
             let points = wingdi::MAKEPOINTS(lparam as u32);
             let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from Header HWND");
-            //if points.y > this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().da
             let hwnd_lv = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().hwnd_lv;
+            let mut height = 0;
+            this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.cols.iter_mut().for_each(|col| {
+                col.control.as_mut().map(|col| {
+                    let (_, ch) = col.size();
+                    height = cmp::max(height, ch as i32);
+                });
+            });
+            if points.y as i32 > height {
+                return  0;
+            }
             let mut hit_info = commctrl::LVHITTESTINFO {
                 pt: Default::default(),
                 flags: commctrl::LVHT_ONITEM,
@@ -670,8 +679,7 @@ unsafe extern "system" fn hdrhandler(hwnd: windef::HWND, msg: minwindef::UINT, w
             hit_info.pt.x = points.x as i32;
             hit_info.pt.y = points.y as i32;
             if 0 > winuser::SendMessageW(hwnd_lv, commctrl::LVM_SUBITEMHITTEST, 0, &mut hit_info as *mut _ as isize) {
-                common::log_error();
-                panic!("Cannot get sub item position!");
+                return 0;
             }
             let this = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
             let maybe_clicked = this.data.column_at_mut(hit_info.iSubItem as usize);
@@ -1086,6 +1094,7 @@ fn remove_cell_from_row<T: Sized>(hwnd: windef::HWND, row: &mut Row<T>, member: 
         cell.as_mut().map(|cell| {
             cell.control.as_mut().map(|ref mut control| {
                 let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
+                control.set_visibility(Visibility::Gone);
                 control.on_removed_from_container(this);
                 let lv = commctrl::LVITEMW {
                     mask: commctrl::LVIF_TEXT,// | commctrl::LVIF_PARAM,
