@@ -179,7 +179,7 @@ impl WindowsTable {
         let (member, control, adapter, _) = unsafe { Table::adapter_base_parts_mut(base) };
         let (pw, ph) = control.measured;
         let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
-        adapter.adapter.spawn_item_view(&[col_index, row_index], this).map(|mut item| {
+        adapter.adapter.spawn_item_view(&[row_index, col_index], this).map(|mut item| {
             let title = common::string_of_pixel_len(5);
             let mut title = OsStr::new(title.as_str()).encode_wide().chain(Some(0).into_iter()).collect::<Vec<_>>();
             
@@ -391,21 +391,21 @@ impl AdaptedInner for WindowsTable {
             match value {
                 adapter::Change::Added(at, node) => {
                     if adapter::Node::Leaf == node || at.len() > 1 {
-                        self.add_cell_inner(base, at[0], at[1]);
+                        self.add_cell_inner(base, at[1], at[0]);
                     } else {
                         self.add_column_inner(base, at[0], false);
                     }
                 },
                 adapter::Change::Removed(at) => {
                     if at.len() > 1 {
-                        self.remove_cell_inner(base, at[0], at[1]);
+                        self.remove_cell_inner(base, at[1], at[0]);
                     } else {
                         self.remove_column_inner(base, at[0]);
                     }
                 },
                 adapter::Change::Edited(at, node) => {
                     if adapter::Node::Leaf == node || at.len() > 1 {
-                        self.change_cell_inner(base, at[0], at[1]);
+                        self.change_cell_inner(base, at[1], at[0]);
                     } else {
                         self.change_column_inner(base, at[0]);
                     }
@@ -490,7 +490,7 @@ impl ControlInner for WindowsTable {
 
         adapter.adapter.for_each(&mut (|indexes, node| {
             match node {
-                adapter::Node::Leaf => { self.add_cell_inner(member, indexes[0], indexes[1]); },
+                adapter::Node::Leaf => { self.add_cell_inner(member, indexes[1], indexes[0]); },
                 adapter::Node::Branch(_) => { self.add_column_inner(member, indexes[0], true); }
             }
         }));
@@ -884,11 +884,12 @@ unsafe extern "system" fn handler<T: controls::Table>(this: &mut Table, msg: min
     			        return 0;
                     }
                     let this = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
-                    let maybe_clicked = this.data.cell_at_mut(&[hit_info.iItem as usize, hit_info.iSubItem as usize]);
+                    let indices = &[hit_info.iItem as usize, hit_info.iSubItem as usize];
+                    let maybe_clicked = this.data.cell_at_mut(indices);
 		            if let Some(clicked) = maybe_clicked.and_then(|clicked| clicked.control.as_mut()) {
                         if let Some(ref mut cb) = this.on_item_click {
                             let this = common::member_from_hwnd::<T>(hwnd).unwrap();
-                            (cb.as_mut())(this, &[hit_info.iSubItem as usize, hit_info.iItem as usize], clicked.as_member_mut().is_control_mut().unwrap());
+                            (cb.as_mut())(this, indices, clicked.as_member_mut().is_control_mut().unwrap());
                         }
                     }
                 }
