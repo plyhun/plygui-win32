@@ -18,16 +18,17 @@ pub struct WindowsTable {
     hwnd_lv: windef::HWND,
     data: Matrix<WinPtr>,
     on_item_click: Option<callbacks::OnItemClick>,
-    width: usize, height: usize,
     col_1_needs_init: bool,
     custom_row_height: Option<commctrl::HIMAGELIST>
 }
 
 impl WindowsTable {
     fn add_row_inner(&mut self, base: &mut MemberBase, row_index: usize) -> Option<&mut Row<isize>> {
+        let (_, _, adapter, _) = unsafe { Table::adapter_base_parts_mut(base) };
+        let row_num = self.data.rows.len();
         let hwnd = self.hwnd_lv;
-        let row = Row {
-            cells: self.data.cols.iter_mut().enumerate().map(|(y, col)| {
+        if row_index >= row_num {
+            (row_num..row_index+1).into_iter().for_each(|y| {
                 let mut lv = commctrl::LVITEMW {
                     mask: commctrl::LVIF_STATE,
                     stateMask: std::u32::MAX,
@@ -36,20 +37,24 @@ impl WindowsTable {
                 };
                 if 0 == unsafe { winuser::SendMessageW(hwnd, commctrl::LVM_GETITEMW, 0, &lv as *const _ as isize) } {
                     lv.mask = commctrl::LVIF_PARAM;
-                    lv.lParam = col.native;
+                    lv.lParam = y as isize;
+                    dbg!("Ins row", y);
                     if y as isize != unsafe { winuser::SendMessageW(hwnd, commctrl::LVM_INSERTITEMW, 0, &lv as *const _ as isize) } {
                         unsafe { common::log_error(); }
-                        panic!("Could not insert a table row at index [{}, {}]", row_index, y);
+                        panic!("Could not insert a table row at index [{}]", y);
                     }
                 }
-                None
-            }).collect(),
-            native: 0 as WinPtr,
-            control: None,
-            height: self.data.default_row_height,
-        };
-        self.data.rows.insert(row_index, row);
-        self.resize_rows(row_index, self.data.default_row_height, true);
+                let row = Row {
+                    cells: (0..adapter.adapter.len_at(&[]).unwrap_or(0)).into_iter().map(|_| None).collect(),
+                    
+                    native: 0 as WinPtr,
+                    control: None,
+                    height: self.data.default_row_height,
+                };
+                self.data.rows.insert(row_index, row);
+                self.resize_rows(row_index, self.data.default_row_height, true);
+            });
+        }
         self.data.row_at_mut(row_index)
     }
     fn add_column_inner(&mut self, base: &mut MemberBase, col_index: usize, initial: bool) -> Option<&mut Column<isize>> {
@@ -66,7 +71,7 @@ impl WindowsTable {
             mask: commctrl::LVCF_FMT | commctrl::LVCF_WIDTH | commctrl::LVCF_TEXT | commctrl::LVCF_SUBITEM ,
             fmt: commctrl::LVCFMT_LEFT,
             pszText: title.as_mut_ptr(),
-            cx: (pw as usize / self.width) as i32,
+            cx: (pw as usize / (adapter.adapter.len_at(&[]).map(|col_num| if col_num < 1 { 1 } else { col_num }).unwrap_or(1))) as i32,
             iSubItem: col_index as i32,
             ..Default::default()
         };
@@ -172,6 +177,7 @@ impl WindowsTable {
         self.col_1_needs_init = col_1_needs_init;
     }
     fn add_cell_inner(&mut self, base: &mut MemberBase, col_index: usize, row_index: usize) {
+        dbg!(col_index, row_index);
         if self.data.row_at_mut(row_index).is_none() {
             self.add_row_inner(base, row_index);
         }
@@ -295,13 +301,12 @@ impl WindowsTable {
     }
 }
 impl<O: controls::Table> NewTableInner<O> for WindowsTable {
-    fn with_uninit_params(_: &mut mem::MaybeUninit<O>, width: usize, height: usize) -> Self {
+    fn with_uninit_params(_: &mut mem::MaybeUninit<O>, _: usize, _: usize) -> Self {
         WindowsTable {
             base: WindowsControlBase::with_wndproc(Some(handler::<O>)),
             hwnd_lv: 0 as windef::HWND,
             data: Default::default(),
             on_item_click: None,
-            width, height,
             col_1_needs_init: false,
             custom_row_height: None,
         }
@@ -471,14 +476,16 @@ impl ControlInner for WindowsTable {
             commctrl::SetWindowSubclass(hwnd_hdr, Some(hdrhandler), common::subclass_id(WINDOW_CLASS_LVHDR.as_ptr()) as usize, selfptr as usize);
             (hwnd, hwnd_lv, id)
         };
+        let (member, _, adapter, _) = unsafe { Table::adapter_base_parts_mut(member) };
+
         self.base.hwnd = hwnd;
         self.hwnd_lv = hwnd_lv;
         self.base.subclass_id = id;
-        self.col_1_needs_init |= self.width > 1;
+        self.col_1_needs_init |= adapter.adapter.len_at(&[]).unwrap_or(0) > 1;
         //self.data.default_row_height = layout::Size::Exact(50);
         control.coords = Some((px, py));
         
-        if 0 == unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_SETITEMCOUNT, self.width, commctrl::LVSICF_NOINVALIDATEALL) } {
+        if 0 == unsafe { winuser::SendMessageW(self.hwnd_lv, commctrl::LVM_SETITEMCOUNT, adapter.adapter.len_at(&[0]).unwrap_or(0), commctrl::LVSICF_NOINVALIDATEALL) } {
             unsafe { common::log_error(); }
         }
         unsafe { 
@@ -486,8 +493,6 @@ impl ControlInner for WindowsTable {
         	self.redraw_visible();
         }
         
-        let (member, _, adapter, _) = unsafe { Table::adapter_base_parts_mut(member) };
-
         adapter.adapter.for_each(&mut (|indexes, node| {
             match node {
                 adapter::Node::Leaf => { self.add_cell_inner(member, indexes[1], indexes[0]); },
