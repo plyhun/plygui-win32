@@ -601,11 +601,9 @@ impl HasVisibilityInner for WindowsTable {
 
 impl Drawable for WindowsTable {
     fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase) {
-        if let Some((x, y)) = control.coords {
-            unsafe {
-                winuser::SetWindowPos(self.base.hwnd, ptr::null_mut(), x, y, control.measured.0 as i32, control.measured.1 as i32, 0);
-                winuser::SetWindowPos(self.hwnd_lv, ptr::null_mut(), 0, 0, control.measured.0 as i32, control.measured.1 as i32, 0);
-            }
+        self.base.draw(control.coords, control.measured);
+        unsafe {
+            winuser::SetWindowPos(self.hwnd_lv, ptr::null_mut(), 0, 0, control.measured.0 as i32, control.measured.1 as i32, winuser::SWP_NOZORDER);
         }
     }
     fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
@@ -819,7 +817,7 @@ unsafe extern "system" fn window_handler(hwnd: windef::HWND, msg: minwindef::UIN
     match msg {
         winuser::WM_NOTIFY => {
     		match (&*(lparam as winuser::LPNMHDR)).code {
-    		    commctrl::LVN_COLUMNCLICK => {
+                commctrl::LVN_COLUMNCLICK => {
                     let header = &mut *(lparam as commctrl::LPNMLISTVIEW);
                     let this: &mut Table = common::member_from_hwnd(hwnd).expect("Cannot get Table from HWND");
                     let this = this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
@@ -998,77 +996,77 @@ fn redraw_header<T: Sized>(col: Option<&mut Column<T>>, col_index: i32, hwnd: wi
         panic!("Could not get the table header");
     }
     let mut drawn = commctrl::HDITEMW {
-        mask: commctrl::HDI_TEXT | commctrl::HDI_WIDTH,// | commctrl::LVIF_PARAM,
-        //lParam: unsafe { item.native_id() as isize },
+        mask: commctrl::HDI_TEXT | commctrl::HDI_WIDTH,
         ..Default::default()
     }; 
     if 0 == unsafe { winuser::SendMessageW(hdr_hwnd, commctrl::HDM_GETITEMW, col_index as usize, &mut drawn as *mut _ as isize) } {
-    	return;
+        return;
     }
-    col.and_then(|cell| cell.control.as_mut()).map(|item| {
+    if let Some(cell) = col.and_then(|col| col.control.as_mut()) {
         let action = action.unwrap_or(0 != unsafe { winuser::SendMessageW(hdr_hwnd, commctrl::HDM_GETITEMRECT, col_index as usize, rc as *mut _ as isize) });
         if action {
-            let (width, mut height) = item.size();
+            let (width, mut height) = cell.size();
             if let layout::Size::Exact(row_height) = header_height {
                 height = row_height;
-            };
-            item.set_skip_draw(true);
-            item.set_layout_width(layout::Size::Exact(drawn.cxy as u16 - 2));
-            item.set_layout_height(header_height);
-            let (tw, th, changed) = item.measure(width, height);
-            item.set_skip_draw(false);
+            }
+            cell.set_skip_draw(true);
+            cell.set_layout_width(layout::Size::Exact(drawn.cxy as u16 - 2));
+            cell.set_layout_height(header_height);
+            let (tw, th, changed) = cell.measure(width, height);
+            cell.set_skip_draw(false);
             if changed {
-        		let mut title = common::wsz_of_pixel_len(tw as usize);
-    		    drawn.mask = commctrl::LVIF_TEXT;// | commctrl::LVIF_PARAM,
+                let mut title = common::wsz_of_pixel_len(tw as usize);
+                drawn.mask = commctrl::LVIF_TEXT;
                 drawn.cchTextMax = title.len() as i32 + 1;
                 drawn.pszText = title.as_mut_ptr();
                 if 0 == unsafe { winuser::SendMessageW(hdr_hwnd, commctrl::HDM_SETITEMW, col_index as usize, &drawn as *const _ as isize) } {
                     unsafe { common::log_error(); }
                     println!("Could not insert a table header at index [{}]", col_index);
                 } else {
-            		item.draw(None);
+                    cell.draw(None);
                 }
-        	}
+            }
             unsafe {
-                winuser::ShowWindow(item.native_id() as windef::HWND, winuser::SW_SHOW);
+                winuser::ShowWindow(cell.native_id() as windef::HWND, winuser::SW_SHOW);
                 winuser::SetWindowPos(
-                    item.native_id() as windef::HWND, 
+                    cell.native_id() as windef::HWND, 
                     ptr::null_mut(), 
                     rc.left + 1, 
                     rc.top + 1, 
                     cmp::max(tw as i32, rc.right - rc.left), 
                     cmp::max(th as i32, rc.bottom - rc.top), 
-                    winuser::SWP_NOSIZE | winuser::SWP_NOSENDCHANGING | winuser::SWP_NOREDRAW | winuser::SWP_NOCOPYBITS | winuser::SWP_DEFERERASE);
+                    winuser::SWP_NOSIZE | winuser::SWP_NOSENDCHANGING | winuser::SWP_NOREDRAW | winuser::SWP_NOCOPYBITS | winuser::SWP_DEFERERASE
+                );
             }
         } else {
-            unsafe { winuser::ShowWindow(item.native_id() as windef::HWND, winuser::SW_HIDE); }
-        } 
-    });
+            unsafe { winuser::ShowWindow(cell.native_id() as windef::HWND, winuser::SW_HIDE); }
+        }
+    }
 }
+
 fn redraw_cell<T: Sized>(cell: Option<&mut Cell<T>>, col_index: i32, row_index: i32, hwnd: windef::HWND, rc: &mut windef::RECT, action: Option<bool>, row_height: layout::Size) {
     let mut drawn = commctrl::LVITEMW {
-        mask: commctrl::LVIF_TEXT,// | commctrl::LVIF_PARAM,
+        mask: commctrl::LVIF_TEXT,
         iItem: row_index, 
         iSubItem: col_index,
-        //lParam: unsafe { item.native_id() as isize },
         ..Default::default()
     };
     if 0 == unsafe { winuser::SendMessageW(hwnd, commctrl::LVM_GETITEMW, 0, &mut drawn as *mut _ as isize) } {
-    	return;
+        return;
     }
-    cell.and_then(|cell| cell.control.as_mut()).map(|item| {
+    if let Some(cell) = cell.and_then(|cell| cell.control.as_mut()) {
         rc.left = commctrl::LVIR_BOUNDS;
-    	rc.top = drawn.iSubItem;
-    	let action = action.unwrap_or(0 != unsafe { winuser::SendMessageW(hwnd, commctrl::LVM_GETSUBITEMRECT, drawn.iItem as usize, rc as *mut _ as isize) });
+        rc.top = drawn.iSubItem;
+        let action = action.unwrap_or(0 != unsafe { winuser::SendMessageW(hwnd, commctrl::LVM_GETSUBITEMRECT, drawn.iItem as usize, rc as *mut _ as isize) });
         if action {
-            let (width, mut height) = item.size();
+            let (width, mut height) = cell.size();
             if let layout::Size::Exact(row_height) = row_height {
-               height = row_height;
-            };
-            let (tw, th, changed) = item.measure(width, height);
-        	if changed {
-        		let mut title = common::wsz_of_pixel_len(tw as usize);
-    		    drawn.mask = commctrl::LVIF_TEXT;// | commctrl::LVIF_PARAM,
+                height = row_height;
+            }
+            let (tw, th, changed) = cell.measure(width, height);
+            if changed {
+                let mut title = common::wsz_of_pixel_len(tw as usize);
+                drawn.mask = commctrl::LVIF_TEXT;
                 drawn.cchTextMax = title.len() as i32 + 1;
                 drawn.pszText = title.as_mut_ptr();
                 if 0 == unsafe { winuser::SendMessageW(hwnd, commctrl::LVM_SETITEMW, 0, &drawn as *const _ as isize) } {
@@ -1076,24 +1074,25 @@ fn redraw_cell<T: Sized>(cell: Option<&mut Cell<T>>, col_index: i32, row_index: 
                     println!("Could not insert a table cell at index [{}, {}]", drawn.iSubItem, drawn.iItem);
                 } else {
                     println!("Drawing [{}, {}] anew", drawn.iSubItem, drawn.iItem);
-            		item.draw(None);
+                    cell.draw(None);
                 }
-        	}
+            }
             unsafe {
-                winuser::ShowWindow(item.native_id() as windef::HWND, winuser::SW_SHOW);
+                winuser::ShowWindow(cell.native_id() as windef::HWND, winuser::SW_SHOW);
                 winuser::SetWindowPos(
-                	item.native_id() as windef::HWND, 
-                	ptr::null_mut(), 
-                	rc.left + 1, 
-                	rc.top + 1, 
-                	cmp::max(tw as i32, rc.right - rc.left), 
-                	cmp::max(th as i32, rc.bottom - rc.top), 
-                	winuser::SWP_NOSIZE | winuser::SWP_NOSENDCHANGING | winuser::SWP_NOREDRAW | winuser::SWP_NOCOPYBITS | winuser::SWP_DEFERERASE);
+                    cell.native_id() as windef::HWND, 
+                    ptr::null_mut(), 
+                    rc.left + 1, 
+                    rc.top + 1, 
+                    cmp::max(tw as i32, rc.right - rc.left), 
+                    cmp::max(th as i32, rc.bottom - rc.top), 
+                    winuser::SWP_NOSIZE | winuser::SWP_NOSENDCHANGING | winuser::SWP_NOREDRAW | winuser::SWP_NOCOPYBITS | winuser::SWP_DEFERERASE
+                );
             }
         } else {
-        	 unsafe { winuser::ShowWindow(item.native_id() as windef::HWND, winuser::SW_HIDE); }
-        } 
-    });
+            unsafe { winuser::ShowWindow(cell.native_id() as windef::HWND, winuser::SW_HIDE); }
+        }
+    }
 }
 fn remove_cell_from_row<T: Sized>(hwnd: windef::HWND, row: &mut Row<T>, member: &mut MemberBase, col_index: usize, row_index: usize) {
     row.cells.get_mut(col_index).map(|cell| {

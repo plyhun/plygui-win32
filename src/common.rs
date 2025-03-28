@@ -437,7 +437,7 @@ pub fn destroy_hwnd(hwnd: windef::HWND, subclass_id: usize, handler: Option<unsa
 pub fn draw(hwnd: windef::HWND, coords: Option<(i32, i32)>, (width, height): (u16, u16)) -> bool {
     if let Some((x, y)) = coords {
         unsafe {
-            winuser::SetWindowPos(hwnd, ptr::null_mut(), x, y, width as i32, height as i32, 0);
+            winuser::SetWindowPos(hwnd, ptr::null_mut(), x, y, width as i32, height as i32, winuser::SWP_NOZORDER);
         }
         true
     } else {
